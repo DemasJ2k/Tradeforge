@@ -371,6 +371,42 @@ class OptimizerEngine:
 
     # ─── Core Evaluation ────────────────────────────────────
 
+    def _run_backtest(self, config: dict, bars):
+        """Route backtest to the correct strategy engine."""
+        gold_config = config.get("gold_bt_config")
+        mss_config = config.get("mss_config")
+
+        if gold_config:
+            from app.services.backtest.strategy_backtester import backtest_gold_bt
+            return backtest_gold_bt(
+                bars_raw=bars,
+                gold_config=gold_config,
+                initial_balance=self.initial_balance,
+                spread_points=self.spread,
+                commission_per_lot=self.commission,
+                point_value=self.point_value,
+            )
+        elif mss_config:
+            from app.services.backtest.strategy_backtester import backtest_mss
+            return backtest_mss(
+                bars_raw=bars,
+                mss_config=mss_config,
+                initial_balance=self.initial_balance,
+                spread_points=self.spread,
+                commission_per_lot=self.commission,
+                point_value=self.point_value,
+            )
+        else:
+            engine = BacktestEngine(
+                bars=bars,
+                strategy_config=config,
+                initial_balance=self.initial_balance,
+                spread_points=self.spread,
+                commission_per_lot=self.commission,
+                point_value=self.point_value,
+            )
+            return engine.run()
+
     def _evaluate(self, params: dict) -> tuple[float, dict]:
         """Run backtest with given params and return (score, stats)."""
         config = copy.deepcopy(self.base_config)
@@ -382,16 +418,8 @@ class OptimizerEngine:
             except (KeyError, IndexError, TypeError) as e:
                 logger.debug(f"Could not set param {path}={value}: {e}")
 
-        # Run backtest on in-sample data
-        engine = BacktestEngine(
-            bars=self.in_sample_bars,
-            strategy_config=config,
-            initial_balance=self.initial_balance,
-            spread_points=self.spread,
-            commission_per_lot=self.commission,
-            point_value=self.point_value,
-        )
-        result = engine.run()
+        # Run backtest on in-sample data (route to correct strategy engine)
+        result = self._run_backtest(config, self.in_sample_bars)
 
         # Extract score based on objective
         score = self._extract_score(result)
@@ -408,15 +436,7 @@ class OptimizerEngine:
 
         # If walk-forward, also run OOS and penalize divergence
         if self.walk_forward and self.out_sample_bars:
-            oos_engine = BacktestEngine(
-                bars=self.out_sample_bars,
-                strategy_config=config,
-                initial_balance=self.initial_balance,
-                spread_points=self.spread,
-                commission_per_lot=self.commission,
-                point_value=self.point_value,
-            )
-            oos_result = oos_engine.run()
+            oos_result = self._run_backtest(config, self.out_sample_bars)
             oos_score = self._extract_score(oos_result)
 
             stats["oos_net_profit"] = round(oos_result.net_profit, 2)
