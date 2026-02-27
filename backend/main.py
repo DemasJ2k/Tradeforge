@@ -181,6 +181,75 @@ def _seed_mss_strategy():
         db.close()
 
 
+def _seed_gold_breakout_strategy():
+    """Seed the Gold Breakout system strategy into the database if it doesn't exist."""
+    from app.core.database import SessionLocal
+    from app.models.strategy import Strategy
+    from app.models.user import User
+    from app.services.strategy.gold_bt_engine import DEFAULT_GOLD_BT_CONFIG
+
+    db = SessionLocal()
+    try:
+        existing = db.query(Strategy).filter(Strategy.is_system == True, Strategy.name == "Gold Breakout").first()
+        if existing:
+            return
+
+        admin = db.query(User).filter(User.is_admin == True).first()
+        if not admin:
+            admin = db.query(User).first()
+        if not admin:
+            import logging
+            logging.getLogger(__name__).warning("Cannot seed Gold Breakout strategy: no users in DB")
+            return
+
+        gold = Strategy(
+            name="Gold Breakout",
+            description=(
+                "Gold Breakout Trader strategy. Every N hours, captures a reference price and builds "
+                "a gray box zone (±boxHeight/2). Buy Stop is placed above the box, Sell Stop below. "
+                "Entries trigger on price crossover of those stops. TP1/TP2/TP3 stacked above/below "
+                "with configurable zone heights and gaps. SL defaults to the opposite stop level."
+            ),
+            indicators=[
+                {"id": "box_high", "type": "GoldBTBox", "params": {"side": "top"}, "overlay": True},
+                {"id": "box_low", "type": "GoldBTBox", "params": {"side": "bottom"}, "overlay": True},
+                {"id": "buy_stop", "type": "GoldBTStop", "params": {"direction": "buy"}, "overlay": True},
+                {"id": "sell_stop", "type": "GoldBTStop", "params": {"direction": "sell"}, "overlay": True},
+            ],
+            entry_rules=[
+                {"left": "price.close", "operator": "crosses_above", "right": "buy_stop", "logic": "OR", "direction": "long"},
+                {"left": "price.close", "operator": "crosses_below", "right": "sell_stop", "logic": "OR", "direction": "short"},
+            ],
+            exit_rules=[
+                {"left": "pnl", "operator": ">=", "right": "tp1", "logic": "OR"},
+                {"left": "pnl", "operator": ">=", "right": "tp2", "logic": "OR"},
+                {"left": "pnl", "operator": "<=", "right": "sl", "logic": "OR"},
+                {"left": "signal", "operator": "==", "right": "reversal", "logic": "OR"},
+            ],
+            risk_params={
+                "position_size_type": "percent_risk",
+                "position_size_value": 1.0,
+                "stop_loss_type": "opposite_stop",
+                "take_profit_type": "zone",
+                "trailing_stop": False,
+                "max_positions": 2,
+                "lot_split": [0.5, 0.5],
+                "breakeven_on_tp1": True,
+            },
+            filters={
+                "gold_bt_config": DEFAULT_GOLD_BT_CONFIG,
+            },
+            is_system=True,
+            creator_id=admin.id,
+        )
+        db.add(gold)
+        db.commit()
+        import logging
+        logging.getLogger(__name__).info("Seeded Gold Breakout system strategy (id=%d)", gold.id)
+    finally:
+        db.close()
+
+
 def _seed_system_strategies():
     """Seed the 4 system trading strategies from strategies.txt if they don't exist."""
     from app.core.database import SessionLocal
@@ -401,6 +470,7 @@ def _seed_system_strategies():
 async def startup_event():
     _seed_admin_user()
     _seed_mss_strategy()
+    _seed_gold_breakout_strategy()
     _seed_system_strategies()
     await ws_manager.start()
     await tick_aggregator.start()
