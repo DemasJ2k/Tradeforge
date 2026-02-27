@@ -52,10 +52,14 @@ app = FastAPI(
     version=settings.APP_VERSION,
 )
 
-# CORS
+# CORS — production uses FRONTEND_URL env var; dev adds localhost origins
+_cors_origins = [settings.FRONTEND_URL]
+if settings.DEBUG:
+    _cors_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -372,7 +376,10 @@ async def startup_event():
     _seed_system_strategies()
     await ws_manager.start()
     await tick_aggregator.start()
-    await mt5_streamer.start()
+    try:
+        await mt5_streamer.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("MT5 streamer start skipped: %s", e)
     await algo_engine.start()
     # Start paper trade monitor (simulates SL/TP exits for agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
@@ -383,7 +390,10 @@ async def startup_event():
 async def shutdown_event():
     await trade_monitor.stop()
     await algo_engine.stop()
-    await mt5_streamer.stop()
+    try:
+        await mt5_streamer.stop()
+    except Exception:
+        pass
     await ws_manager.stop()
 
 

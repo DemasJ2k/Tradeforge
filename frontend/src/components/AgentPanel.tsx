@@ -80,6 +80,14 @@ export default function AgentPanel() {
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
   const [creating, setCreating] = useState(false);
 
+  // Risk config form state
+  const [cSizeType, setCSizeType] = useState("fixed_lot");
+  const [cSizeValue, setCSizeValue] = useState("0.01");
+  const [cMaxExposure, setCMaxExposure] = useState("1.0");
+  const [cMaxOpenPositions, setCMaxOpenPositions] = useState("3");
+  const [cMaxDailyLoss, setCMaxDailyLoss] = useState("5");
+  const [cMaxDrawdown, setCMaxDrawdown] = useState("10");
+
   // ── Load agents & strategies on mount ──
   const didLoad = useRef(false);
   if (!didLoad.current) {
@@ -151,6 +159,14 @@ export default function AgentPanel() {
         timeframe: cTimeframe,
         mode: cMode,
         ml_model_id: cMlModelId,
+        risk_config: {
+          position_size_type: cSizeType,
+          position_size_value: parseFloat(cSizeValue) || 0.01,
+          max_exposure_per_symbol: parseFloat(cMaxExposure) || 1.0,
+          max_open_positions: parseInt(cMaxOpenPositions) || 3,
+          max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 0,
+          max_drawdown_pct: parseFloat(cMaxDrawdown) || 0,
+        },
       };
       await createAgent(data);
       setShowCreate(false);
@@ -583,6 +599,91 @@ export default function AgentPanel() {
                     </option>
                   ))}
               </select>
+            </div>
+
+            {/* ── Risk Configuration ── */}
+            <div className="border-t border-card-border pt-3">
+              <label className="block text-xs font-semibold text-foreground mb-2">Risk Configuration</label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-muted mb-1">Position Sizing</label>
+                  <select
+                    value={cSizeType}
+                    onChange={(e) => setCSizeType(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="fixed_lot">Fixed Lot</option>
+                    <option value="percent_risk">% of Balance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted mb-1">
+                    {cSizeType === "fixed_lot" ? "Lot Size" : "Risk %"}
+                  </label>
+                  <input
+                    type="number"
+                    step={cSizeType === "fixed_lot" ? "0.01" : "0.5"}
+                    min="0"
+                    value={cSizeValue}
+                    onChange={(e) => setCSizeValue(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                    placeholder={cSizeType === "fixed_lot" ? "0.01" : "2"}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                <div>
+                  <label className="block text-[10px] text-muted mb-1">Max Exposure</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={cMaxExposure}
+                    onChange={(e) => setCMaxExposure(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                    placeholder="1.0 lots"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted mb-1">Max Positions</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={cMaxOpenPositions}
+                    onChange={(e) => setCMaxOpenPositions(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                    placeholder="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted mb-1">Max Daily Loss %</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={cMaxDailyLoss}
+                    onChange={(e) => setCMaxDailyLoss(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                    placeholder="5%"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <label className="block text-[10px] text-muted mb-1">Max Drawdown % <span className="text-zinc-500">(0 = disabled)</span></label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={cMaxDrawdown}
+                  onChange={(e) => setCMaxDrawdown(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                  placeholder="10%"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

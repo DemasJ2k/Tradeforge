@@ -8,6 +8,7 @@ import type {
   ConversationSummary,
   ConversationList,
   ConversationDetail,
+  MemoryItem,
 } from "@/types";
 
 // ── Markdown-lite renderer (bold, code, headers, lists) ──
@@ -174,6 +175,11 @@ export default function ChatSidebar() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMemories, setShowMemories] = useState(false);
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
+  const [editingMemory, setEditingMemory] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -187,9 +193,22 @@ export default function ChatSidebar() {
   // Load conversation list when history panel opens
   useEffect(() => {
     if (showHistory) {
+      setShowMemories(false);
       api.get<ConversationList>("/api/llm/conversations").then(setConversations as never).catch(() => {});
     }
   }, [showHistory]);
+
+  // Load memories when memories panel opens
+  useEffect(() => {
+    if (showMemories) {
+      setShowHistory(false);
+      setMemoriesLoading(true);
+      api.get<{ items: MemoryItem[]; total: number }>("/api/llm/memories")
+        .then((res) => setMemories(res.items))
+        .catch(() => setMemories([]))
+        .finally(() => setMemoriesLoading(false));
+    }
+  }, [showMemories]);
 
   // Keyboard shortcut: Ctrl+K to toggle
   useEffect(() => {
@@ -236,8 +255,31 @@ export default function ChatSidebar() {
     setMessages([]);
     setConversationId(null);
     setShowHistory(false);
+    setShowMemories(false);
     setError("");
     setStreamingText("");
+  }, []);
+
+  const togglePin = useCallback(async (mem: MemoryItem) => {
+    try {
+      const updated = await api.put<MemoryItem>(`/api/llm/memories/${mem.id}`, { pinned: !mem.pinned });
+      setMemories((prev) => prev.map((m) => (m.id === mem.id ? updated : m)));
+    } catch { setError("Failed to update memory"); }
+  }, []);
+
+  const saveMemoryEdit = useCallback(async (mem: MemoryItem) => {
+    try {
+      const updated = await api.put<MemoryItem>(`/api/llm/memories/${mem.id}`, { value: editValue });
+      setMemories((prev) => prev.map((m) => (m.id === mem.id ? updated : m)));
+      setEditingMemory(null);
+    } catch { setError("Failed to update memory"); }
+  }, [editValue]);
+
+  const deleteMemory = useCallback(async (id: number) => {
+    try {
+      await api.delete(`/api/llm/memories/${id}`);
+      setMemories((prev) => prev.filter((m) => m.id !== id));
+    } catch { setError("Failed to delete memory"); }
   }, []);
 
   const sendMessage = useCallback(async () => {
@@ -350,8 +392,17 @@ export default function ChatSidebar() {
           </div>
           <div className="flex items-center gap-1">
             <button
+              onClick={() => setShowMemories(!showMemories)}
+              className={`p-1.5 rounded hover:bg-sidebar-hover ${showMemories ? "text-accent" : "text-muted hover:text-foreground"}`}
+              title="Memories"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+              </svg>
+            </button>
+            <button
               onClick={() => setShowHistory(!showHistory)}
-              className="p-1.5 rounded hover:bg-sidebar-hover text-muted hover:text-foreground"
+              className={`p-1.5 rounded hover:bg-sidebar-hover ${showHistory ? "text-accent" : "text-muted hover:text-foreground"}`}
               title="Chat History"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -406,6 +457,101 @@ export default function ChatSidebar() {
                   </button>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* Memories panel */}
+        {showMemories && (
+          <div className="border-b border-card-border max-h-80 overflow-y-auto">
+            <div className="px-4 py-2 border-b border-card-border/50">
+              <div className="text-xs font-semibold text-foreground">AI Memories</div>
+              <div className="text-[10px] text-muted">What the AI remembers about you</div>
+            </div>
+            {memoriesLoading ? (
+              <div className="p-4 text-center text-xs text-muted">Loading memories...</div>
+            ) : memories.length === 0 ? (
+              <div className="p-6 text-center text-xs text-muted">
+                <svg className="h-8 w-8 mx-auto mb-2 opacity-30" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+                </svg>
+                No memories yet. Chat with the AI to build your trading profile.
+              </div>
+            ) : (
+              <div className="divide-y divide-card-border/30">
+                {memories.map((mem) => (
+                  <div key={mem.id} className="px-4 py-2.5 hover:bg-sidebar-hover/50 group">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] rounded px-1.5 py-0.5 bg-accent/10 text-accent font-medium uppercase">
+                            {mem.category}
+                          </span>
+                          {mem.pinned && (
+                            <span className="text-[10px] text-yellow-400">📌</span>
+                          )}
+                        </div>
+                        <div className="text-xs font-medium text-foreground">{mem.key}</div>
+                        {editingMemory === mem.id ? (
+                          <div className="mt-1 flex gap-1">
+                            <input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="flex-1 rounded border border-card-border bg-input-bg px-2 py-1 text-xs text-foreground"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveMemoryEdit(mem);
+                                if (e.key === "Escape") setEditingMemory(null);
+                              }}
+                            />
+                            <button
+                              onClick={() => saveMemoryEdit(mem)}
+                              className="rounded bg-accent px-2 py-1 text-[10px] text-black font-medium"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingMemory(null)}
+                              className="rounded border border-card-border px-2 py-1 text-[10px] text-muted"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted mt-0.5">{mem.value}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          onClick={() => togglePin(mem)}
+                          className={`p-1 rounded text-xs ${mem.pinned ? "text-yellow-400" : "text-muted hover:text-yellow-400"}`}
+                          title={mem.pinned ? "Unpin" : "Pin"}
+                        >
+                          📌
+                        </button>
+                        <button
+                          onClick={() => { setEditingMemory(mem.id); setEditValue(mem.value); }}
+                          className="p-1 rounded text-muted hover:text-foreground"
+                          title="Edit"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => deleteMemory(mem.id)}
+                          className="p-1 rounded text-muted hover:text-red-400"
+                          title="Delete"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

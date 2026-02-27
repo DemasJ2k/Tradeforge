@@ -175,6 +175,44 @@ export default function TradingPage() {
 
   const currentTick = ticks[chartSymbol];
 
+  // ── Chart auto-refresh polling fallback ──
+  // When WebSocket bar updates aren't arriving (e.g. on deployed server without MT5),
+  // poll the REST endpoint every 8 seconds to keep chart fresh.
+  const lastBarUpdateRef = useRef<number>(Date.now());
+  useEffect(() => {
+    // Track when we last got a WS bar update
+    lastBarUpdateRef.current = Date.now();
+  }, [liveBarCount, liveCurrentBar]);
+
+  useEffect(() => {
+    if (chartMode !== "live" || chartBars.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      const timeSinceUpdate = Date.now() - lastBarUpdateRef.current;
+      // Only poll if no WS update in the last 10 seconds
+      if (timeSinceUpdate < 10_000) return;
+
+      try {
+        // Fetch the latest few bars and merge with existing chart
+        const res = await api.get<{ candles: CandleInput[] }>(
+          `/api/market/candles/${chartSymbol}?timeframe=${chartTimeframe}&count=5`
+        );
+        const freshBars = res.candles || [];
+        if (freshBars.length > 0 && chartRef.current) {
+          for (const bar of freshBars) {
+            if (typeof bar.time === "number" && bar.time > 0) {
+              chartRef.current.updateBar(bar);
+            }
+          }
+        }
+      } catch {
+        // Silent fail — polling is best-effort
+      }
+    }, 8_000);
+
+    return () => clearInterval(pollInterval);
+  }, [chartMode, chartSymbol, chartTimeframe, chartBars.length]);
+
   /* ── check broker on mount ────────────────────── */
   useEffect(() => {
     checkBrokerStatus();

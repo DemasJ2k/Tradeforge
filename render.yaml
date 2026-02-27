@@ -1,0 +1,50 @@
+services:
+  # Backend (FastAPI)
+  - type: web
+    name: tradeforge-api
+    runtime: python
+    repo: https://github.com/DemasJ2k/Tradeforge.git
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tradeforge-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false  # set after frontend deploys
+      - key: DEBUG
+        value: "false"
+      - key: UPLOAD_DIR
+        value: "/tmp/uploads"
+      - key: SMTP_SERVER
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: NOTIFICATION_EMAIL
+        sync: false
+
+  # Frontend (Next.js)
+  - type: web
+    name: tradeforge
+    runtime: node
+    repo: https://github.com/DemasJ2k/Tradeforge.git
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false  # set after backend deploys
+      - key: PORT
+        value: "3000"
+
+databases:
+  - name: tradeforge-db
+    plan: free

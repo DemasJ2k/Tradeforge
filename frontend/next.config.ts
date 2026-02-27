@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",  // self-contained build for non-Vercel hosts (Render, Docker, etc.)
 };
 
 export default nextConfig;

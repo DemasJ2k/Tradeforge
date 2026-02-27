@@ -1,5 +1,7 @@
 import io
 import base64
+import logging
+import threading
 from datetime import datetime, timezone
 
 import qrcode
@@ -217,6 +219,18 @@ def create_invitation(
     db.add(invite)
     db.commit()
     db.refresh(invite)
+
+    # Send invitation email in a background thread so the API response isn't delayed
+    try:
+        from app.services.email import send_invitation_email
+        thread = threading.Thread(
+            target=send_invitation_email,
+            args=(payload.email, payload.username, payload.temp_password),
+            daemon=True,
+        )
+        thread.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("Could not send invitation email: %s", e)
 
     return InvitationResponse(
         id=invite.id,
