@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Local secrets/config
+.env
+.env.*
+
+# Runtime logs/artifacts
+*.log
+build_output.txt
+frontend_log.txt
+
+# Project local data artifacts
+backend/data/uploads/
+backend/data/ml_models/
+backend/data/*.db
+backend/*.db
