@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:\\Python314\\python.exe",
+      "runtimeArgs": ["D:\\Doc\\DATA\\tradeforge\\backend\\start_server.py"],
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["D:\\Doc\\DATA\\tradeforge\\frontend\\node_modules\\next\\dist\\bin\\next", "dev"],
+      "port": 3000
+    }
+  ]
+}
