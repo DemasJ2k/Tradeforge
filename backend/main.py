@@ -83,6 +83,33 @@ app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
 
 
+def _seed_admin_user():
+    """Create the default admin user if the database is empty (fresh deployment)."""
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.core.auth import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(User).count() > 0:
+            return  # users already exist, nothing to do
+        admin = User(
+            username="TradeforgeAdmin",
+            password_hash=hash_password("admin123"),
+            email="",
+            is_admin=True,
+            must_change_password=False,
+        )
+        db.add(admin)
+        db.commit()
+        logging.getLogger(__name__).info("Default admin user 'TradeforgeAdmin' created")
+    except Exception as e:
+        db.rollback()
+        logging.getLogger(__name__).error("Failed to seed admin user: %s", e)
+    finally:
+        db.close()
+
+
 def _seed_mss_strategy():
     """Seed the MSS system strategy into the database if it doesn't exist."""
     from app.core.database import SessionLocal
@@ -372,6 +399,7 @@ def _seed_system_strategies():
 
 @app.on_event("startup")
 async def startup_event():
+    _seed_admin_user()
     _seed_mss_strategy()
     _seed_system_strategies()
     await ws_manager.start()
