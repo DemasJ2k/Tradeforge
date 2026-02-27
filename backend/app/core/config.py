@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pathlib import Path
+import os
 
 
 class Settings(BaseSettings):
@@ -8,7 +9,11 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'tradeforge.db'}"
+    DATABASE_URL: str = (
+        "sqlite:////tmp/tradeforge.db"
+        if os.getenv("VERCEL")
+        else f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'tradeforge.db'}"
+    )
 
     # Auth
     SECRET_KEY: str = "tradeforge-dev-secret-change-in-production"
@@ -19,7 +24,11 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # File uploads
-    UPLOAD_DIR: str = str(Path(__file__).resolve().parent.parent.parent / "data" / "uploads")
+    UPLOAD_DIR: str = (
+        "/tmp/uploads"
+        if os.getenv("VERCEL")
+        else str(Path(__file__).resolve().parent.parent.parent / "data" / "uploads")
+    )
     MAX_UPLOAD_SIZE_MB: int = 500
 
     class Config:
