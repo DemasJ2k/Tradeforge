@@ -42,8 +42,6 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false  # set after backend deploys
-      - key: PORT
-        value: "3000"
 
 databases:
   - name: tradeforge-db
