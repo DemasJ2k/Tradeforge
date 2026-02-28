@@ -156,10 +156,12 @@ async def get_candles(
     )
 
     if not bars:
-        raise HTTPException(
-            404,
-            f"No candle data found for {symbol} ({timeframe}). "
-            "Make sure a data provider is registered and has data.",
+        return MarketCandleResponse(
+            symbol=symbol,
+            timeframe=timeframe,
+            provider="none",
+            candles=[],
+            total=0,
         )
 
     # Determine which provider was used
@@ -177,7 +179,7 @@ async def get_candles(
 
     candles = [
         MarketCandleData(
-            time=b.timestamp,
+            time=b.timestamp.timestamp() if hasattr(b.timestamp, "timestamp") else float(b.timestamp),
             open=b.open,
             high=b.high,
             low=b.low,

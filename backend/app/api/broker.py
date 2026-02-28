@@ -426,15 +426,16 @@ async def get_candles(
     adapter = _get_adapter(broker)
     candles = await adapter.get_candles(symbol, timeframe, count)
 
+    # Return time as Unix float to match CandleInput format expected by the chart
     return [
-        CandleResponse(
-            timestamp=c.timestamp.isoformat(),
-            open=c.open,
-            high=c.high,
-            low=c.low,
-            close=c.close,
-            volume=c.volume,
-        )
+        {
+            "time": c.timestamp.timestamp() if hasattr(c.timestamp, "timestamp") else float(c.timestamp),
+            "open": c.open,
+            "high": c.high,
+            "low": c.low,
+            "close": c.close,
+            "volume": c.volume,
+        }
         for c in candles
     ]
 
