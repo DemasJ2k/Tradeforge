@@ -62,9 +62,29 @@ export default function TradingPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Chart state ──
-  const SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100"];
+  const DEFAULT_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
   const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
   const [chartSymbol, setChartSymbol] = useState("XAUUSD");
+  const [symbolInput, setSymbolInput] = useState("XAUUSD");
+  const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false);
+  const [customSymbols, setCustomSymbols] = useState<string[]>([]);
+  const symbolInputRef = useRef<HTMLInputElement>(null);
+
+  const applySymbol = (sym: string) => {
+    const upper = sym.trim().toUpperCase();
+    if (!upper) return;
+    if (!DEFAULT_SYMBOLS.includes(upper) && !customSymbols.includes(upper)) {
+      setCustomSymbols((prev) => [...prev, upper]);
+    }
+    setChartSymbol(upper);
+    setSymbolInput(upper);
+    setSymbolDropdownOpen(false);
+  };
+
+  const allSymbols = [...new Set([...DEFAULT_SYMBOLS, ...customSymbols])];
+  const filteredSymbols = symbolInput
+    ? allSymbols.filter((s) => s.includes(symbolInput.toUpperCase()))
+    : allSymbols;
   const [chartTimeframe, setChartTimeframe] = useState("H1");
   const [chartBroker, setChartBroker] = useState<string>("mt5"); // "mt5" | "oanda" | "coinbase" | "tradovate" | "static"
   const chartMode = chartBroker === "static" ? "static" : "live";
@@ -413,16 +433,54 @@ export default function TradingPage() {
         {/* Chart toolbar */}
         <div className="flex items-center justify-between border-b border-card-border px-4 py-2">
           <div className="flex items-center gap-3">
-            {/* Symbol selector */}
-            <select
-              value={chartSymbol}
-              onChange={(e) => setChartSymbol(e.target.value)}
-              className="rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
-            >
-              {SYMBOLS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            {/* Symbol combobox — type any symbol or pick from list */}
+            <div className="relative">
+              <div className="flex items-center rounded-lg border border-card-border bg-background focus-within:border-accent">
+                <input
+                  ref={symbolInputRef}
+                  value={symbolInput}
+                  onChange={(e) => {
+                    setSymbolInput(e.target.value.toUpperCase());
+                    setSymbolDropdownOpen(true);
+                  }}
+                  onFocus={() => setSymbolDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setSymbolDropdownOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applySymbol(symbolInput);
+                    if (e.key === "Escape") { setSymbolDropdownOpen(false); symbolInputRef.current?.blur(); }
+                  }}
+                  className="w-24 bg-transparent px-2 py-1.5 text-sm font-medium uppercase outline-none"
+                  placeholder="Symbol"
+                />
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); setSymbolDropdownOpen((o) => !o); symbolInputRef.current?.focus(); }}
+                  className="pr-2 text-muted hover:text-foreground"
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+              </div>
+              {symbolDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-card-border bg-card-bg shadow-xl">
+                  {filteredSymbols.map((s) => (
+                    <button
+                      key={s}
+                      onMouseDown={() => applySymbol(s)}
+                      className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-sidebar-hover transition-colors ${s === chartSymbol ? "text-accent font-medium" : "text-foreground"}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                  {symbolInput && !filteredSymbols.includes(symbolInput.toUpperCase()) && (
+                    <button
+                      onMouseDown={() => applySymbol(symbolInput)}
+                      className="block w-full border-t border-card-border px-3 py-1.5 text-left text-sm text-accent hover:bg-sidebar-hover transition-colors"
+                    >
+                      + Use &quot;{symbolInput.toUpperCase()}&quot;
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Timeframe selector */}
             <div className="flex gap-1">
