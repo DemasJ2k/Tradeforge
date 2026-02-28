@@ -31,6 +31,7 @@ from app.api import dashboard as dashboard_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
+from app.services.market.broker_stream import broker_price_streamer
 from app.services.agent.engine import algo_engine
 from app.services.agent.trade_monitor import trade_monitor
 
@@ -479,6 +480,11 @@ async def startup_event():
         await mt5_streamer.start()
     except Exception as e:
         logging.getLogger(__name__).warning("MT5 streamer start skipped: %s", e)
+    # Start broker price streamer (non-MT5 live tick data for Oanda/Coinbase/etc.)
+    try:
+        await broker_price_streamer.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("BrokerPriceStreamer start skipped: %s", e)
     await algo_engine.start()
     # Start paper trade monitor (simulates SL/TP exits for agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
@@ -491,6 +497,10 @@ async def shutdown_event():
     await algo_engine.stop()
     try:
         await mt5_streamer.stop()
+    except Exception:
+        pass
+    try:
+        await broker_price_streamer.stop()
     except Exception:
         pass
     await ws_manager.stop()

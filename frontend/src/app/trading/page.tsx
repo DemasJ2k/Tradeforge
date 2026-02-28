@@ -28,6 +28,32 @@ const fmt = (n: number, d = 2) => n.toFixed(d);
 const fmtK = (n: number) =>
   Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}k` : fmt(n, 2);
 
+/**
+ * Derive appropriate decimal places from bid/ask spread.
+ * Works for all asset classes: forex (5dp), crypto (2dp), gold (2dp), indices (2dp).
+ *   e.g. spread 0.00020 → 5dp,  spread 2.00 → 2dp,  spread 0.30 → 2dp
+ */
+function tickDecimals(spread: number): number {
+  if (!spread || spread <= 0) return 5; // Default forex precision
+  const raw = Math.ceil(-Math.log10(spread)) + 1;
+  return Math.max(2, Math.min(raw, 8));
+}
+
+/** Format a price value with smart decimal places derived from spread. */
+function fmtTick(price: number, spread: number): string {
+  if (!Number.isFinite(price)) return "—";
+  return price.toFixed(tickDecimals(spread));
+}
+
+/** Relative time label: "just now", "2s ago", "5m ago" */
+function relativeMs(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 2000) return "live";
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  return "stale";
+}
+
 /* ═══════════════════════════════════════════════════ */
 
 export default function TradingPage() {
@@ -125,8 +151,14 @@ export default function TradingPage() {
   const macdContainerRef = useRef<HTMLDivElement>(null);
   const macdChartRef = useRef<import("lightweight-charts").IChartApi | null>(null);
   const wsStatus = useWebSocket((s) => s.status);
-  const { ticks, bars, currentBar, subscribeBars, subscribeTicks } = useMarketData();
+  const { ticks, lastTickMs, bars, currentBar, subscribeBars, subscribeTicks } = useMarketData();
   const { settings } = useSettings();
+
+  // Ref tracking current bar state for direct tick→chart updates
+  const liveBarStateRef = useRef<{ time: number; open: number; high: number; low: number; close: number; volume: number } | null>(null);
+  // Track last tick update time for freshness display (re-render every second)
+  const [tickAge, setTickAge] = useState<string>("—");
+  const tickAgeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Connect WebSocket on mount ──
   useEffect(() => {
@@ -197,6 +229,8 @@ export default function TradingPage() {
 
   // ── Reload bars when symbol/timeframe/broker changes ──
   useEffect(() => {
+    // Reset live bar state so stale data from previous symbol doesn't bleed through
+    liveBarStateRef.current = null;
     loadChartBars(chartSymbol, chartTimeframe);
   }, [chartSymbol, chartTimeframe, chartBroker, loadChartBars]);
 
@@ -238,11 +272,51 @@ export default function TradingPage() {
     // Don't push live bars before chart has initial data
     if (chartBars.length === 0) return;
     if (typeof liveCurrentBar.time === "number" && liveCurrentBar.time > 0) {
+      // Keep liveBarStateRef in sync with bar_update data
+      liveBarStateRef.current = { ...liveCurrentBar };
       chartRef.current.updateBar(liveCurrentBar);
     }
   }, [liveCurrentBar, chartMode, chartBars.length]);
 
   const currentTick = ticks[chartSymbol];
+
+  // ── Direct tick → chart update (fills gaps between bar_update events) ──
+  // For MT5: bar_update already fires on every tick, so this adds no latency.
+  // For non-MT5 (broker_stream.py REST polling): same path, ~1-2s intervals.
+  useEffect(() => {
+    if (!currentTick || !chartRef.current || chartMode !== "live") return;
+    if (chartBars.length === 0) return;
+
+    const midPrice = (currentTick.bid + currentTick.ask) / 2;
+    const last = liveBarStateRef.current;
+
+    if (last && typeof last.time === "number" && last.time > 0) {
+      const updated = {
+        ...last,
+        high: Math.max(last.high, midPrice),
+        low: Math.min(last.low, midPrice),
+        close: midPrice,
+      };
+      liveBarStateRef.current = updated;
+      chartRef.current.updateBar(updated);
+    }
+  }, [currentTick, chartMode, chartBars.length]);
+
+  // ── Tick age timer (update display every second) ──
+  useEffect(() => {
+    if (tickAgeTimerRef.current) clearInterval(tickAgeTimerRef.current);
+    if (chartMode !== "live" || wsStatus !== "connected") {
+      setTickAge("—");
+      return;
+    }
+    tickAgeTimerRef.current = setInterval(() => {
+      const ms = lastTickMs[chartSymbol];
+      setTickAge(ms ? relativeMs(ms) : "waiting…");
+    }, 1000);
+    return () => {
+      if (tickAgeTimerRef.current) clearInterval(tickAgeTimerRef.current);
+    };
+  }, [chartMode, wsStatus, chartSymbol, lastTickMs]);
 
   // ── Chart auto-refresh polling fallback ──
   // When WebSocket bar updates aren't arriving (e.g. on deployed server without MT5),
@@ -640,19 +714,46 @@ export default function TradingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Live tick display */}
+            {/* Live tick display — smart decimal formatting based on spread */}
             {currentTick && chartMode === "live" && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted">Bid:</span>
-                <span className="font-mono">{currentTick.bid.toFixed(currentTick.bid < 10 ? 5 : 2)}</span>
-                <span className="text-muted">Ask:</span>
-                <span className="font-mono">{currentTick.ask.toFixed(currentTick.ask < 10 ? 5 : 2)}</span>
-                <span className="text-muted">Spread:</span>
-                <span className="font-mono">{currentTick.spread.toFixed(currentTick.spread < 1 ? 5 : 2)}</span>
+              <div className="flex items-center gap-2 text-xs font-mono">
+                {/* Symbol badge */}
+                <span className="text-muted font-sans mr-0.5">{currentTick.symbol}</span>
+
+                {/* Bid */}
+                <span className="text-muted font-sans">B</span>
+                <span className="text-green-400">{fmtTick(currentTick.bid, currentTick.spread)}</span>
+
+                {/* Ask */}
+                <span className="text-muted font-sans">A</span>
+                <span className="text-red-400">{fmtTick(currentTick.ask, currentTick.spread)}</span>
+
+                {/* Spread */}
+                <span className="text-zinc-500 font-sans">Sprd</span>
+                <span className="text-zinc-400">{fmtTick(currentTick.spread, currentTick.spread)}</span>
+
+                {/* Freshness */}
+                <span className={`font-sans ml-0.5 px-1.5 py-0.5 rounded text-[10px] ${
+                  tickAge === "live"
+                    ? "bg-green-500/15 text-green-400"
+                    : tickAge === "waiting…"
+                      ? "bg-zinc-700/50 text-zinc-400"
+                      : "bg-amber-500/15 text-amber-400"
+                }`}>
+                  {tickAge}
+                </span>
               </div>
             )}
 
-            {/* Connection status */}
+            {/* No tick yet — show waiting state */}
+            {!currentTick && chartMode === "live" && wsStatus === "connected" && (
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-500 animate-pulse" />
+                Waiting for ticks…
+              </div>
+            )}
+
+            {/* Connection status dot */}
             <span className={`flex items-center gap-1.5 text-xs ${
               chartMode === "live" && wsStatus === "connected"
                 ? "text-green-400"

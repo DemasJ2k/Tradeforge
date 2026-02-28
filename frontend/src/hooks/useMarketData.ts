@@ -23,6 +23,8 @@ export interface BarData {
 interface MarketDataState {
   /** Latest tick per symbol */
   ticks: Record<string, TickData>;
+  /** Unix timestamp (ms) of most recent tick received per symbol */
+  lastTickMs: Record<string, number>;
   /** Live bars per "symbol:timeframe" key */
   bars: Record<string, BarData[]>;
   /** Current (incomplete) bar per "symbol:timeframe" */
@@ -39,6 +41,7 @@ interface MarketDataState {
 
 export const useMarketData = create<MarketDataState>((set) => ({
   ticks: {},
+  lastTickMs: {},
   bars: {},
   currentBar: {},
 
@@ -55,6 +58,7 @@ export const useMarketData = create<MarketDataState>((set) => ({
       };
       set((state) => ({
         ticks: { ...state.ticks, [symbol]: tick },
+        lastTickMs: { ...state.lastTickMs, [symbol]: Date.now() },
       }));
     });
     return unsub;
@@ -115,6 +119,6 @@ export const useMarketData = create<MarketDataState>((set) => ({
   },
 
   clear: () => {
-    set({ ticks: {}, bars: {}, currentBar: {} });
+    set({ ticks: {}, lastTickMs: {}, bars: {}, currentBar: {} });
   },
 }));

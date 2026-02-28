@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _TF_SECONDS = {
     "M1": 60,
     "M5": 300,
+    "M10": 600,
     "M15": 900,
     "M30": 1800,
     "H1": 3600,
