@@ -105,7 +105,9 @@ class CoinbaseAdapter(BrokerAdapter):
 
     def _auth_headers(self, method: str, path: str) -> dict:
         """Build JWT auth headers for a Coinbase API request."""
-        uri = f"{method.upper()} {self._BASE_URL}{path}"
+        # Coinbase CDP JWT spec requires URI without protocol: "GET api.coinbase.com/path"
+        host = self._BASE_URL.replace("https://", "").replace("http://", "")
+        uri = f"{method.upper()} {host}{path}"
         token = _build_jwt(self._api_key, self._api_secret, uri)
         return {
             "Authorization": f"Bearer {token}",
