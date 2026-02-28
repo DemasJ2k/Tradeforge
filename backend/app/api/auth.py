@@ -373,8 +373,18 @@ def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db))
     record.used_at = now
     db.commit()
 
+    # Issue a JWT so the frontend can auto-login immediately after reset
+    access_token = create_access_token({"sub": str(user.id)})
+
     logging.getLogger(__name__).info("Password reset completed for user %s", user.username)
-    return {"status": "ok", "message": "Password updated successfully. You can now log in."}
+    return {
+        "status": "ok",
+        "message": "Password updated successfully.",
+        "access_token": access_token,
+        "token_type": "bearer",
+        "must_change_password": False,
+        "totp_required": bool(user.totp_enabled),
+    }
 
 
 # ─── Admin: List pending reset requests ───
@@ -440,3 +450,72 @@ def admin_manual_reset(
         "Admin %s manually reset password for user %s", admin.username, user.username
     )
     return {"status": "ok", "message": f"Password reset for {user.username}. They must change it on next login."}
+
+
+# ─── Admin: List all registered users ───
+@router.get("/admin/users")
+def list_users(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Return all registered users (excluding the requesting admin)."""
+    users = db.query(User).order_by(User.created_at.asc()).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email or "",
+            "is_admin": bool(u.is_admin),
+            "must_change_password": bool(u.must_change_password),
+            "created_at": u.created_at.strftime("%Y-%m-%d %H:%M UTC") if u.created_at else "",
+        }
+        for u in users
+    ]
+
+
+# ─── Admin: Delete a user account ───
+@router.delete("/admin/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Permanently delete a user account and all their personal data."""
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot delete admin accounts")
+
+    username = user.username
+
+    # Delete password reset tokens
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user_id
+    ).delete(synchronize_session=False)
+
+    # Delete LLM data
+    try:
+        from app.models.llm import LLMMemory, LLMConversation, LLMUsage
+        db.query(LLMMemory).filter(LLMMemory.user_id == user_id).delete(synchronize_session=False)
+        db.query(LLMConversation).filter(LLMConversation.user_id == user_id).delete(synchronize_session=False)
+        db.query(LLMUsage).filter(LLMUsage.user_id == user_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    # Delete user settings
+    try:
+        from app.models.settings import UserSettings
+        db.query(UserSettings).filter(UserSettings.user_id == user_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    # Delete the user record
+    db.delete(user)
+    db.commit()
+
+    logging.getLogger(__name__).info("Admin %s deleted user %s (id=%d)", admin.username, username, user_id)
+    return {"status": "ok", "message": f"User '{username}' has been deleted."}

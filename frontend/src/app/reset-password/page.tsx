@@ -52,13 +52,23 @@ function ResetPasswordForm() {
 
     setLoading(true);
     try {
-      await api.post("/api/auth/reset-password", {
+      const data = await api.post<{
+        status: string;
+        access_token?: string;
+        totp_required?: boolean;
+      }>("/api/auth/reset-password", {
         token,
         new_password: newPw,
       });
+
+      // Store the JWT so AuthGate auto-loads the user when we redirect
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+      }
+
       setSuccess(true);
-      // Redirect to login after 2.5 seconds
-      setTimeout(() => router.push("/"), 2500);
+      // Short pause to show the success message, then enter the app
+      setTimeout(() => router.push("/"), 1500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reset failed. The link may have expired.");
     } finally {
@@ -78,10 +88,10 @@ function ResetPasswordForm() {
               <h2 className="text-sm font-semibold">Password Updated</h2>
             </div>
             <p className="text-center text-xs text-muted mb-4">
-              Your password has been reset. Redirecting you to sign in…
+              Your password has been updated. Logging you in…
             </p>
             <button onClick={() => router.push("/")} className={btnCls}>
-              Go to Sign In
+              Go to Dashboard
             </button>
           </>
         ) : (

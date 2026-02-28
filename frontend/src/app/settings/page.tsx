@@ -142,6 +142,14 @@ export default function SettingsPage() {
   const [manualResetUserId, setManualResetUserId] = useState<number | null>(null);
   const [manualResetPw, setManualResetPw] = useState('');
   const [manualResetMsg, setManualResetMsg] = useState('');
+
+  // Admin: registered users
+  const [registeredUsers, setRegisteredUsers] = useState<Array<{
+    id: number; username: string; email: string;
+    is_admin: boolean; must_change_password: boolean; created_at: string;
+  }>>([]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Broker credentials state
@@ -160,7 +168,7 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  // Load invitations + reset requests if admin
+  // Load invitations + reset requests + registered users if admin
   useEffect(() => {
     if (user?.is_admin && tab === 'profile') {
       fetch(`${API}/api/auth/invitations`, { headers: authHeaders() })
@@ -170,6 +178,10 @@ export default function SettingsPage() {
       fetch(`${API}/api/auth/admin/reset-requests`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setResetRequests(d); })
+        .catch(() => {});
+      fetch(`${API}/api/auth/admin/users`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setRegisteredUsers(d); })
         .catch(() => {});
     }
   }, [user, tab]);
@@ -637,6 +649,106 @@ export default function SettingsPage() {
                       </table>
                     </div>
                   )}
+
+                  {/* ─── Admin: Registered Users ─── */}
+                  <hr className="border-gray-800" />
+                  <h3 className="text-md font-semibold text-white">Registered Users (Admin)</h3>
+                  {deleteMsg && (
+                    <p className={`text-xs ${deleteMsg.includes('deleted') ? 'text-green-400' : 'text-red-400'}`}>{deleteMsg}</p>
+                  )}
+                  {registeredUsers.length === 0 ? (
+                    <p className="text-xs text-gray-500">No registered users yet.</p>
+                  ) : (
+                    <div className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                            <th className="text-left px-3 py-2">Username</th>
+                            <th className="text-left px-3 py-2">Email</th>
+                            <th className="text-left px-3 py-2">Joined</th>
+                            <th className="text-left px-3 py-2">Status</th>
+                            <th className="px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {registeredUsers.map(u => (
+                            <tr key={u.id} className="border-b border-gray-800/50">
+                              <td className="px-3 py-2 text-white font-medium">{u.username}</td>
+                              <td className="px-3 py-2 text-gray-400 text-xs">{u.email || '—'}</td>
+                              <td className="px-3 py-2 text-gray-400 text-xs">{u.created_at}</td>
+                              <td className="px-3 py-2">
+                                {u.is_admin ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400">admin</span>
+                                ) : u.must_change_password ? (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400">must change pw</span>
+                                ) : (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/30 text-green-400">active</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {!u.is_admin && u.id !== user?.id && (
+                                  <button
+                                    onClick={() => { setDeleteConfirmId(u.id); setDeleteMsg(''); }}
+                                    className="text-xs text-red-400 hover:text-red-300"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Delete User Confirmation Modal */}
+                  {deleteConfirmId !== null && (() => {
+                    const target = registeredUsers.find(u => u.id === deleteConfirmId);
+                    return (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                        <div className="w-full max-w-sm rounded-xl border border-gray-700 bg-[#151923] p-6 space-y-4">
+                          <h3 className="font-semibold text-white">Delete User Account</h3>
+                          <p className="text-sm text-gray-300">
+                            Are you sure you want to permanently delete{' '}
+                            <strong className="text-white">{target?.username}</strong>{target?.email ? ` (${target.email})` : ''}?
+                          </p>
+                          <p className="text-xs text-red-400">
+                            This removes their account, settings, LLM data, and access. This cannot be undone.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const r = await fetch(`${API}/api/auth/admin/users/${deleteConfirmId}`, {
+                                    method: 'DELETE',
+                                    headers: authHeaders(),
+                                  });
+                                  const d = await r.json();
+                                  if (r.ok) {
+                                    setRegisteredUsers(prev => prev.filter(u => u.id !== deleteConfirmId));
+                                    setDeleteMsg(d.message || 'User deleted.');
+                                  } else {
+                                    setDeleteMsg(d.detail || 'Failed to delete user.');
+                                  }
+                                } catch { setDeleteMsg('Request failed.'); }
+                                setDeleteConfirmId(null);
+                              }}
+                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                            >
+                              Yes, Delete
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="flex-1 rounded-lg border border-gray-700 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Manual Reset Modal */}
                   {manualResetUserId !== null && (
