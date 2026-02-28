@@ -91,6 +91,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { accounts: brokerAccounts, activeBroker, setActiveBroker } = useBrokerAccounts();
 
   const load = useCallback(async () => {
     try {
@@ -115,8 +116,6 @@ export default function Dashboard() {
   if (!data) return null;
 
   const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos } = data;
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { accounts: brokerAccounts, activeBroker, setActiveBroker } = useBrokerAccounts();
 
   return (
     <div className="space-y-6">

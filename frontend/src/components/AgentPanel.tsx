@@ -71,6 +71,9 @@ export default function AgentPanel() {
   const [actionError, setActionError] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
+  // Connected broker accounts for broker selector (must be before other hooks)
+  const { accounts: brokerAccounts, activeBroker } = useBrokerAccounts();
+
   // Create form state
   const [cName, setCName] = useState("");
   const [cStrategyId, setCStrategyId] = useState<number | null>(null);
@@ -79,13 +82,6 @@ export default function AgentPanel() {
   const [cMode, setCMode] = useState<AgentMode>("paper");
   const [cMlModelId, setCMlModelId] = useState<number | null>(null);
   const [cBroker, setCBroker] = useState<string>("");
-
-  // Connected broker accounts for broker selector
-  const { accounts: brokerAccounts, activeBroker } = useBrokerAccounts();
-  // Default cBroker to activeBroker when it changes
-  useEffect(() => {
-    if (activeBroker && !cBroker) setCBroker(activeBroker);
-  }, [activeBroker, cBroker]);
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -111,6 +107,11 @@ export default function AgentPanel() {
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
       .catch(() => {});
   }
+
+  // ── Default cBroker to activeBroker when it first becomes available ──
+  useEffect(() => {
+    if (activeBroker && !cBroker) setCBroker(activeBroker);
+  }, [activeBroker, cBroker]);
 
   // ── Subscribe to agent WebSocket channels ──
   useEffect(() => {
