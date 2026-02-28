@@ -1,8 +1,10 @@
+import hashlib
 import io
 import base64
 import logging
+import secrets
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,12 +18,14 @@ from app.core.auth import (
 from app.core.database import get_db
 from app.models.user import User
 from app.models.invitation import Invitation
+from app.models.password_reset import PasswordResetToken
 from app.schemas.auth import (
     UserCreate, UserLogin, UserResponse, Token,
     InvitationCreate, InvitationResponse,
     ForceChangePasswordRequest,
     TOTPSetupResponse, TOTPVerifyRequest, TOTPVerifyResponse,
     ProfileUpdate,
+    PasswordResetRequest, PasswordResetConfirm, AdminManualReset, ResetRequestItem,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -260,9 +264,9 @@ def list_invitations(
     ]
 
 
-# ─── Admin: Revoke invitation ───
+# ─── Admin: Revoke (pending) or permanently delete (revoked) invitation ───
 @router.delete("/invitations/{invite_id}")
-def revoke_invitation(
+def revoke_or_delete_invitation(
     invite_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
@@ -270,9 +274,169 @@ def revoke_invitation(
     invite = db.query(Invitation).filter(Invitation.id == invite_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Invitation not found")
-    if invite.status != "pending":
-        raise HTTPException(status_code=400, detail="Can only revoke pending invitations")
 
-    invite.status = "revoked"
+    if invite.status == "pending":
+        # Revoke pending invitation
+        invite.status = "revoked"
+        db.commit()
+        return {"status": "ok", "message": "Invitation revoked"}
+    elif invite.status == "revoked":
+        # Permanently delete a revoked invitation record
+        db.delete(invite)
+        db.commit()
+        return {"status": "ok", "message": "Invitation deleted"}
+    else:
+        raise HTTPException(status_code=400, detail="Cannot delete an accepted invitation")
+
+
+# ─── Password Reset: Request (public — no auth required) ───
+@router.post("/request-reset")
+def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+    """
+    Step 1 of password reset.
+    Always returns success to avoid leaking whether an email exists.
+    Sends a time-limited reset link to the user and a notification to the admin.
+    """
+    log = logging.getLogger(__name__)
+    user = db.query(User).filter(User.email == payload.email.strip().lower()).first()
+
+    if user:
+        # Invalidate any existing unused tokens for this user
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        ).delete(synchronize_session=False)
+
+        # Generate a cryptographically secure raw token (never stored)
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        db.add(PasswordResetToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        ))
+        db.commit()
+
+        reset_link = f"{__import__('app.core.config', fromlist=['settings']).settings.FRONTEND_URL}/reset-password?token={raw_token}"
+
+        def _send():
+            try:
+                from app.services.email import send_password_reset_email, send_admin_reset_notification
+                send_password_reset_email(user.email, user.username, reset_link)
+                send_admin_reset_notification(user.username, user.email)
+            except Exception as e:
+                log.warning("Reset email error: %s", e)
+
+        threading.Thread(target=_send, daemon=True).start()
+        log.info("Password reset requested for user %s (email %s)", user.username, user.email)
+
+    # Always return the same response — don't reveal whether email exists
+    return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
+
+
+# ─── Password Reset: Confirm (public — no auth required) ───
+@router.post("/reset-password")
+def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db)):
+    """Step 2 of password reset. Validates the token and sets the new password."""
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    record = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token_hash == token_hash,
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    # Normalize expires_at to UTC-aware if stored as naive datetime
+    expires = record.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+
+    if expires < now:
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+
+    if record.used_at is not None:
+        raise HTTPException(status_code=400, detail="Reset link has already been used.")
+
+    user = db.query(User).filter(User.id == record.user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    record.used_at = now
     db.commit()
-    return {"status": "ok", "message": "Invitation revoked"}
+
+    logging.getLogger(__name__).info("Password reset completed for user %s", user.username)
+    return {"status": "ok", "message": "Password updated successfully. You can now log in."}
+
+
+# ─── Admin: List pending reset requests ───
+@router.get("/admin/reset-requests", response_model=list[ResetRequestItem])
+def list_reset_requests(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Return all password reset tokens (pending and used) ordered newest first."""
+    now = datetime.now(timezone.utc)
+    records = (
+        db.query(PasswordResetToken)
+        .order_by(PasswordResetToken.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    result = []
+    for r in records:
+        user = db.query(User).filter(User.id == r.user_id).first()
+        if not user:
+            continue
+        expires = r.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        result.append(ResetRequestItem(
+            id=r.id,
+            user_id=r.user_id,
+            username=user.username,
+            email=user.email,
+            created_at=r.created_at.strftime("%Y-%m-%d %H:%M UTC"),
+            expires_at=expires.strftime("%Y-%m-%d %H:%M UTC"),
+            used=r.used_at is not None,
+        ))
+    return result
+
+
+# ─── Admin: Manually reset a user's password ───
+@router.post("/admin/manual-reset")
+def admin_manual_reset(
+    payload: AdminManualReset,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Admin sets a temporary password for a user and forces a change on next login."""
+    if len(payload.temp_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(payload.temp_password)
+    user.must_change_password = True
+
+    # Invalidate any outstanding reset tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    logging.getLogger(__name__).info(
+        "Admin %s manually reset password for user %s", admin.username, user.username
+    )
+    return {"status": "ok", "message": f"Password reset for {user.username}. They must change it on next login."}

@@ -35,7 +35,7 @@ const pnlColor = (v: number) =>
   v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-muted";
 
 const SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100"];
-const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
+const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
 
 /* ═══════════════════════════════════════════════════════ */
 
@@ -85,6 +85,26 @@ export default function AgentPanel() {
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
   const [creating, setCreating] = useState(false);
 
+  // Symbol combobox state for create form
+  const AGENT_DEFAULT_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
+  const [cSymbolInput, setCSymbolInput] = useState("XAUUSD");
+  const [cSymbolOpen, setCSymbolOpen] = useState(false);
+  const [cCustomSymbols, setCCustomSymbols] = useState<string[]>([]);
+
+  const applyAgentSymbol = (sym: string) => {
+    const upper = sym.trim().toUpperCase();
+    if (!upper) return;
+    if (!AGENT_DEFAULT_SYMBOLS.includes(upper) && !cCustomSymbols.includes(upper)) {
+      setCCustomSymbols(prev => [...prev, upper]);
+    }
+    setCSymbol(upper);
+    setCSymbolInput(upper);
+    setCSymbolOpen(false);
+  };
+  const filteredAgentSymbols = [...AGENT_DEFAULT_SYMBOLS, ...cCustomSymbols].filter(s =>
+    cSymbolInput === "" || s.includes(cSymbolInput.toUpperCase())
+  );
+
   // Risk config form state
   const [cSizeType, setCSizeType] = useState("fixed_lot");
   const [cSizeValue, setCSizeValue] = useState("0.01");
@@ -92,6 +112,17 @@ export default function AgentPanel() {
   const [cMaxOpenPositions, setCMaxOpenPositions] = useState("3");
   const [cMaxDailyLoss, setCMaxDailyLoss] = useState("5");
   const [cMaxDrawdown, setCMaxDrawdown] = useState("10");
+
+  // Edit agent modal state
+  const [editAgent, setEditAgent] = useState<Agent | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editMode, setEditMode] = useState("paper");
+  const [editMlModelId, setEditMlModelId] = useState<number | null>(null);
+  const [editLotSize, setEditLotSize] = useState(0.01);
+  const [editMaxPositions, setEditMaxPositions] = useState(3);
+  const [editMaxDailyLoss, setEditMaxDailyLoss] = useState(5);
+  const [editMaxDrawdown, setEditMaxDrawdown] = useState(10);
+  const [editMsg, setEditMsg] = useState("");
 
   // ── Load agents & strategies on mount ──
   const didLoad = useRef(false);
@@ -454,6 +485,21 @@ export default function AgentPanel() {
                         </>
                       )}
                       <button
+                        onClick={() => {
+                          setEditAgent(agent);
+                          setEditName(agent.name);
+                          setEditMode(agent.mode);
+                          setEditMlModelId(agent.ml_model_id ?? null);
+                          setEditLotSize(agent.risk_config?.lot_size ?? 0.01);
+                          setEditMaxPositions(agent.risk_config?.max_open_positions ?? 3);
+                          setEditMaxDailyLoss(agent.risk_config?.max_daily_loss_pct ?? 5);
+                          setEditMaxDrawdown(agent.risk_config?.max_drawdown_pct ?? 10);
+                          setEditMsg("");
+                        }}
+                        title="Edit agent"
+                        className="rounded p-1 text-muted hover:text-accent transition-colors text-sm"
+                      >✏️</button>
+                      <button
                         onClick={() => handleAction("delete", agent)}
                         disabled={actionLoading === agent.id}
                         className="rounded border border-card-border px-2 py-0.5 text-xs text-muted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
@@ -549,15 +595,33 @@ export default function AgentPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-muted mb-1">Symbol</label>
-                <select
-                  value={cSymbol}
-                  onChange={(e) => setCSymbol(e.target.value)}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                >
-                  {SYMBOLS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    value={cSymbolInput}
+                    onChange={e => { setCSymbolInput(e.target.value.toUpperCase()); setCSymbolOpen(true); }}
+                    onFocus={() => setCSymbolOpen(true)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyAgentSymbol(cSymbolInput); } if (e.key === "Escape") setCSymbolOpen(false); }}
+                    onBlur={() => setTimeout(() => setCSymbolOpen(false), 150)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
+                    placeholder="Symbol (e.g. XAUUSD)"
+                  />
+                  {cSymbolOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg border border-card-border bg-card-bg shadow-lg max-h-40 overflow-y-auto">
+                      {filteredAgentSymbols.map(s => (
+                        <button key={s} onMouseDown={() => applyAgentSymbol(s)}
+                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-card-border transition-colors ${s === cSymbol ? "text-accent" : "text-foreground"}`}>
+                          {s}
+                        </button>
+                      ))}
+                      {cSymbolInput && !filteredAgentSymbols.includes(cSymbolInput) && (
+                        <button onMouseDown={() => applyAgentSymbol(cSymbolInput)}
+                          className="w-full text-left px-3 py-1.5 text-sm text-accent hover:bg-card-border transition-colors">
+                          + Use &quot;{cSymbolInput}&quot;
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-muted mb-1">Timeframe</label>
@@ -742,6 +806,69 @@ export default function AgentPanel() {
               >
                 {creating ? "Creating..." : "Create Agent"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editAgent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={e => { if (e.target === e.currentTarget) setEditAgent(null); }}>
+          <div className="w-full max-w-md rounded-xl border border-card-border bg-card-bg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-semibold text-foreground">Edit Agent</h3>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded bg-background p-2"><div className="text-muted mb-0.5">Symbol</div><div className="text-foreground font-mono">{editAgent.symbol}</div></div>
+              <div className="rounded bg-background p-2"><div className="text-muted mb-0.5">Timeframe</div><div className="text-foreground">{editAgent.timeframe}</div></div>
+              <div className="rounded bg-background p-2"><div className="text-muted mb-0.5">Broker</div><div className="text-foreground capitalize">{editAgent.broker_name}</div></div>
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1.5">Agent Name</label>
+              <input value={editName} onChange={e => setEditName(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1.5">Mode</label>
+              <select value={editMode} onChange={e => setEditMode(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                <option value="paper">Paper Trading (simulated)</option>
+                <option value="confirm">Confirm Each Trade</option>
+                <option value="autonomous">Fully Autonomous</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted mb-1.5">Lot Size</label>
+                <input type="number" step="0.01" min="0.01" value={editLotSize} onChange={e => setEditLotSize(parseFloat(e.target.value) || 0.01)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-1.5">Max Open Positions</label>
+                <input type="number" min="1" max="50" value={editMaxPositions} onChange={e => setEditMaxPositions(parseInt(e.target.value) || 1)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-1.5">Max Daily Loss %</label>
+                <input type="number" step="0.5" min="0" value={editMaxDailyLoss} onChange={e => setEditMaxDailyLoss(parseFloat(e.target.value) || 0)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-1.5">Max Drawdown %</label>
+                <input type="number" step="0.5" min="0" value={editMaxDrawdown} onChange={e => setEditMaxDrawdown(parseFloat(e.target.value) || 0)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+              </div>
+            </div>
+            {editMsg && <p className={`text-xs ${editMsg.startsWith('✓') ? 'text-accent' : 'text-danger'}`}>{editMsg}</p>}
+            <div className="flex gap-2 pt-1">
+              <button onClick={async () => {
+                try {
+                  await api.put(`/api/agents/${editAgent.id}`, {
+                    name: editName, mode: editMode, ml_model_id: editMlModelId,
+                    risk_config: { ...editAgent.risk_config, lot_size: editLotSize, max_open_positions: editMaxPositions, max_daily_loss_pct: editMaxDailyLoss, max_drawdown_pct: editMaxDrawdown },
+                  });
+                  setEditMsg("✓ Agent updated successfully");
+                  setTimeout(() => setEditAgent(null), 1200);
+                } catch (err: unknown) { setEditMsg(err instanceof Error ? err.message : "Save failed"); }
+              }} className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-black hover:bg-accent-hover transition-colors">Save Changes</button>
+              <button onClick={() => setEditAgent(null)} className="flex-1 rounded-lg border border-card-border py-2 text-sm text-muted hover:text-foreground transition-colors">Cancel</button>
             </div>
           </div>
         </div>

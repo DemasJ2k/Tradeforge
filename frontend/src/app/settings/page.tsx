@@ -87,13 +87,13 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 const TABS = [
-  { id: 'profile', label: 'Profile' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'llm', label: 'AI / LLM' },
-  { id: 'trading', label: 'Trading Defaults' },
-  { id: 'brokers', label: 'Brokers' },
-  { id: 'data', label: 'Data Management' },
-  { id: 'platform', label: 'Platform' },
+  { id: 'profile',    label: 'Profile',           icon: '👤' },
+  { id: 'appearance', label: 'Appearance',         icon: '🎨' },
+  { id: 'llm',        label: 'AI / LLM',           icon: '🤖' },
+  { id: 'trading',    label: 'Trading Defaults',   icon: '📈' },
+  { id: 'brokers',    label: 'Brokers',            icon: '🔗' },
+  { id: 'data',       label: 'Data Management',    icon: '💾' },
+  { id: 'platform',   label: 'Platform',           icon: '⚙️' },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -134,6 +134,16 @@ export default function SettingsPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [invMsg, setInvMsg] = useState('');
 
+  // Admin password reset requests
+  const [resetRequests, setResetRequests] = useState<Array<{
+    id: number; user_id: number; username: string; email: string;
+    created_at: string; expires_at: string; used: boolean;
+  }>>([]);
+  const [manualResetUserId, setManualResetUserId] = useState<number | null>(null);
+  const [manualResetPw, setManualResetPw] = useState('');
+  const [manualResetMsg, setManualResetMsg] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   // Broker credentials state
   const [brokerCreds, setBrokerCreds] = useState<BrokerCredentialMasked[]>([]);
   const [brokerForms, setBrokerForms] = useState<Record<string, Record<string, string>>>({});
@@ -150,12 +160,16 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  // Load invitations if admin
+  // Load invitations + reset requests if admin
   useEffect(() => {
     if (user?.is_admin && tab === 'profile') {
       fetch(`${API}/api/auth/invitations`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setInvitations(d); })
+        .catch(() => {});
+      fetch(`${API}/api/auth/admin/reset-requests`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setResetRequests(d); })
         .catch(() => {});
     }
   }, [user, tab]);
@@ -347,15 +361,32 @@ export default function SettingsPage() {
         <p className="text-gray-400 text-sm mt-1">Configure your TradeForge experience</p>
       </div>
 
-      <div className="flex gap-6">
-        {/* Tab sidebar */}
-        <div className="w-48 shrink-0 space-y-1">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>
-              {t.label}
-            </button>
-          ))}
+      <div className="flex gap-4">
+        {/* Collapseable Tab Sidebar */}
+        <div className={`shrink-0 transition-all duration-200 ${sidebarOpen ? 'w-48' : 'w-12'}`}>
+          {/* Toggle button */}
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            className="mb-2 flex h-9 w-full items-center justify-center rounded-lg border border-gray-800 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors text-sm"
+            title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
+          >
+            {sidebarOpen ? '◀' : '▶'}
+          </button>
+          <div className="space-y-1">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                title={!sidebarOpen ? t.label : undefined}
+                className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors overflow-hidden
+                  ${sidebarOpen ? 'px-3 py-2.5 text-left' : 'px-0 py-2.5 justify-center'}
+                  ${tab === t.id ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}
+              >
+                <span className="text-base shrink-0">{t.icon}</span>
+                {sidebarOpen && <span className="truncate">{t.label}</span>}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tab content */}
@@ -542,18 +573,121 @@ export default function SettingsPage() {
                                   'bg-yellow-900/30 text-yellow-400'
                                 }`}>{inv.status}</span>
                               </td>
-                              <td className="px-3 py-2 text-right">
+                              <td className="px-3 py-2 text-right flex gap-2 justify-end">
                                 {inv.status === 'pending' && (
                                   <button onClick={async () => {
                                     await fetch(`${API}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
                                     setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'revoked' } : i));
                                   }} className="text-xs text-red-400 hover:text-red-300">Revoke</button>
                                 )}
+                                {inv.status === 'revoked' && (
+                                  <button onClick={async () => {
+                                    const r = await fetch(`${API}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
+                                    if (r.ok) setInvitations(prev => prev.filter(i => i.id !== inv.id));
+                                  }} className="text-xs text-gray-500 hover:text-red-400">Delete</button>
+                                )}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+                  {/* ─── Admin: Password Reset Requests ─── */}
+                  <hr className="border-gray-800" />
+                  <h3 className="text-md font-semibold text-white">Password Reset Requests (Admin)</h3>
+                  {resetRequests.length === 0 ? (
+                    <p className="text-xs text-gray-500">No password reset requests yet.</p>
+                  ) : (
+                    <div className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                            <th className="text-left px-3 py-2">Username</th>
+                            <th className="text-left px-3 py-2">Email</th>
+                            <th className="text-left px-3 py-2">Requested</th>
+                            <th className="text-left px-3 py-2">Status</th>
+                            <th className="px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resetRequests.map(req => (
+                            <tr key={req.id} className="border-b border-gray-800/50">
+                              <td className="px-3 py-2 text-white">{req.username}</td>
+                              <td className="px-3 py-2 text-gray-400">{req.email}</td>
+                              <td className="px-3 py-2 text-gray-400 text-xs">{req.created_at}</td>
+                              <td className="px-3 py-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  req.used ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'
+                                }`}>{req.used ? 'used' : 'pending'}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {!req.used && (
+                                  <button
+                                    onClick={() => { setManualResetUserId(req.user_id); setManualResetPw(''); setManualResetMsg(''); }}
+                                    className="text-xs text-blue-400 hover:text-blue-300"
+                                  >
+                                    Manual Reset
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Manual Reset Modal */}
+                  {manualResetUserId !== null && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                      <div className="w-full max-w-sm rounded-xl border border-gray-700 bg-[#151923] p-6 space-y-4">
+                        <h3 className="font-semibold text-white">Manual Password Reset</h3>
+                        <p className="text-xs text-gray-400">
+                          Set a temporary password for this user. They will be required to change it on next login.
+                        </p>
+                        <input
+                          type="text"
+                          value={manualResetPw}
+                          onChange={e => setManualResetPw(e.target.value)}
+                          className={inputCls}
+                          placeholder="Temporary password (min 6 chars)"
+                        />
+                        {manualResetMsg && <p className={`text-xs ${manualResetMsg.includes('success') || manualResetMsg.includes('Reset') ? 'text-green-400' : 'text-red-400'}`}>{manualResetMsg}</p>}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (manualResetPw.length < 6) { setManualResetMsg('Password must be at least 6 characters'); return; }
+                              try {
+                                const r = await fetch(`${API}/api/auth/admin/manual-reset`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                  body: JSON.stringify({ user_id: manualResetUserId, temp_password: manualResetPw }),
+                                });
+                                const d = await r.json();
+                                if (r.ok) {
+                                  setManualResetMsg('Reset successful — user must change password on next login.');
+                                  // Refresh reset requests
+                                  const lr = await fetch(`${API}/api/auth/admin/reset-requests`, { headers: authHeaders() });
+                                  const ld = await lr.json();
+                                  if (Array.isArray(ld)) setResetRequests(ld);
+                                  setTimeout(() => { setManualResetUserId(null); setManualResetPw(''); setManualResetMsg(''); }, 1800);
+                                } else { setManualResetMsg(d.detail || 'Failed'); }
+                              } catch { setManualResetMsg('Request failed'); }
+                            }}
+                            disabled={!manualResetPw}
+                            className={btnPrimary}
+                          >
+                            Set Password
+                          </button>
+                          <button
+                            onClick={() => { setManualResetUserId(null); setManualResetPw(''); setManualResetMsg(''); }}
+                            className="flex-1 rounded-lg border border-gray-700 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </>

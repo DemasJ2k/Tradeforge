@@ -24,7 +24,7 @@ function Logo() {
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, login, register, loadUser, mustChangePassword, totpRequired, clearFlags, refreshUser } = useAuth();
   const { loadSettings } = useSettings();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -35,6 +35,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   // TOTP verification state
   const [totpCode, setTotpCode] = useState("");
+
+  // Forgot password state
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -149,6 +154,82 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // ─── Forgot Password Screen ───
+  if (!user && mode === "forgot") {
+    const handleForgot = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError("");
+      setForgotLoading(true);
+      try {
+        await api.post("/api/auth/request-reset", { email: forgotEmail.trim() });
+        setForgotSent(true);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setForgotLoading(false);
+      }
+    };
+
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="w-full max-w-sm rounded-xl border border-card-border bg-card-bg p-8">
+          <Logo />
+          {forgotSent ? (
+            <>
+              <div className="mb-4 flex flex-col items-center gap-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/20 text-2xl">✉️</div>
+                <h2 className="text-sm font-semibold">Check your inbox</h2>
+              </div>
+              <p className="text-center text-xs text-muted mb-6">
+                If <span className="text-foreground">{forgotEmail}</span> is registered, a reset link has been sent. It expires in 1 hour.
+              </p>
+              <button
+                onClick={() => { setMode("login"); setForgotSent(false); setForgotEmail(""); }}
+                className={btnCls}
+              >
+                Back to Sign In
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-center text-sm font-semibold mb-1">Forgot Password</h2>
+              <p className="text-center text-xs text-muted mb-4">
+                Enter your email and we&apos;ll send you a reset link.
+              </p>
+              <form onSubmit={handleForgot} className="space-y-4">
+                <div>
+                  <label className="block text-xs text-muted mb-1.5">Email Address</label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className={inputCls}
+                    placeholder="you@example.com"
+                    required
+                    autoFocus
+                  />
+                </div>
+                {error && <p className="text-xs text-danger">{error}</p>}
+                <button type="submit" className={btnCls} disabled={forgotLoading}>
+                  {forgotLoading ? "Sending…" : "Send Reset Link"}
+                </button>
+              </form>
+              <p className="mt-4 text-center text-xs text-muted">
+                Remember your password?{" "}
+                <button
+                  onClick={() => { setMode("login"); setError(""); }}
+                  className="text-accent hover:underline"
+                >
+                  Sign in
+                </button>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ─── Login / Register Screen ───
   if (!user) {
     const handleSubmit = async (e: React.FormEvent) => {
@@ -199,7 +280,19 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             </button>
           </form>
 
-          <p className="mt-4 text-center text-xs text-muted">
+          {/* Forgot password link — login mode only */}
+          {mode === "login" && (
+            <p className="mt-2 text-center text-xs">
+              <button
+                onClick={() => { setMode("forgot"); setError(""); }}
+                className="text-muted hover:text-accent transition-colors"
+              >
+                Forgot password?
+              </button>
+            </p>
+          )}
+
+          <p className="mt-3 text-center text-xs text-muted">
             {mode === "login" ? (
               <>
                 Have an invitation?{" "}

@@ -40,6 +40,7 @@ from app.models import llm as llm_model  # noqa: F401
 from app.models import ml as ml_model  # noqa: F401
 from app.models import invitation  # noqa: F401
 from app.models import agent as agent_model  # noqa: F401
+from app.models import password_reset as password_reset_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)

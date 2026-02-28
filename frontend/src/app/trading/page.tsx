@@ -8,6 +8,7 @@ import CandlestickChart, { type ChartHandle, type CandleInput } from "@/componen
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useSettings } from "@/hooks/useSettings";
+import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
 import type {
   AccountInfo,
   LivePosition,
@@ -57,18 +58,28 @@ export default function TradingPage() {
   const [oSL, setOSL] = useState("");
   const [oTP, setOTP] = useState("");
   const [placing, setPlacing] = useState(false);
+  const [orderBroker, setOrderBroker] = useState("");
+  const { accounts: brokerAccounts, activeBroker } = useBrokerAccounts();
 
   // polling
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Chart state ──
   const DEFAULT_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
-  const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
-  const [chartSymbol, setChartSymbol] = useState("XAUUSD");
+  const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
+  const [chartSymbol, setChartSymbol] = useState(() =>
+    (typeof window !== "undefined" ? localStorage.getItem("tf_chart_symbol") : null) ?? "XAUUSD"
+  );
   const [symbolInput, setSymbolInput] = useState("XAUUSD");
   const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false);
   const [customSymbols, setCustomSymbols] = useState<string[]>([]);
   const symbolInputRef = useRef<HTMLInputElement>(null);
+  const [recentSymbols, setRecentSymbols] = useState<string[]>(() => {
+    try {
+      if (typeof window === "undefined") return [];
+      return JSON.parse(localStorage.getItem("tf_recent_symbols") ?? "[]");
+    } catch { return []; }
+  });
 
   const applySymbol = (sym: string) => {
     const upper = sym.trim().toUpperCase();
@@ -79,15 +90,27 @@ export default function TradingPage() {
     setChartSymbol(upper);
     setSymbolInput(upper);
     setSymbolDropdownOpen(false);
+    setRecentSymbols(prev => {
+      const next = [upper, ...prev.filter(s => s !== upper)].slice(0, 5);
+      if (typeof window !== "undefined") localStorage.setItem("tf_recent_symbols", JSON.stringify(next));
+      return next;
+    });
   };
 
   const allSymbols = [...new Set([...DEFAULT_SYMBOLS, ...customSymbols])];
   const filteredSymbols = symbolInput
     ? allSymbols.filter((s) => s.includes(symbolInput.toUpperCase()))
     : allSymbols;
-  const [chartTimeframe, setChartTimeframe] = useState("H1");
-  const [chartBroker, setChartBroker] = useState<string>("mt5"); // "mt5" | "oanda" | "coinbase" | "tradovate" | "static"
+  const [chartTimeframe, setChartTimeframe] = useState(() =>
+    (typeof window !== "undefined" ? localStorage.getItem("tf_chart_timeframe") : null) ?? "H1"
+  );
+  const [chartBroker, setChartBroker] = useState<string>(() =>
+    (typeof window !== "undefined" ? localStorage.getItem("tf_chart_broker") : null) ?? "mt5"
+  ); // "mt5" | "oanda" | "coinbase" | "tradovate" | "static"
   const chartMode = chartBroker === "static" ? "static" : "live";
+  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_symbol", chartSymbol); }, [chartSymbol]);
+  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_timeframe", chartTimeframe); }, [chartTimeframe]);
+  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_broker", chartBroker); }, [chartBroker]);
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
@@ -374,7 +397,7 @@ export default function TradingPage() {
       if (oSL) req.stop_loss = parseFloat(oSL);
       if (oTP) req.take_profit = parseFloat(oTP);
 
-      await api.post("/api/broker/orders", req);
+      await api.post("/api/broker/orders", { ...req, broker: orderBroker });
       setShowOrder(false);
       refreshData();
     } catch (e: unknown) {
@@ -398,7 +421,7 @@ export default function TradingPage() {
                 {brokerName}
               </span>
               <button
-                onClick={() => setShowOrder(true)}
+                onClick={() => { setShowOrder(true); setOrderBroker(activeBroker ?? brokerAccounts.find(b => b.connected)?.broker ?? ""); }}
                 className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/80 transition-colors"
               >
                 New Order
@@ -461,6 +484,18 @@ export default function TradingPage() {
               </div>
               {symbolDropdownOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-card-border bg-card-bg shadow-xl">
+                  {recentSymbols.length > 0 && symbolInput === "" && (
+                    <>
+                      <div className="px-3 py-1 text-xs text-muted font-medium border-b border-card-border">Recent</div>
+                      {recentSymbols.map(s => (
+                        <button key={`recent-${s}`} onMouseDown={() => applySymbol(s)}
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-card-border transition-colors text-accent">
+                          🕐 {s}
+                        </button>
+                      ))}
+                      <div className="px-3 py-1 text-xs text-muted font-medium border-b border-card-border">All Symbols</div>
+                    </>
+                  )}
                   {filteredSymbols.map((s) => (
                     <button
                       key={s}
@@ -726,6 +761,16 @@ export default function TradingPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-md rounded-xl border border-card-border bg-[#1a1a2e] p-6 space-y-4">
             <h3 className="text-lg font-semibold">Place Order</h3>
+
+            <div>
+              <label className="block text-xs text-muted mb-1.5">Broker</label>
+              <select value={orderBroker} onChange={e => setOrderBroker(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                {brokerAccounts.filter(b => b.connected).map(b => (
+                  <option key={b.broker} value={b.broker}>{b.broker.charAt(0).toUpperCase() + b.broker.slice(1)} ({b.currency})</option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <label className="block text-xs text-muted mb-1">Symbol</label>
@@ -1083,8 +1128,11 @@ export default function TradingPage() {
                   <thead>
                     <tr className="border-b border-card-border text-xs text-muted">
                       <th className="pb-2 text-left font-medium">Symbol</th>
+                      <th className="pb-2 text-left font-medium">Broker</th>
                       <th className="pb-2 text-left font-medium">Side</th>
                       <th className="pb-2 text-right font-medium">Size</th>
+                      <th className="pb-2 text-right font-medium">SL</th>
+                      <th className="pb-2 text-right font-medium">TP</th>
                       <th className="pb-2 text-right font-medium">Entry</th>
                       <th className="pb-2 text-right font-medium">Exit</th>
                       <th className="pb-2 text-right font-medium">P&L</th>
@@ -1099,6 +1147,7 @@ export default function TradingPage() {
                         className="border-b border-card-border/50 last:border-0"
                       >
                         <td className="py-2">{t.symbol}</td>
+                        <td className="py-2 text-xs text-muted">{(t as any).broker ?? "—"}</td>
                         <td className="py-2">
                           <span
                             className={
@@ -1111,6 +1160,8 @@ export default function TradingPage() {
                           </span>
                         </td>
                         <td className="py-2 text-right">{t.lot_size}</td>
+                        <td className="py-2 text-right text-xs text-muted">{(t as any).stop_loss ?? "—"}</td>
+                        <td className="py-2 text-right text-xs text-muted">{(t as any).take_profit ?? "—"}</td>
                         <td className="py-2 text-right">
                           {t.entry_price ? fmt(t.entry_price, 5) : "—"}
                         </td>

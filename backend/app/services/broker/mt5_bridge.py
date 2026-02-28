@@ -62,6 +62,27 @@ except ImportError:
     logger.warning("MetaTrader5 package not installed — MT5 adapter unavailable")
 
 
+def _order_send_with_filling_fallback(request: dict):
+    """
+    Try different MT5 order filling modes.
+    Retcode 10030 = unsupported filling mode — try the next mode.
+    """
+    import MetaTrader5 as mt5
+    filling_modes = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
+    last_result = None
+    for filling in filling_modes:
+        req = {**request, "type_filling": filling}
+        result = mt5.order_send(req)
+        if result is None:
+            last_result = result
+            continue
+        if result.retcode == 10030:  # Unsupported filling mode
+            last_result = result
+            continue
+        return result
+    return last_result
+
+
 class MT5Adapter(BrokerAdapter):
     """
     MetaTrader 5 bridge adapter.
@@ -211,10 +232,9 @@ class MT5Adapter(BrokerAdapter):
                 "magic": 100,
                 "comment": "tradeforge_close",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
             }
 
-            result = mt5.order_send(request)
+            result = _order_send_with_filling_fallback(request)
             return result
 
         result = await self._run(_do_close)
@@ -269,7 +289,6 @@ class MT5Adapter(BrokerAdapter):
                 "magic": 100,
                 "comment": request.comment or "tradeforge",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
             }
 
             if request.order_type == OrderType.LIMIT:
@@ -293,7 +312,7 @@ class MT5Adapter(BrokerAdapter):
             if request.take_profit:
                 mt5_request["tp"] = request.take_profit
 
-            result = mt5.order_send(mt5_request)
+            result = _order_send_with_filling_fallback(mt5_request)
             return result
 
         result = await self._run(_do_order)

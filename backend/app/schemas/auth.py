@@ -80,3 +80,29 @@ class TOTPVerifyResponse(BaseModel):
 class ProfileUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
+
+
+# ─── Password Reset ───
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+
+class AdminManualReset(BaseModel):
+    user_id: int
+    temp_password: str
+
+
+class ResetRequestItem(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    email: str
+    created_at: str
+    expires_at: str
+    used: bool
