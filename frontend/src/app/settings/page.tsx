@@ -91,6 +91,7 @@ const TABS = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'llm', label: 'AI / LLM' },
   { id: 'trading', label: 'Trading Defaults' },
+  { id: 'brokers', label: 'Brokers' },
   { id: 'data', label: 'Data Management' },
   { id: 'platform', label: 'Platform' },
 ] as const;
@@ -958,6 +959,258 @@ export default function SettingsPage() {
               }} className={btnDanger}>
                 Clear All Data
               </button>
+            </div>
+          )}
+
+          {/* ─── Brokers ─── */}
+          {tab === 'brokers' && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Broker Connections</h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  Save API credentials for each broker. Credentials are encrypted at rest.
+                  Once saved, you can connect and fetch historical data from the Data page.
+                </p>
+              </div>
+
+              {/* Oanda */}
+              {(() => {
+                const bc = brokerCreds.find(b => b.broker === 'oanda');
+                const busy = brokerBusy['oanda'];
+                const msg = brokerMsg['oanda'];
+                const form = brokerForms['oanda'] || {};
+                const expanded = expandedBroker === 'oanda';
+                return (
+                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-white">Oanda</span>
+                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
+                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
+                        {bc?.fields_set?.length ? <span className="text-xs text-gray-500">{bc.fields_set.join(', ')} set</span> : null}
+                      </div>
+                      <button onClick={() => setExpandedBroker(expanded ? null : 'oanda')}
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                        <Field label="API Key (Personal Access Token)">
+                          <input type="password" value={form.api_key || ''} onChange={e => setBrokerField('oanda', 'api_key', e.target.value)}
+                            placeholder="••••••••" className={inputCls} />
+                        </Field>
+                        <Field label="Account ID">
+                          <input type="text" value={form.account_id || ''} onChange={e => setBrokerField('oanda', 'account_id', e.target.value)}
+                            placeholder="101-011-12345678-001" className={inputCls} />
+                        </Field>
+                        <Toggle value={form.practice !== 'false'}
+                          onChange={v => setBrokerField('oanda', 'practice', v.toString())}
+                          label="Practice account (paper trading)" />
+                        <Toggle value={brokerAutoConnect['oanda'] ?? false}
+                          onChange={v => setBrokerAutoConnect(p => ({ ...p, oanda: v }))}
+                          label="Auto-connect on startup" />
+                        <div className="flex gap-2 pt-1 flex-wrap">
+                          <button onClick={() => saveBrokerCreds('oanda')} disabled={busy} className={btnPrimary}>
+                            {busy ? 'Saving...' : 'Save Credentials'}
+                          </button>
+                          {bc?.configured && (
+                            <button onClick={() => connectBroker('oanda')} disabled={busy} className={btnSecondary}>
+                              {busy ? 'Connecting...' : 'Test Connection'}
+                            </button>
+                          )}
+                          {bc?.configured && (
+                            <button onClick={() => deleteBrokerCreds('oanda')} disabled={busy} className={btnDanger}>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Coinbase */}
+              {(() => {
+                const bc = brokerCreds.find(b => b.broker === 'coinbase');
+                const busy = brokerBusy['coinbase'];
+                const msg = brokerMsg['coinbase'];
+                const form = brokerForms['coinbase'] || {};
+                const expanded = expandedBroker === 'coinbase';
+                return (
+                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-white">Coinbase Advanced</span>
+                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
+                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
+                      </div>
+                      <button onClick={() => setExpandedBroker(expanded ? null : 'coinbase')}
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                        <p className="text-xs text-gray-400">Use CDP (Cloud Developer Platform) API keys. Format: organizations/…/apiKeys/…</p>
+                        <Field label="CDP API Key Name">
+                          <input type="text" value={form.api_key || ''} onChange={e => setBrokerField('coinbase', 'api_key', e.target.value)}
+                            placeholder="organizations/.../apiKeys/..." className={inputCls} />
+                        </Field>
+                        <Field label="CDP API Secret (EC Private Key PEM)">
+                          <textarea value={form.api_secret || ''} onChange={e => setBrokerField('coinbase', 'api_secret', e.target.value)}
+                            placeholder="-----BEGIN EC PRIVATE KEY-----&#10;...&#10;-----END EC PRIVATE KEY-----"
+                            rows={4} className={`${inputCls} font-mono text-xs`} />
+                        </Field>
+                        <div className="flex gap-2 pt-1 flex-wrap">
+                          <button onClick={() => saveBrokerCreds('coinbase')} disabled={busy} className={btnPrimary}>
+                            {busy ? 'Saving...' : 'Save Credentials'}
+                          </button>
+                          {bc?.configured && (
+                            <button onClick={() => connectBroker('coinbase')} disabled={busy} className={btnSecondary}>
+                              {busy ? 'Connecting...' : 'Test Connection'}
+                            </button>
+                          )}
+                          {bc?.configured && (
+                            <button onClick={() => deleteBrokerCreds('coinbase')} disabled={busy} className={btnDanger}>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Tradovate */}
+              {(() => {
+                const bc = brokerCreds.find(b => b.broker === 'tradovate');
+                const busy = brokerBusy['tradovate'];
+                const msg = brokerMsg['tradovate'];
+                const form = brokerForms['tradovate'] || {};
+                const expanded = expandedBroker === 'tradovate';
+                return (
+                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-white">Tradovate</span>
+                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
+                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
+                      </div>
+                      <button onClick={() => setExpandedBroker(expanded ? null : 'tradovate')}
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                        <Field label="Username">
+                          <input type="text" value={form.username || ''} onChange={e => setBrokerField('tradovate', 'username', e.target.value)}
+                            placeholder="your@email.com" className={inputCls} />
+                        </Field>
+                        <Field label="Password">
+                          <input type="password" value={form.password || ''} onChange={e => setBrokerField('tradovate', 'password', e.target.value)}
+                            placeholder="••••••••" className={inputCls} />
+                        </Field>
+                        <Field label="App ID">
+                          <input type="text" value={form.app_id || ''} onChange={e => setBrokerField('tradovate', 'app_id', e.target.value)}
+                            placeholder="MyApp" className={inputCls} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="CID">
+                            <input type="text" value={form.cid || ''} onChange={e => setBrokerField('tradovate', 'cid', e.target.value)}
+                              placeholder="12345" className={inputCls} />
+                          </Field>
+                          <Field label="SEC">
+                            <input type="password" value={form.sec || ''} onChange={e => setBrokerField('tradovate', 'sec', e.target.value)}
+                              placeholder="••••••••" className={inputCls} />
+                          </Field>
+                        </div>
+                        <Toggle value={form.practice !== 'false'}
+                          onChange={v => setBrokerField('tradovate', 'practice', v.toString())}
+                          label="Demo account" />
+                        <div className="flex gap-2 pt-1 flex-wrap">
+                          <button onClick={() => saveBrokerCreds('tradovate')} disabled={busy} className={btnPrimary}>
+                            {busy ? 'Saving...' : 'Save Credentials'}
+                          </button>
+                          {bc?.configured && (
+                            <button onClick={() => connectBroker('tradovate')} disabled={busy} className={btnSecondary}>
+                              {busy ? 'Connecting...' : 'Test Connection'}
+                            </button>
+                          )}
+                          {bc?.configured && (
+                            <button onClick={() => deleteBrokerCreds('tradovate')} disabled={busy} className={btnDanger}>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* MT5 */}
+              {(() => {
+                const bc = brokerCreds.find(b => b.broker === 'mt5');
+                const busy = brokerBusy['mt5'];
+                const msg = brokerMsg['mt5'];
+                const form = brokerForms['mt5'] || {};
+                const expanded = expandedBroker === 'mt5';
+                return (
+                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-white">MetaTrader 5</span>
+                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
+                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
+                        <span className="text-xs text-gray-600">(Windows-only)</span>
+                      </div>
+                      <button onClick={() => setExpandedBroker(expanded ? null : 'mt5')}
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                        <Field label="Server">
+                          <input type="text" value={form.server || ''} onChange={e => setBrokerField('mt5', 'server', e.target.value)}
+                            placeholder="ICMarkets-Demo01" className={inputCls} />
+                        </Field>
+                        <Field label="Login">
+                          <input type="text" value={form.login || ''} onChange={e => setBrokerField('mt5', 'login', e.target.value)}
+                            placeholder="12345678" className={inputCls} />
+                        </Field>
+                        <Field label="Password">
+                          <input type="password" value={form.password || ''} onChange={e => setBrokerField('mt5', 'password', e.target.value)}
+                            placeholder="••••••••" className={inputCls} />
+                        </Field>
+                        <div className="flex gap-2 pt-1 flex-wrap">
+                          <button onClick={() => saveBrokerCreds('mt5')} disabled={busy} className={btnPrimary}>
+                            {busy ? 'Saving...' : 'Save Credentials'}
+                          </button>
+                          {bc?.configured && (
+                            <button onClick={() => connectBroker('mt5')} disabled={busy} className={btnSecondary}>
+                              {busy ? 'Connecting...' : 'Test Connection'}
+                            </button>
+                          )}
+                          {bc?.configured && (
+                            <button onClick={() => deleteBrokerCreds('mt5')} disabled={busy} className={btnDanger}>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

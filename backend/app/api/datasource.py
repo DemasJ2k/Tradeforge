@@ -349,32 +349,80 @@ async def fetch_from_broker(
         except RuntimeError as e:
             raise HTTPException(400, str(e))
     else:
-        # Future: support other brokers via broker_manager
-        from app.services.broker.manager import broker_manager
-        adapter = broker_manager.get_adapter(req.broker)
-        if not adapter:
-            raise HTTPException(400, f"Broker '{req.broker}' not connected")
+        # Load stored credentials from user settings and create a temporary adapter
+        import json as _json
+        from app.models.settings import UserSettings
+        from app.core.encryption import decrypt_value
+
+        s = db.query(UserSettings).filter(UserSettings.user_id == user.id).first()
+        creds_blob: dict = {}
+        if s and s.broker_api_keys:
+            try:
+                creds_blob = _json.loads(decrypt_value(s.broker_api_keys))
+            except Exception:
+                pass
+
+        entry = creds_blob.get(req.broker)
+        if not entry:
+            raise HTTPException(
+                400,
+                f"No saved credentials for '{req.broker}'. "
+                "Go to Settings → Brokers to add your API credentials first."
+            )
 
         try:
-            bars = await adapter.get_initial_bars(req.symbol, req.timeframe, req.bars)
-            if not bars:
-                raise HTTPException(400, f"No data returned from {req.broker}")
+            if req.broker == "oanda":
+                from app.services.broker.oanda import OandaAdapter
+                adapter = OandaAdapter(
+                    api_key=entry.get("api_key", ""),
+                    account_id=entry.get("account_id", ""),
+                    practice=entry.get("practice", True),
+                )
+            elif req.broker == "coinbase":
+                from app.services.broker.coinbase import CoinbaseAdapter
+                adapter = CoinbaseAdapter(
+                    api_key=entry.get("api_key", ""),
+                    api_secret=entry.get("api_secret", ""),
+                )
+            elif req.broker == "tradovate":
+                from app.services.broker.tradovate import TradovateAdapter
+                adapter = TradovateAdapter(
+                    username=entry.get("username", ""),
+                    password=entry.get("password", ""),
+                    app_id=entry.get("app_id", ""),
+                    cid=entry.get("cid", ""),
+                    sec=entry.get("sec", ""),
+                    demo=entry.get("practice", True),
+                )
+            else:
+                raise HTTPException(400, f"Unsupported broker for data fetch: {req.broker}")
+
+            ok = await adapter.connect()
+            if not ok:
+                last_err = getattr(adapter, "_last_error", "Unknown error")
+                raise HTTPException(400, f"Failed to connect to {req.broker}: {last_err}")
+
+            candles = await adapter.get_candles(req.symbol, req.timeframe, req.bars)
+            await adapter.disconnect()
+
+            if not candles:
+                raise HTTPException(400, f"No data returned from {req.broker} for {req.symbol} {req.timeframe}")
 
             lines = ["time,open,high,low,close,volume"]
             first_dt = None
             last_dt = None
-            for b in bars:
-                dt = datetime.utcfromtimestamp(int(b['time']))
+            for c in candles:
+                dt = c.timestamp.replace(tzinfo=None)
                 if first_dt is None:
                     first_dt = dt
                 last_dt = dt
                 lines.append(
                     f"{dt.strftime('%Y.%m.%d %H:%M:%S')},"
-                    f"{b['open']},{b['high']},{b['low']},{b['close']},{b.get('volume', 0)}"
+                    f"{c.open},{c.high},{c.low},{c.close},{c.volume}"
                 )
 
             csv_content = "\n".join(lines)
-            filename = f"{req.symbol}_{req.timeframe}_{len(bars)}bars.csv"
+            filename = f"{req.symbol}_{req.timeframe}_{len(candles)}bars.csv"
 
             upload_dir = Path(settings.UPLOAD_DIR)
             upload_dir.mkdir(parents=True, exist_ok=True)
@@ -388,7 +436,7 @@ async def fetch_from_broker(
                 symbol=req.symbol,
                 timeframe=req.timeframe,
                 data_type="ohlcv",
-                row_count=len(bars),
+                row_count=len(candles),
                 date_from=first_dt.strftime("%Y-%m-%d %H:%M") if first_dt else "",
                 date_to=last_dt.strftime("%Y-%m-%d %H:%M") if last_dt else "",
                 columns="time,open,high,low,close,volume",
@@ -399,7 +447,10 @@ async def fetch_from_broker(
             db.add(ds)
             db.commit()
             db.refresh(ds)
+            logger.info("Fetched %d candles for %s %s from %s", len(candles), req.symbol, req.timeframe, req.broker)
             return ds
 
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(400, f"Fetch failed: {str(e)[:200]}")

@@ -123,7 +123,7 @@ export default function DataPage() {
               <button onClick={() => { setShowFetchModal(false); setFetchMsg(""); }}
                 className="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
             </div>
-            <p className="text-sm text-gray-400">Download historical candle data from your connected broker.</p>
+            <p className="text-sm text-gray-400">Download historical candle data from a broker. Save API credentials in <span className="text-blue-400">Settings → Brokers</span> first.</p>
 
             <div>
               <label className="block text-xs text-gray-400 mb-1">Broker</label>
