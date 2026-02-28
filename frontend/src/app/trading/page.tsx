@@ -320,7 +320,8 @@ export default function TradingPage() {
   /* ── close position ───────────────────────────── */
   const closePosition = async (posId: string) => {
     try {
-      await api.post("/api/broker/positions/close", { position_id: posId });
+      const brokerParam = brokerName ? `?broker=${brokerName}` : "";
+      await api.post(`/api/broker/positions/close${brokerParam}`, { position_id: posId });
       refreshData();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Close failed");
