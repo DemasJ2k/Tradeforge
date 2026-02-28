@@ -171,25 +171,37 @@ async def train_model(
     # Create model record
     features_config = {"features": payload.features or _DEFAULT_FEATURES}
     target_config = {"type": payload.target_type, "horizon": payload.target_horizon}
-    hyperparams = {
-        "n_estimators": payload.n_estimators,
-        "max_depth": payload.max_depth,
-        "learning_rate": payload.learning_rate,
-        "subsample": payload.subsample,
-        "colsample_bytree": payload.colsample_bytree,
-        "reg_alpha": payload.reg_alpha,
-        "reg_lambda": payload.reg_lambda,
-        "min_child_weight": payload.min_child_weight,
-        "gamma": payload.gamma,
-        "early_stopping_rounds": payload.early_stopping_rounds,
-        "min_samples_split": payload.min_samples_split,
-        "min_samples_leaf": payload.min_samples_leaf,
-    }
+    if payload.level == 3:
+        hyperparams = {
+            "sub_type": payload.sub_type or "lstm",
+            "seq_len": payload.seq_len or 20,
+            "hidden_units": payload.hidden_units or 64,
+        }
+    else:
+        hyperparams = {
+            "n_estimators": payload.n_estimators,
+            "max_depth": payload.max_depth,
+            "learning_rate": payload.learning_rate,
+            "subsample": payload.subsample,
+            "colsample_bytree": payload.colsample_bytree,
+            "reg_alpha": payload.reg_alpha,
+            "reg_lambda": payload.reg_lambda,
+            "min_child_weight": payload.min_child_weight,
+            "gamma": payload.gamma,
+            "early_stopping_rounds": payload.early_stopping_rounds,
+            "min_samples_split": payload.min_samples_split,
+            "min_samples_leaf": payload.min_samples_leaf,
+        }
+
+    # For level 3, store the sub_type as model_type for display purposes
+    effective_model_type = (
+        (payload.sub_type or "lstm") if payload.level == 3 else payload.model_type
+    )
 
     model_record = MLModel(
         name=payload.name,
         level=payload.level,
-        model_type=payload.model_type,
+        model_type=effective_model_type,
         strategy_id=payload.strategy_id,
         symbol=payload.symbol or ds.symbol or "",
         timeframe=payload.timeframe or ds.timeframe or "H1",
@@ -202,17 +214,29 @@ async def train_model(
     db.commit()
     db.refresh(model_record)
 
-    # Train the model
+    # Train the model — dispatch by level
     try:
         from app.services.ml.trainer import MLTrainer
-        result = MLTrainer.train_model(
-            ohlcv_data=ohlcv_data,
-            model_type=payload.model_type,
-            features_config=features_config,
-            target_config=target_config,
-            hyperparams=hyperparams,
-            model_id=model_record.id,
-        )
+
+        if payload.level == 3:
+            result = MLTrainer.train_level3(
+                ohlcv_data=ohlcv_data,
+                sub_type=payload.sub_type or "lstm",
+                seq_len=payload.seq_len or 20,
+                hidden_units=payload.hidden_units or 64,
+                features_config=features_config,
+                target_config=target_config,
+                model_id=model_record.id,
+            )
+        else:
+            result = MLTrainer.train_model(
+                ohlcv_data=ohlcv_data,
+                model_type=payload.model_type,
+                features_config=features_config,
+                target_config=target_config,
+                hyperparams=hyperparams,
+                model_id=model_record.id,
+            )
 
         model_record.train_metrics = result["train_metrics"]
         model_record.val_metrics = result["val_metrics"]

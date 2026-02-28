@@ -36,6 +36,10 @@ class MLTrainRequest(BaseModel):
     min_samples_leaf: int = 2
     # Train/val split
     train_ratio: float = 0.8
+    # Level 3: Advanced ML
+    sub_type: Optional[str] = None        # "lstm" or "ensemble" for level 3
+    seq_len: Optional[int] = 20           # LSTM sequence length
+    hidden_units: Optional[int] = 64      # LSTM hidden units
 
 
 class MLModelResponse(BaseModel):

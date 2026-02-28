@@ -21,7 +21,7 @@ const statusColor = (s: string) => {
   return "bg-zinc-500/20 text-zinc-400";
 };
 const levelLabel = (l: number) =>
-  l === 1 ? "L1: Adaptive Params" : l === 2 ? "L2: Signal Prediction" : "L3: Full ML";
+  l === 1 ? "L1: Adaptive Params" : l === 2 ? "L2: Signal Prediction" : "L3: Advanced ML";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -51,6 +51,11 @@ export default function MLPage() {
   const [tMaxDepth, setTMaxDepth] = useState(10);
   const [tLR, setTLR] = useState(0.1);
   const [tFeatures, setTFeatures] = useState<string[]>([]);
+
+  // Level 3 config
+  const [l3SubType, setL3SubType] = useState('lstm');
+  const [l3SeqLen, setL3SeqLen] = useState(20);
+  const [l3Units, setL3Units] = useState(64);
 
   // Predict form
   const [pDsId, setPDsId] = useState<number>(0);
@@ -188,6 +193,7 @@ export default function MLPage() {
         n_estimators: tNEst,
         max_depth: tMaxDepth,
         learning_rate: tLR,
+        ...(tLevel === 3 && { sub_type: l3SubType, seq_len: l3SeqLen, hidden_units: l3Units }),
       });
       setSelected(result);
       setView("detail");
@@ -411,14 +417,14 @@ export default function MLPage() {
             <div key={level} className="rounded-xl border border-card-border bg-card-bg p-4">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium text-accent">
-                  {level === 1 ? "Level 1: Adaptive Params" : level === 2 ? "Level 2: Signal Prediction" : "Level 3: Full ML"}
+                  {level === 1 ? "Level 1: Adaptive Params" : level === 2 ? "Level 2: Signal Prediction" : "Level 3: Advanced ML"}
                 </h3>
                 <span className="text-xs text-muted">{ready.length} ready</span>
               </div>
               <p className="text-xs text-muted">
                 {level === 1 && "ML predicts best strategy params for current market regime."}
                 {level === 2 && "Predict next-bar direction/movement using trained classifiers."}
-                {level === 3 && "End-to-end RL trading agents (coming soon)."}
+                {level === 3 && "LSTM time-series models and stacked ensemble classifiers (RF + XGB + LR)."}
               </p>
               {ready.length > 0 && (
                 <div className="mt-2 text-xs">
@@ -457,6 +463,9 @@ export default function MLPage() {
                       <div className="text-sm font-medium">{m.name}</div>
                       <div className="text-xs text-muted">
                         {levelLabel(m.level)} · {m.model_type} · {m.symbol || "—"} · {m.timeframe}
+                        {m.level === 3 && (m as { architecture?: string }).architecture && (
+                          <span className="ml-1 text-accent/70">· {(m as { architecture?: string }).architecture}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -501,7 +510,7 @@ export default function MLPage() {
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm">
                 <option value={1}>Level 1: Adaptive Params</option>
                 <option value={2}>Level 2: Signal Prediction</option>
-                <option value={3}>Level 3: Full ML (RL)</option>
+                <option value={3}>Level 3: Advanced ML: LSTM &amp; Stacked Ensemble</option>
               </select>
             </div>
           </div>
@@ -574,6 +583,36 @@ export default function MLPage() {
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
             </div>
           </div>
+
+          {/* Level 3 Advanced ML config */}
+          {tLevel === 3 && (
+            <div className="space-y-3 p-3 rounded-lg border border-card-border bg-background/40">
+              <div>
+                <label className="block text-xs text-muted mb-1">Model Architecture</label>
+                <select value={l3SubType} onChange={e => setL3SubType(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm">
+                  <option value="lstm">LSTM (time-series sequence model)</option>
+                  <option value="ensemble">Stacked Ensemble (RF + XGB + Logistic)</option>
+                </select>
+              </div>
+              {l3SubType === 'lstm' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Sequence Length</label>
+                    <input type="number" min="5" max="100" value={l3SeqLen}
+                      onChange={e => setL3SeqLen(Number(e.target.value))}
+                      className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Hidden Units</label>
+                    <input type="number" min="16" max="256" step="16" value={l3Units}
+                      onChange={e => setL3Units(Number(e.target.value))}
+                      className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Feature selection */}
           {features && (

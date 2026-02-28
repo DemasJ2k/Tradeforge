@@ -49,6 +49,9 @@ def _run_optimization_thread(
     point_value: float,
     walk_forward: bool,
     wf_pct: float,
+    secondary_objective: str = None,
+    secondary_threshold: float = None,
+    secondary_operator: str = None,
 ):
     """Background thread that runs optimization and updates DB on complete."""
     _running_optimizations[opt_id] = {
@@ -85,6 +88,9 @@ def _run_optimization_thread(
             walk_forward=walk_forward,
             wf_in_sample_pct=wf_pct,
             progress_callback=progress_cb,
+            secondary_objective=secondary_objective,
+            secondary_threshold=secondary_threshold,
+            secondary_operator=secondary_operator,
         )
         result = engine.run()
 
@@ -222,6 +228,8 @@ def start_optimization(
             payload.initial_balance, payload.spread_points,
             payload.commission_per_lot, payload.point_value,
             payload.walk_forward, payload.wf_in_sample_pct,
+            payload.secondary_objective, payload.secondary_threshold,
+            payload.secondary_operator,
         ),
         daemon=True,
     )

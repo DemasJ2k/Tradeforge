@@ -101,6 +101,9 @@ class OptimizerEngine:
         walk_forward: bool = False,
         wf_in_sample_pct: float = 70.0,
         progress_callback=None,
+        secondary_objective: Optional[str] = None,
+        secondary_threshold: Optional[float] = None,
+        secondary_operator: Optional[str] = None,
     ):
         self.bars = bars
         self.base_config = strategy_config
@@ -115,6 +118,9 @@ class OptimizerEngine:
         self.walk_forward = walk_forward
         self.wf_in_sample_pct = wf_in_sample_pct
         self.progress_callback = progress_callback
+        self.secondary_objective = secondary_objective
+        self.secondary_threshold = secondary_threshold
+        self.secondary_operator = secondary_operator or ">="
 
         # Split data for walk-forward
         if walk_forward:
@@ -421,7 +427,7 @@ class OptimizerEngine:
         # Run backtest on in-sample data (route to correct strategy engine)
         result = self._run_backtest(config, self.in_sample_bars)
 
-        # Extract score based on objective
+        # Extract score based on primary objective
         score = self._extract_score(result)
 
         stats = {
@@ -433,6 +439,18 @@ class OptimizerEngine:
             "max_drawdown_pct": round(result.max_drawdown_pct, 2),
             "expectancy": round(result.expectancy, 2),
         }
+
+        # Apply secondary objective threshold filter
+        if self.secondary_objective and self.secondary_threshold is not None:
+            secondary_value = self._get_metric(result, self.secondary_objective)
+            if self.secondary_operator == ">=":
+                if secondary_value < self.secondary_threshold:
+                    score = -999.0  # penalize — fails secondary filter
+            elif self.secondary_operator == "<=":
+                if secondary_value > self.secondary_threshold:
+                    score = -999.0  # penalize — fails secondary filter
+            stats["secondary_metric"] = round(secondary_value, 4)
+            stats["secondary_passed"] = score != -999.0
 
         # If walk-forward, also run OOS and penalize divergence
         if self.walk_forward and self.out_sample_bars:
@@ -448,21 +466,23 @@ class OptimizerEngine:
 
         return score, stats
 
+    def _get_metric(self, result, metric: str) -> float:
+        """Get a specific metric value from a backtest result."""
+        if metric == "sharpe_ratio":
+            return result.sharpe_ratio
+        elif metric == "net_profit":
+            return result.net_profit
+        elif metric == "profit_factor":
+            return result.profit_factor if result.profit_factor < 100 else 0
+        elif metric == "win_rate":
+            return result.win_rate
+        return 0.0
+
     def _extract_score(self, result) -> float:
         """Extract the optimization target from backtest result."""
         if result.total_trades < 5:
             return -1e6  # Penalize strategies with too few trades
-
-        if self.objective == "sharpe_ratio":
-            return result.sharpe_ratio
-        elif self.objective == "net_profit":
-            return result.net_profit
-        elif self.objective == "profit_factor":
-            return result.profit_factor if result.profit_factor < 100 else 0
-        elif self.objective == "win_rate":
-            return result.win_rate
-        else:
-            return result.sharpe_ratio
+        return self._get_metric(result, self.objective)
 
     # ─── Helpers ────────────────────────────────────────────
 

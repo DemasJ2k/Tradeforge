@@ -356,6 +356,217 @@ class MLTrainer:
         return results
 
     @staticmethod
+    def train_level3(
+        ohlcv_data: list[dict],
+        sub_type: str = "lstm",
+        seq_len: int = 20,
+        hidden_units: int = 64,
+        features_config: Optional[dict] = None,
+        target_config: Optional[dict] = None,
+        model_id: int = 0,
+    ) -> dict:
+        """
+        Train a Level 3 Advanced ML model.
+
+        sub_type="lstm"     → LSTM sequence model (TensorFlow/Keras, falls back to ensemble)
+        sub_type="ensemble" → Stacked ensemble: RandomForest + XGBoost + LogisticRegression
+        """
+        import joblib
+
+        opens = [d["open"] for d in ohlcv_data]
+        highs = [d["high"] for d in ohlcv_data]
+        lows = [d["low"] for d in ohlcv_data]
+        closes = [d["close"] for d in ohlcv_data]
+        volumes = [d.get("volume", 0) for d in ohlcv_data]
+
+        feature_names, feature_matrix = compute_features(
+            opens, highs, lows, closes, volumes, features_config
+        )
+        if not feature_names:
+            raise ValueError("No features computed — check data")
+
+        target_name, targets = compute_targets(closes, target_config)
+        feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
+
+        if len(X) < 50:
+            raise ValueError(f"Not enough valid samples after cleaning: {len(X)}")
+
+        logger.info("Level 3 training (%s): %d samples, %d features", sub_type, len(X), len(feature_names))
+
+        if sub_type == "lstm":
+            model, scaler, val_accuracy, meta = MLTrainer._train_lstm(
+                X, y, feature_names, seq_len=seq_len, units=hidden_units
+            )
+            # Save model — use joblib wrapper so predict pipeline stays consistent
+            model_path = str(_MODEL_DIR / f"model_{model_id}.joblib")
+            joblib.dump({
+                "model": model,
+                "scaler": scaler,
+                "feature_names": feature_names,
+                "target_name": target_name,
+                "model_type": "lstm",
+                "meta": meta,
+            }, model_path)
+
+            val_metrics = {"accuracy": round(val_accuracy, 4)}
+            train_metrics = {"accuracy": round(val_accuracy, 4)}  # LSTM: use val as proxy
+            feature_importance = {}
+
+        else:
+            model, scaler, val_accuracy, train_accuracy, meta = MLTrainer._train_ensemble(
+                X, y, feature_names
+            )
+            model_path = str(_MODEL_DIR / f"model_{model_id}.joblib")
+            joblib.dump({
+                "model": model,
+                "scaler": scaler,
+                "feature_names": feature_names,
+                "target_name": target_name,
+                "model_type": "ensemble",
+                "meta": meta,
+            }, model_path)
+
+            val_metrics = {"accuracy": round(val_accuracy, 4)}
+            train_metrics = {"accuracy": round(train_accuracy, 4)}
+            # Extract feature importance from the RF sub-estimator if possible
+            feature_importance = {}
+            try:
+                rf_est = None
+                for name, est in model.estimators_:
+                    if name == "rf":
+                        rf_est = est
+                        break
+                if rf_est is not None and hasattr(rf_est, "feature_importances_"):
+                    feature_importance = dict(
+                        sorted(
+                            {n: round(float(v), 6) for n, v in zip(feature_names, rf_est.feature_importances_)}.items(),
+                            key=lambda x: -x[1],
+                        )
+                    )
+            except Exception:
+                pass
+
+        logger.info(
+            "Level 3 model %d (%s) trained: val_acc=%.3f",
+            model_id, sub_type, val_accuracy,
+        )
+
+        return {
+            "train_metrics": train_metrics,
+            "val_metrics": val_metrics,
+            "feature_importance": feature_importance,
+            "model_path": model_path,
+            "n_train": int(len(X) * 0.8),
+            "n_val": int(len(X) * 0.2),
+            "n_features": len(feature_names),
+            "feature_names": feature_names,
+            "target_name": target_name,
+            "meta": meta,
+        }
+
+    @staticmethod
+    def _train_lstm(X, y, feature_names, seq_len: int = 20, units: int = 64):
+        """Train LSTM model using Keras/TensorFlow for time-series prediction."""
+        import numpy as np
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics import accuracy_score
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Create sequences
+        def make_sequences(data, labels, sl):
+            Xs, ys = [], []
+            for i in range(len(data) - sl):
+                Xs.append(data[i:i + sl])
+                ys.append(labels[i + sl])
+            return np.array(Xs), np.array(ys)
+
+        X_seq, y_seq = make_sequences(X_scaled, y.values if hasattr(y, "values") else list(y), seq_len)
+
+        if len(X_seq) < 40:
+            raise ValueError(f"Not enough sequences after windowing (got {len(X_seq)}). Use more data or reduce seq_len.")
+
+        split = int(len(X_seq) * 0.8)
+        X_train, X_val = X_seq[:split], X_seq[split:]
+        y_train, y_val = y_seq[:split], y_seq[split:]
+
+        try:
+            import tensorflow as tf
+            from tensorflow import keras
+
+            model = keras.Sequential([
+                keras.layers.LSTM(units, input_shape=(seq_len, X_scaled.shape[1]), return_sequences=False),
+                keras.layers.Dropout(0.2),
+                keras.layers.Dense(32, activation='relu'),
+                keras.layers.Dense(1, activation='sigmoid'),
+            ])
+            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+            model.fit(X_train, y_train, epochs=20, batch_size=32,
+                      validation_data=(X_val, y_val), verbose=0)
+
+            val_pred = (model.predict(X_val, verbose=0) > 0.5).astype(int).flatten()
+            val_accuracy = float(accuracy_score(y_val, val_pred))
+            meta = {"architecture": f"LSTM({units})", "seq_len": seq_len, "sub_type": "lstm"}
+            return model, scaler, val_accuracy, meta
+
+        except ImportError:
+            logger.warning("TensorFlow not available — falling back to ensemble for Level 3 LSTM")
+            # Re-use ensemble training path
+            model, scaler2, val_accuracy, train_accuracy, meta = MLTrainer._train_ensemble(
+                X, y if hasattr(y, "values") else y, feature_names
+            )
+            meta["sub_type"] = "lstm_fallback_ensemble"
+            return model, scaler2, val_accuracy, meta
+
+    @staticmethod
+    def _train_ensemble(X, y, feature_names):
+        """Train stacked ensemble: RandomForest + XGBoost + LogisticRegression."""
+        import numpy as np
+        from sklearn.ensemble import RandomForestClassifier, StackingClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics import accuracy_score
+        from sklearn.model_selection import train_test_split
+
+        try:
+            from xgboost import XGBClassifier
+            xgb_est = XGBClassifier(
+                n_estimators=100, max_depth=4, learning_rate=0.1,
+                use_label_encoder=False, eval_metric='logloss', random_state=42
+            )
+        except ImportError:
+            from sklearn.ensemble import GradientBoostingClassifier
+            xgb_est = GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42)
+
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        y_arr = y.values if hasattr(y, "values") else list(y)
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_scaled, y_arr, test_size=0.2, random_state=42
+        )
+
+        estimators = [
+            ('rf', RandomForestClassifier(n_estimators=100, random_state=42)),
+            ('xgb', xgb_est),
+        ]
+        stack = StackingClassifier(
+            estimators=estimators,
+            final_estimator=LogisticRegression(max_iter=1000),
+            cv=3,
+        )
+        stack.fit(X_train, y_train)
+
+        val_pred = stack.predict(X_val)
+        train_pred = stack.predict(X_train)
+        val_accuracy = float(accuracy_score(y_val, val_pred))
+        train_accuracy = float(accuracy_score(y_train, train_pred))
+
+        meta = {"architecture": "Stacked(RF+XGB+LR)", "sub_type": "ensemble"}
+        return stack, scaler, val_accuracy, train_accuracy, meta
+
+    @staticmethod
     def delete_model(model_path: str):
         """Delete a serialized model file."""
         if os.path.exists(model_path):

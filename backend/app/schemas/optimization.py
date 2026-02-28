@@ -26,6 +26,10 @@ class OptimizationRequest(BaseModel):
     point_value: float = 1.0
     walk_forward: bool = False
     wf_in_sample_pct: float = 70.0  # % of data for in-sample
+    # Secondary objective filter (optional)
+    secondary_objective: Optional[str] = None   # sharpe_ratio, net_profit, profit_factor, win_rate
+    secondary_threshold: Optional[float] = None  # threshold value the secondary metric must meet
+    secondary_operator: Optional[str] = None     # ">=" or "<="
 
 
 class TrialResult(BaseModel):

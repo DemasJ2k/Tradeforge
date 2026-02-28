@@ -9,6 +9,7 @@ import type {
   TradeResult,
 } from '@/types';
 import ChatHelpers from '@/components/ChatHelpers';
+import { useBrokerAccounts } from '@/hooks/useBrokerAccounts';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -301,6 +302,7 @@ export default function BacktestPage() {
   const [wfResult, setWfResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'equity' | 'trades' | 'monthly'>('equity');
   const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const { accounts, activeBroker } = useBrokerAccounts();
 
   useEffect(() => {
     const h = authHeaders();
@@ -411,7 +413,10 @@ export default function BacktestPage() {
       .catch(() => {});
   }, []);
 
-  const deployAsAgent = useCallback(async (name: string, mode: string, timeframe: string, mlModelId: number | null) => {
+  const deployAsAgent = useCallback(async (
+    name: string, mode: string, timeframe: string,
+    mlModelId: number | null, brokerName: string, lotSize: number,
+  ) => {
     if (!strategyId) return;
     const ds = datasources.find(d => d.id === datasourceId);
     const symbol = ds?.symbol || 'XAUUSD';
@@ -422,6 +427,8 @@ export default function BacktestPage() {
         symbol,
         timeframe,
         mode,
+        broker_name: brokerName,
+        risk_config: { lot_size: lotSize },
       };
       if (mlModelId) body.ml_model_id = mlModelId;
       const r = await fetch(`${API}/api/agents`, {
@@ -705,69 +712,103 @@ export default function BacktestPage() {
       )}
 
       {/* Deploy as Agent Modal */}
-      {showCreateAgent && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreateAgent(false)}>
-          <div className="bg-[#1a1f2e] rounded-xl border border-gray-700 p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-white mb-4">Deploy Strategy as Agent</h3>
-            <form onSubmit={e => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const mlVal = fd.get('ml_model_id') as string;
-              deployAsAgent(
-                fd.get('name') as string,
-                fd.get('mode') as string,
-                fd.get('timeframe') as string,
-                mlVal ? Number(mlVal) : null,
-              );
-            }} className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Agent Name</label>
-                <input name="name" required defaultValue={`WF-Agent-${Date.now().toString(36)}`}
-                  className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Mode</label>
-                <select name="mode" defaultValue="paper" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="paper">Paper Trading (simulated, no real trades)</option>
-                  <option value="confirmation">Confirm Trade (approve each trade before execution)</option>
-                  <option value="auto">Fully Autonomous (executes trades automatically)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Timeframe</label>
-                <select name="timeframe" defaultValue="M10" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="M1">M1</option>
-                  <option value="M5">M5</option>
-                  <option value="M10">M10</option>
-                  <option value="M15">M15</option>
-                  <option value="H1">H1</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">ML Model (optional)</label>
-                <select name="ml_model_id" defaultValue="" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="">None — pure strategy signals</option>
-                  {mlModels.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} {m.val_accuracy ? `(${(m.val_accuracy * 100).toFixed(1)}% acc)` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowCreateAgent(false)}
-                  className="flex-1 px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm">
-                  Cancel
-                </button>
-                <button type="submit"
-                  className="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold text-sm">
-                  Create Agent
-                </button>
-              </div>
-            </form>
+      {showCreateAgent && (() => {
+        const ds = datasources.find(d => d.id === datasourceId);
+        const deploySymbol = ds?.symbol || 'Unknown';
+        const connectedBrokers = accounts.filter(a => a.connected);
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreateAgent(false)}>
+            <div className="bg-[#1a1f2e] rounded-xl border border-gray-700 p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-white mb-4">Deploy Strategy as Agent</h3>
+              <form onSubmit={e => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const mlVal = fd.get('ml_model_id') as string;
+                deployAsAgent(
+                  fd.get('name') as string,
+                  fd.get('mode') as string,
+                  fd.get('timeframe') as string,
+                  mlVal ? Number(mlVal) : null,
+                  fd.get('broker_name') as string,
+                  Number(fd.get('lot_size')) || 0.01,
+                );
+              }} className="space-y-3">
+                {/* Symbol (read-only from datasource) */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Symbol</label>
+                  <div className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-accent text-sm font-mono">
+                    {deploySymbol}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Agent Name</label>
+                  <input name="name" required defaultValue={`WF-Agent-${Date.now().toString(36)}`}
+                    className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Broker</label>
+                    <select name="broker_name" defaultValue={activeBroker || ''} className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                      {connectedBrokers.length > 0
+                        ? connectedBrokers.map(a => (
+                          <option key={a.broker} value={a.broker}>{a.broker}</option>
+                        ))
+                        : <option value="">No brokers connected</option>
+                      }
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Lot Size</label>
+                    <input name="lot_size" type="number" step="0.01" min="0.01" defaultValue="0.01" required
+                      className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Mode</label>
+                  <select name="mode" defaultValue="paper" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                    <option value="paper">Paper Trading (simulated, no real trades)</option>
+                    <option value="confirmation">Confirm Trade (approve each trade before execution)</option>
+                    <option value="auto">Fully Autonomous (executes trades automatically)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Timeframe</label>
+                  <select name="timeframe" defaultValue="M10" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                    <option value="M1">M1</option>
+                    <option value="M5">M5</option>
+                    <option value="M10">M10</option>
+                    <option value="M15">M15</option>
+                    <option value="M30">M30</option>
+                    <option value="H1">H1</option>
+                    <option value="H4">H4</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">ML Model (optional)</label>
+                  <select name="ml_model_id" defaultValue="" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                    <option value="">None — pure strategy signals</option>
+                    {mlModels.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {m.val_accuracy ? `(${(m.val_accuracy * 100).toFixed(1)}% acc)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={() => setShowCreateAgent(false)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm">
+                    Cancel
+                  </button>
+                  <button type="submit"
+                    className="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold text-sm">
+                    Create Agent
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* History */}
       {history.length > 0 && (

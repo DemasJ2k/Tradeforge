@@ -5,10 +5,12 @@ import {
   createChart,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
   type HistogramData,
+  type LineData,
   type Time,
   ColorType,
   CrosshairMode,
@@ -30,6 +32,13 @@ export interface ChartHandle {
   getChart: () => IChartApi | null;
 }
 
+export interface IndicatorConfig {
+  ma?: boolean;
+  maLen?: number;
+  ema?: boolean;
+  emaLen?: number;
+}
+
 interface Props {
   data: CandleInput[];
   height?: number;
@@ -38,7 +47,36 @@ interface Props {
   volumeColor?: string;
   showGrid?: boolean;
   showCrosshair?: boolean;
+  indicators?: IndicatorConfig;
 }
+
+// ─── Indicator calculation helpers ───────────────────────────────────────────
+
+function calcSMA(closes: number[], len: number): (number | null)[] {
+  return closes.map((_, i) => {
+    if (i < len - 1) return null;
+    const slice = closes.slice(i - len + 1, i + 1);
+    return slice.reduce((a, b) => a + b, 0) / len;
+  });
+}
+
+function calcEMA(closes: number[], len: number): (number | null)[] {
+  const k = 2 / (len + 1);
+  const result: (number | null)[] = [];
+  let ema: number | null = null;
+  for (let i = 0; i < closes.length; i++) {
+    if (i < len - 1) { result.push(null); continue; }
+    if (ema === null) {
+      ema = closes.slice(0, len).reduce((a, b) => a + b, 0) / len;
+    } else {
+      ema = closes[i] * k + ema * (1 - k);
+    }
+    result.push(ema);
+  }
+  return result;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
   {
@@ -49,6 +87,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     volumeColor,
     showGrid = true,
     showCrosshair = true,
+    indicators,
   },
   ref
 ) {
@@ -56,6 +95,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const maSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const colors = useMemo(() => ({ upColor, downColor, volumeColor }), [upColor, downColor, volumeColor]);
   const colorsRef = useRef(colors);
 
@@ -159,9 +200,31 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       scaleMargins: { top: 0.8, bottom: 0 },
     });
 
+    // MA series (always created, hidden until enabled)
+    const maSeries = chart.addSeries(LineSeries, {
+      color: "#f59e0b",
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    });
+
+    // EMA series
+    const emaSeries = chart.addSeries(LineSeries, {
+      color: "#a78bfa",
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      visible: false,
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
+    maSeriesRef.current = maSeries;
+    emaSeriesRef.current = emaSeries;
 
     // Handle resize
     const observer = new ResizeObserver((entries) => {
@@ -177,6 +240,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      maSeriesRef.current = null;
+      emaSeriesRef.current = null;
       dataLoadedRef.current = false;
     };
   }, [height, upColor, downColor, showGrid, showCrosshair]);
@@ -224,6 +289,45 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       chartRef.current?.timeScale().setVisibleRange({ from, to });
     }
   }, [data, upColor, downColor, volumeColor]);
+
+  // Update MA/EMA indicators when data or indicator config changes
+  useEffect(() => {
+    if (!maSeriesRef.current || !emaSeriesRef.current || data.length === 0) return;
+
+    const validData = data.filter(
+      (d) => typeof d.time === "number" && Number.isFinite(d.time) && d.time > 0
+    );
+    const closes = validData.map((d) => d.close);
+    const times = validData.map((d) => d.time as Time);
+
+    // MA
+    const showMA = indicators?.ma ?? false;
+    const maLen = indicators?.maLen ?? 20;
+    if (showMA && closes.length >= maLen) {
+      const maValues = calcSMA(closes, maLen);
+      const maData: LineData<Time>[] = maValues
+        .map((v, i) => ({ time: times[i], value: v! }))
+        .filter((d) => d.value !== null);
+      maSeriesRef.current.setData(maData);
+      maSeriesRef.current.applyOptions({ visible: true });
+    } else {
+      maSeriesRef.current.applyOptions({ visible: false });
+    }
+
+    // EMA
+    const showEMA = indicators?.ema ?? false;
+    const emaLen = indicators?.emaLen ?? 50;
+    if (showEMA && closes.length >= emaLen) {
+      const emaValues = calcEMA(closes, emaLen);
+      const emaData: LineData<Time>[] = emaValues
+        .map((v, i) => ({ time: times[i], value: v! }))
+        .filter((d) => d.value !== null);
+      emaSeriesRef.current.setData(emaData);
+      emaSeriesRef.current.applyOptions({ visible: true });
+    } else {
+      emaSeriesRef.current.applyOptions({ visible: false });
+    }
+  }, [data, indicators]);
 
   return (
     <div

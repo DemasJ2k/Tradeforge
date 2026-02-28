@@ -114,6 +114,15 @@ export default function TradingPage() {
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
+
+  // ── Indicator state ──
+  const [indMA, setIndMA] = useState(false);
+  const [indMALen, setIndMALen] = useState(20);
+  const [indEMA, setIndEMA] = useState(false);
+  const [indEMALen, setIndEMALen] = useState(50);
+  const [indMACD, setIndMACD] = useState(false);
+  const macdContainerRef = useRef<HTMLDivElement>(null);
+  const macdChartRef = useRef<import("lightweight-charts").IChartApi | null>(null);
   const wsStatus = useWebSocket((s) => s.status);
   const { ticks, bars, currentBar, subscribeBars, subscribeTicks } = useMarketData();
   const { settings } = useSettings();
@@ -271,6 +280,86 @@ export default function TradingPage() {
 
     return () => clearInterval(pollInterval);
   }, [chartMode, chartSymbol, chartTimeframe, chartBars.length]);
+
+  // ── MACD chart ──
+  useEffect(() => {
+    const destroy = () => {
+      if (macdChartRef.current) {
+        try { macdChartRef.current.remove(); } catch { /* already removed */ }
+        macdChartRef.current = null;
+      }
+    };
+    if (!indMACD || !macdContainerRef.current || chartBars.length < 26) {
+      destroy();
+      return;
+    }
+    destroy(); // ensure clean slate before creating
+
+    // Dynamic import to avoid SSR issues
+    import("lightweight-charts").then(({ createChart, LineSeries, HistogramSeries }) => {
+      if (!macdContainerRef.current) return;
+      const macdChart = createChart(macdContainerRef.current, {
+        height: 120,
+        layout: { background: { color: "transparent" }, textColor: "#9ca3af" },
+        grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
+        rightPriceScale: { borderColor: "#374151" },
+        timeScale: { borderColor: "#374151", timeVisible: true, secondsVisible: false },
+        crosshair: { mode: 1 },
+      });
+      macdChartRef.current = macdChart;
+
+      // MACD calculation helpers
+      function ema(vals: number[], len: number): (number | null)[] {
+        const k = 2 / (len + 1);
+        const out: (number | null)[] = [];
+        let e: number | null = null;
+        for (let i = 0; i < vals.length; i++) {
+          if (i < len - 1) { out.push(null); continue; }
+          if (e === null) {
+            e = vals.slice(0, len).reduce((a, b) => a + b, 0) / len;
+          } else {
+            e = vals[i] * k + e * (1 - k);
+          }
+          out.push(e);
+        }
+        return out;
+      }
+
+      const closes = chartBars.map(b => b.close);
+      const times = chartBars.map(b => b.time as number);
+      const ema12 = ema(closes, 12);
+      const ema26 = ema(closes, 26);
+      const macdLine = ema12.map((v, i) => (v !== null && ema26[i] !== null ? v - ema26[i]! : null));
+      const macdClean = macdLine.filter(v => v !== null) as number[];
+      const macdStartIdx = macdLine.findIndex(v => v !== null);
+      const signalRaw = ema(macdClean, 9);
+      const signalLine = [...Array(macdStartIdx).fill(null), ...signalRaw] as (number | null)[];
+      const histogram = macdLine.map((v, i) => (v !== null && signalLine[i] !== null ? v - signalLine[i]! : null));
+
+      const toSeries = (vals: (number | null)[]) =>
+        vals.map((v, i) => v !== null ? { time: times[i], value: v } : null).filter(Boolean) as { time: number; value: number }[];
+
+      const histSeries = macdChart.addSeries(HistogramSeries, { color: "#22c55e", priceLineVisible: false });
+      histSeries.setData(toSeries(histogram).map(p => ({
+        time: p.time,
+        value: p.value,
+        color: p.value >= 0 ? "#22c55e66" : "#ef444466",
+      })));
+
+      const macdSeries = macdChart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceLineVisible: false });
+      macdSeries.setData(toSeries(macdLine));
+
+      const signalSeries = macdChart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false });
+      signalSeries.setData(toSeries(signalLine));
+
+      macdChart.timeScale().fitContent();
+    });
+
+    return () => {
+      destroy();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indMACD, chartBars]);
 
   /* ── check broker on mount ────────────────────── */
   useEffect(() => {
@@ -583,6 +672,54 @@ export default function TradingPage() {
           </div>
         </div>
 
+        {/* Indicator toggle bar */}
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-card-border bg-background/50">
+          <span className="text-xs text-muted mr-1">Indicators:</span>
+          {/* MA toggle */}
+          <button
+            onClick={() => setIndMA(v => !v)}
+            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
+              indMA ? "bg-amber-500/15 border-amber-500/40 text-amber-400" : "border-card-border text-muted hover:text-foreground"
+            }`}
+          >
+            MA
+          </button>
+          {indMA && (
+            <input
+              type="number" value={indMALen} min={2} max={500}
+              onChange={e => setIndMALen(Math.max(2, Number(e.target.value)))}
+              className="w-14 rounded border border-amber-500/40 bg-background px-1.5 py-0.5 text-xs text-amber-400 focus:outline-none"
+              title="MA period"
+            />
+          )}
+          {/* EMA toggle */}
+          <button
+            onClick={() => setIndEMA(v => !v)}
+            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
+              indEMA ? "bg-purple-500/15 border-purple-500/40 text-purple-400" : "border-card-border text-muted hover:text-foreground"
+            }`}
+          >
+            EMA
+          </button>
+          {indEMA && (
+            <input
+              type="number" value={indEMALen} min={2} max={500}
+              onChange={e => setIndEMALen(Math.max(2, Number(e.target.value)))}
+              className="w-14 rounded border border-purple-500/40 bg-background px-1.5 py-0.5 text-xs text-purple-400 focus:outline-none"
+              title="EMA period"
+            />
+          )}
+          {/* MACD toggle */}
+          <button
+            onClick={() => setIndMACD(v => !v)}
+            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
+              indMACD ? "bg-blue-500/15 border-blue-500/40 text-blue-400" : "border-card-border text-muted hover:text-foreground"
+            }`}
+          >
+            MACD
+          </button>
+        </div>
+
         {/* Chart */}
         {chartLoading ? (
           <div className="flex h-[400px] items-center justify-center text-sm text-muted">
@@ -617,7 +754,22 @@ export default function TradingPage() {
             downColor={settings?.chart_down_color || "#ef4444"}
             showGrid={settings?.chart_grid !== false}
             showCrosshair={settings?.chart_crosshair !== false}
+            indicators={{ ma: indMA, maLen: indMALen, ema: indEMA, emaLen: indEMALen }}
           />
+        )}
+
+        {/* MACD pane */}
+        {indMACD && chartBars.length >= 26 && (
+          <div className="border-t border-card-border">
+            <div className="px-3 py-1 text-xs text-muted flex items-center gap-2">
+              <span className="text-blue-400 font-medium">MACD</span>
+              <span className="text-zinc-600">(12, 26, 9)</span>
+              <span className="inline-block h-2 w-2 rounded-sm bg-blue-500/60" /> MACD
+              <span className="inline-block h-2 w-2 rounded-sm bg-amber-500/60" /> Signal
+              <span className="inline-block h-2 w-2 rounded-sm bg-green-500/40" /> Hist
+            </div>
+            <div ref={macdContainerRef} className="w-full" style={{ height: 120 }} />
+          </div>
         )}
       </div>
 

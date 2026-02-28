@@ -63,6 +63,10 @@ export default function OptimizePage() {
   // Param config
   const [paramSpace, setParamSpace] = useState<ParamRange[]>([]);
   const [objective, setObjective] = useState("sharpe_ratio");
+  const [useSecondary, setUseSecondary] = useState(false);
+  const [secondaryObjective, setSecondaryObjective] = useState("net_profit");
+  const [secondaryOperator, setSecondaryOperator] = useState<'>=' | '<='>('>=');
+  const [secondaryThreshold, setSecondaryThreshold] = useState(0);
   const [nTrials, setNTrials] = useState(50);
   const [method, setMethod] = useState("bayesian");
   const [walkForward, setWalkForward] = useState(false);
@@ -143,6 +147,11 @@ export default function OptimizePage() {
         point_value: pointValue,
         walk_forward: walkForward,
         wf_in_sample_pct: wfPct,
+        ...(useSecondary && {
+          secondary_objective: secondaryObjective,
+          secondary_threshold: secondaryThreshold,
+          secondary_operator: secondaryOperator,
+        }),
       });
       setRunningId(resp.id);
       startPolling(resp.id);
@@ -262,6 +271,64 @@ export default function OptimizePage() {
                 className="w-16 rounded-lg border border-card-border bg-input-bg px-2 py-1 text-xs outline-none" title="In-sample %" />
             )}
           </div>
+        </div>
+
+        {/* Secondary Objective Filter */}
+        <div className="rounded-lg border border-card-border bg-background/40 p-3">
+          <label className="flex items-center gap-2 cursor-pointer mb-0">
+            <input
+              type="checkbox"
+              checked={useSecondary}
+              onChange={e => setUseSecondary(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-xs text-muted font-medium">Add secondary objective filter</span>
+          </label>
+          {useSecondary && (
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <div>
+                <label className="block text-xs text-muted mb-1">Secondary Metric</label>
+                <select
+                  value={secondaryObjective}
+                  onChange={e => setSecondaryObjective(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  {['sharpe_ratio','net_profit','profit_factor','win_rate']
+                    .filter(o => o !== objective)
+                    .map(o => (
+                      <option key={o} value={o}>
+                        {o === 'sharpe_ratio' ? 'Sharpe Ratio'
+                          : o === 'net_profit' ? 'Net Profit'
+                          : o === 'profit_factor' ? 'Profit Factor'
+                          : 'Win Rate'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-1">Operator</label>
+                <select
+                  value={secondaryOperator}
+                  onChange={e => setSecondaryOperator(e.target.value as '>=' | '<=')}
+                  className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  <option value=">=">≥ (at least)</option>
+                  <option value="<=">≤ (at most)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-muted mb-1">Threshold</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={secondaryThreshold}
+                  onChange={e => setSecondaryThreshold(Number(e.target.value))}
+                  className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                  placeholder="e.g. 500"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-4 gap-4">

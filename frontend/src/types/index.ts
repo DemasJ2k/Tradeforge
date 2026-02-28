@@ -356,6 +356,9 @@ export interface OptimizationRequest {
   point_value: number;
   walk_forward: boolean;
   wf_in_sample_pct: number;
+  secondary_objective?: string;
+  secondary_threshold?: number;
+  secondary_operator?: '>=' | '<=';
 }
 
 export interface TrialResult {
