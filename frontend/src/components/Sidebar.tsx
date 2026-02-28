@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSidebar } from "@/hooks/useSidebar";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -17,15 +18,44 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { open, toggle } = useSidebar();
 
   return (
-    <aside className="flex h-screen w-56 flex-col bg-sidebar-bg border-r border-card-border">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2 px-4 border-b border-card-border">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-black font-bold text-sm">
-          TF
-        </div>
-        <span className="text-lg font-semibold text-foreground">TradeForge</span>
+    <aside
+      className={`relative flex h-screen flex-col bg-sidebar-bg border-r border-card-border transition-all duration-200 ${
+        open ? "w-56" : "w-14"
+      }`}
+    >
+      {/* Header: logo + toggle button */}
+      <div className="flex h-14 items-center border-b border-card-border px-2">
+        {/* Toggle button — always visible */}
+        <button
+          onClick={toggle}
+          title={open ? "Collapse sidebar (Ctrl+B)" : "Expand sidebar (Ctrl+B)"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover hover:text-foreground transition-colors"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            {open ? (
+              /* sidebar-collapse icon */
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
+            ) : (
+              /* hamburger / sidebar-expand icon */
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            )}
+          </svg>
+        </button>
+
+        {/* Logo text — only when expanded */}
+        {open && (
+          <div className="ml-2 flex items-center gap-2 overflow-hidden">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-black font-bold text-sm">
+              TF
+            </div>
+            <span className="text-lg font-semibold text-foreground whitespace-nowrap">TradeForge</span>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
@@ -40,11 +70,12 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 mb-0.5 text-sm font-medium transition-colors ${
+              title={!open ? item.name : undefined}
+              className={`flex items-center gap-3 rounded-lg px-2 py-2.5 mb-0.5 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-sidebar-active text-accent"
                   : "text-muted hover:bg-sidebar-hover hover:text-foreground"
-              }`}
+              } ${!open ? "justify-center" : ""}`}
             >
               <svg
                 className="h-5 w-5 shrink-0"
@@ -53,25 +84,23 @@ export default function Sidebar() {
                 strokeWidth={1.5}
                 stroke="currentColor"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d={item.icon}
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
               </svg>
-              {item.name}
+              {open && <span className="whitespace-nowrap overflow-hidden">{item.name}</span>}
             </Link>
           );
         })}
       </nav>
 
       {/* Bottom section */}
-      <div className="border-t border-card-border p-3">
-        <div className="flex items-center gap-2 px-2 text-xs text-muted">
-          <div className="h-2 w-2 rounded-full bg-success" />
-          <span>TradeForge v0.1.0</span>
+      {open && (
+        <div className="border-t border-card-border p-3">
+          <div className="flex items-center gap-2 px-2 text-xs text-muted">
+            <div className="h-2 w-2 rounded-full bg-success" />
+            <span>TradeForge v0.1.0</span>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 }
