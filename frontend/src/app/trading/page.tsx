@@ -66,7 +66,8 @@ export default function TradingPage() {
   const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
   const [chartSymbol, setChartSymbol] = useState("XAUUSD");
   const [chartTimeframe, setChartTimeframe] = useState("H1");
-  const [chartMode, setChartMode] = useState<"live" | "static">("live"); // MT5 Live vs Static
+  const [chartBroker, setChartBroker] = useState<string>("mt5"); // "mt5" | "oanda" | "coinbase" | "tradovate" | "static"
+  const chartMode = chartBroker === "static" ? "static" : "live";
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
@@ -86,8 +87,8 @@ export default function TradingPage() {
   const loadChartBars = useCallback(async (sym: string, tf: string) => {
     setChartLoading(true);
     try {
-      if (chartMode === "live") {
-        // Try MT5 bars first (works when MT5 broker is connected)
+      if (chartBroker === "mt5") {
+        // MT5: try MT5-specific endpoint first, fall back to generic
         try {
           const res = await api.get<{ bars: CandleInput[] }>(
             `/api/market/mt5/bars/${sym}?timeframe=${tf}&count=500`
@@ -96,10 +97,17 @@ export default function TradingPage() {
             setChartBars(res.bars);
             return;
           }
+        } catch { /* fall through */ }
+        try {
+          const res = await api.get<{ candles: CandleInput[] }>(
+            `/api/market/candles/${sym}?timeframe=${tf}&count=500`
+          );
+          setChartBars(res.candles || []);
         } catch {
-          // MT5 not connected — fall through to generic provider
+          setChartBars([]);
         }
-        // Fallback: try generic market data endpoint
+      } else if (chartBroker === "static") {
+        // Static / CSV mode
         try {
           const res = await api.get<{ candles: CandleInput[] }>(
             `/api/market/candles/${sym}?timeframe=${tf}&count=500`
@@ -109,14 +117,22 @@ export default function TradingPage() {
           setChartBars([]);
         }
       } else {
-        // Static mode — try generic market data endpoint
+        // Oanda / Coinbase / Tradovate — use broker candles endpoint (requires active connection)
         try {
-          const res = await api.get<{ candles: CandleInput[] }>(
-            `/api/market/candles/${sym}?timeframe=${tf}&count=500`
+          const res = await api.get<CandleInput[]>(
+            `/api/broker/candles/${sym}?timeframe=${tf}&count=500&broker=${chartBroker}`
           );
-          setChartBars(res.candles || []);
+          setChartBars(Array.isArray(res) ? res : []);
         } catch {
-          setChartBars([]);
+          // Broker not connected — fall back to generic
+          try {
+            const res = await api.get<{ candles: CandleInput[] }>(
+              `/api/market/candles/${sym}?timeframe=${tf}&count=500`
+            );
+            setChartBars(res.candles || []);
+          } catch {
+            setChartBars([]);
+          }
         }
       }
     } catch {
@@ -124,12 +140,12 @@ export default function TradingPage() {
     } finally {
       setChartLoading(false);
     }
-  }, [chartMode]);
+  }, [chartBroker]);
 
-  // ── Reload bars when symbol/timeframe/mode changes ──
+  // ── Reload bars when symbol/timeframe/broker changes ──
   useEffect(() => {
     loadChartBars(chartSymbol, chartTimeframe);
-  }, [chartSymbol, chartTimeframe, chartMode, loadChartBars]);
+  }, [chartSymbol, chartTimeframe, chartBroker, loadChartBars]);
 
   // ── Subscribe to live bars when in live mode ──
   useEffect(() => {
@@ -424,29 +440,18 @@ export default function TradingPage() {
               ))}
             </div>
 
-            {/* Data source toggle */}
-            <div className="flex items-center gap-2 ml-2">
-              <button
-                onClick={() => setChartMode("live")}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                  chartMode === "live"
-                    ? "bg-green-500/20 text-green-400 border border-green-500/40"
-                    : "text-muted hover:text-foreground border border-transparent"
-                }`}
-              >
-                MT5 Live
-              </button>
-              <button
-                onClick={() => setChartMode("static")}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                  chartMode === "static"
-                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/40"
-                    : "text-muted hover:text-foreground border border-transparent"
-                }`}
-              >
-                Chart Data
-              </button>
-            </div>
+            {/* Data source dropdown */}
+            <select
+              value={chartBroker}
+              onChange={e => setChartBroker(e.target.value)}
+              className="ml-2 rounded px-2 py-1 text-xs font-medium bg-[#1a1f2e] border border-gray-700 text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              <option value="mt5">MT5 Live</option>
+              <option value="oanda">Oanda</option>
+              <option value="coinbase">Coinbase</option>
+              <option value="tradovate">Tradovate</option>
+              <option value="static">Chart Data</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-3">
@@ -479,7 +484,7 @@ export default function TradingPage() {
               }`} />
               {chartMode === "live"
                 ? wsStatus === "connected" ? "Live" : wsStatus === "reconnecting" ? "Reconnecting" : "Offline"
-                : "Static"}
+                : chartBroker === "static" ? "Chart Data" : "Static"}
             </span>
           </div>
         </div>
@@ -492,13 +497,15 @@ export default function TradingPage() {
         ) : chartBars.length === 0 ? (
           <div className="flex h-[400px] flex-col items-center justify-center text-sm text-muted gap-2">
             <span>
-              {chartMode === "live" && !connected
+              {chartBroker === "mt5" && !connected
                 ? "Connect MT5 broker to view live chart data"
-                : chartMode === "live" && wsStatus !== "connected"
-                  ? "WebSocket connecting... waiting for live data"
-                  : "No chart data available — try switching to a different symbol or data source"}
+                : chartBroker !== "static" && chartBroker !== "mt5" && !connected
+                  ? `Connect ${chartBroker.charAt(0).toUpperCase() + chartBroker.slice(1)} in Settings → Brokers, then use Connect Broker`
+                  : chartMode === "live" && wsStatus !== "connected"
+                    ? "WebSocket connecting... waiting for live data"
+                    : "No chart data available — try switching to a different symbol or data source"}
             </span>
-            {chartMode === "live" && !connected && (
+            {chartBroker === "mt5" && !connected && (
               <button
                 onClick={() => setShowConnect(true)}
                 className="rounded-lg bg-accent/20 border border-accent/30 px-4 py-1.5 text-xs text-accent hover:bg-accent/30 transition-colors"
