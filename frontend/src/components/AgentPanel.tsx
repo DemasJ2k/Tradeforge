@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAgents, subscribeToAgent } from "@/hooks/useAgents";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
 import { api } from "@/lib/api";
 import type {
   Agent,
@@ -77,6 +78,14 @@ export default function AgentPanel() {
   const [cTimeframe, setCTimeframe] = useState("H1");
   const [cMode, setCMode] = useState<AgentMode>("paper");
   const [cMlModelId, setCMlModelId] = useState<number | null>(null);
+  const [cBroker, setCBroker] = useState<string>("");
+
+  // Connected broker accounts for broker selector
+  const { accounts: brokerAccounts, activeBroker } = useBrokerAccounts();
+  // Default cBroker to activeBroker when it changes
+  useEffect(() => {
+    if (activeBroker && !cBroker) setCBroker(activeBroker);
+  }, [activeBroker, cBroker]);
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -159,6 +168,7 @@ export default function AgentPanel() {
         timeframe: cTimeframe,
         mode: cMode,
         ml_model_id: cMlModelId,
+        broker_name: cBroker || activeBroker || undefined,
         risk_config: {
           position_size_type: cSizeType,
           position_size_value: parseFloat(cSizeValue) || 0.01,
@@ -345,6 +355,9 @@ export default function AgentPanel() {
                       </div>
                       <div className="text-xs text-muted truncate">
                         {strategyName(agent.strategy_id)} • {agent.symbol} • {agent.timeframe}
+                        {agent.broker_name && (
+                          <span className="ml-1 capitalize text-accent/70">• {agent.broker_name}</span>
+                        )}
                         {agent.ml_model_id && (
                           <span className="ml-1 text-cyan-400/70">
                             • ML #{agent.ml_model_id}
@@ -487,6 +500,34 @@ export default function AgentPanel() {
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
               />
             </div>
+
+            {/* Broker account selector */}
+            {brokerAccounts.length > 0 && (
+              <div>
+                <label className="block text-xs text-muted mb-1">Broker Account</label>
+                <div className="flex gap-2 flex-wrap">
+                  {brokerAccounts.map((acct) => (
+                    <button
+                      key={acct.broker}
+                      onClick={() => setCBroker(acct.broker)}
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        cBroker === acct.broker
+                          ? "border-accent/60 bg-accent/10 text-accent"
+                          : "border-card-border text-muted hover:border-accent/40 hover:text-foreground"
+                      }`}
+                    >
+                      <div className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                      <span className="capitalize">{acct.broker}</span>
+                      <span className="text-muted/70">
+                        {acct.currency} {acct.balance >= 1000
+                          ? `${(acct.balance / 1000).toFixed(1)}k`
+                          : acct.balance.toFixed(0)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs text-muted mb-1">Strategy</label>

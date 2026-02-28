@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import ChatHelpers from "@/components/ChatHelpers";
+import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface DashboardData {
@@ -114,6 +115,8 @@ export default function Dashboard() {
   if (!data) return null;
 
   const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos } = data;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { accounts: brokerAccounts, activeBroker, setActiveBroker } = useBrokerAccounts();
 
   return (
     <div className="space-y-6">
@@ -136,6 +139,62 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* ── Broker Account Cards ───────────────────────── */}
+      {brokerAccounts.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {brokerAccounts.map((acct) => (
+            <button
+              key={acct.broker}
+              onClick={() => setActiveBroker(acct.broker)}
+              className={`rounded-xl border p-4 text-left transition-all hover:border-accent/60 ${
+                acct.broker === activeBroker
+                  ? "border-accent/60 bg-accent/5"
+                  : "border-card-border bg-card-bg"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-400" />
+                  <span className="text-sm font-semibold capitalize text-foreground">
+                    {acct.broker}
+                  </span>
+                </div>
+                {acct.broker === activeBroker && (
+                  <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
+                    active
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted">Balance</span>
+                  <span className="font-medium text-foreground">
+                    {acct.currency} {acct.balance >= 1000
+                      ? `${(acct.balance / 1000).toFixed(1)}k`
+                      : acct.balance.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted">Equity</span>
+                  <span className="font-medium text-foreground">
+                    {acct.currency} {acct.equity >= 1000
+                      ? `${(acct.equity / 1000).toFixed(1)}k`
+                      : acct.equity.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted">Open P&L</span>
+                  <span className={`font-medium ${acct.unrealizedPnl > 0 ? "text-green-400" : acct.unrealizedPnl < 0 ? "text-red-400" : "text-muted"}`}>
+                    {acct.unrealizedPnl >= 0 ? "+" : ""}
+                    {acct.unrealizedPnl.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Stats Cards ────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
