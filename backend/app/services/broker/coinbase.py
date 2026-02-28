@@ -47,6 +47,59 @@ _TF_MAP = {
     "1d": "ONE_DAY",
 }
 
+# Seconds per granularity (used for pagination)
+_GRANULARITY_SECONDS = {
+    "ONE_MINUTE": 60, "FIVE_MINUTE": 300, "FIFTEEN_MINUTE": 900,
+    "THIRTY_MINUTE": 1800, "ONE_HOUR": 3600, "TWO_HOUR": 7200,
+    "SIX_HOUR": 21600, "ONE_DAY": 86400,
+}
+
+# Max candles Coinbase returns per request
+_MAX_CANDLES_PER_REQUEST = 350
+
+# Known base currencies for 6-char symbol splitting (e.g. BTCUSD → BTC-USD)
+_KNOWN_BASE = {
+    "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT", "AVAX", "LINK",
+    "MATIC", "LTC", "BCH", "UNI", "ATOM", "FIL", "XLM", "VET", "TRX",
+    "SHIB", "SAND", "MANA", "AAVE", "CRV", "COMP", "MKR", "SNX", "YFI",
+    "SUSHI", "1INCH", "ENJ", "CHZ", "BAT", "ZRX", "OMG", "ALGO",
+}
+_KNOWN_QUOTE = {"USD", "USDT", "USDC", "EUR", "GBP", "BTC", "ETH", "BNB"}
+
+
+def _to_coinbase_product(symbol: str) -> str:
+    """
+    Normalise a symbol to Coinbase product_id format (e.g. BTC-USD).
+
+    Handles:
+      BTC-USD  → BTC-USD   (already correct)
+      BTC/USD  → BTC-USD
+      BTCUSD   → BTC-USD   (greedy base-currency split)
+      BTCUSDT  → BTC-USDT
+    """
+    # Already has separator
+    if "-" in symbol:
+        return symbol.upper()
+    if "/" in symbol:
+        return symbol.replace("/", "-").upper()
+
+    s = symbol.upper()
+
+    # Try splitting by known base currencies (longest first to avoid ambiguity)
+    for base in sorted(_KNOWN_BASE, key=len, reverse=True):
+        if s.startswith(base) and len(s) > len(base):
+            quote = s[len(base):]
+            if quote in _KNOWN_QUOTE or len(quote) in (3, 4):
+                return f"{base}-{quote}"
+
+    # Fallback: split 6-char as 3+3, 4-char pair
+    if len(s) == 6 and s.isalpha():
+        return f"{s[:3]}-{s[3:]}"
+    if len(s) == 7 and s.isalpha():
+        return f"{s[:3]}-{s[3:]}"
+
+    return s  # Return as-is if we can't normalise
+
 
 def _build_jwt(api_key: str, api_secret: str, uri: str = "") -> str:
     """Build a JWT token for Coinbase CDP API authentication."""
@@ -266,7 +319,7 @@ class CoinbaseAdapter(BrokerAdapter):
     # ── Orders ─────────────────────────────────────────
 
     async def place_order(self, request: OrderRequest) -> Order:
-        product_id = request.symbol.replace("/", "-")
+        product_id = _to_coinbase_product(request.symbol)
         client_order_id = str(uuid.uuid4())
 
         order_config: dict = {}
@@ -411,48 +464,74 @@ class CoinbaseAdapter(BrokerAdapter):
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
     ) -> list[Candle]:
-        product_id = symbol.replace("/", "-")
+        product_id = _to_coinbase_product(symbol)
         granularity = _TF_MAP.get(timeframe, "ONE_HOUR")
+        bar_seconds = _GRANULARITY_SECONDS.get(granularity, 3600)
 
-        params: dict = {"granularity": granularity}
-        if from_time:
-            params["start"] = str(int(from_time.timestamp()))
-        if to_time:
-            params["end"] = str(int(to_time.timestamp()))
+        now = int(time.time())
+        end_ts = int(to_time.timestamp()) if to_time else now
+        start_ts = int(from_time.timestamp()) if from_time else end_ts - (count * bar_seconds)
 
-        if not from_time and not to_time:
-            now = int(time.time())
-            # Estimate bar width in seconds
-            bar_seconds = {
-                "ONE_MINUTE": 60, "FIVE_MINUTE": 300, "FIFTEEN_MINUTE": 900,
-                "THIRTY_MINUTE": 1800, "ONE_HOUR": 3600, "TWO_HOUR": 7200,
-                "SIX_HOUR": 21600, "ONE_DAY": 86400,
-            }.get(granularity, 3600)
-            params["start"] = str(now - (count * bar_seconds))
-            params["end"] = str(now)
+        # Paginate: Coinbase caps each request at 350 candles
+        all_candles: list[Candle] = []
+        cursor_end = end_ts
 
-        data = await self._get(
-            f"/api/v3/brokerage/products/{product_id}/candles",
-            params=params,
-        )
+        while cursor_end > start_ts and len(all_candles) < count:
+            chunk_bars = min(_MAX_CANDLES_PER_REQUEST, count - len(all_candles))
+            cursor_start = cursor_end - (chunk_bars * bar_seconds)
+            if cursor_start < start_ts:
+                cursor_start = start_ts
 
-        candles: list[Candle] = []
-        for c in data.get("candles", []):
-            candles.append(Candle(
-                timestamp=datetime.fromtimestamp(int(c.get("start", 0)), tz=timezone.utc),
-                open=float(c.get("open", 0)),
-                high=float(c.get("high", 0)),
-                low=float(c.get("low", 0)),
-                close=float(c.get("close", 0)),
-                volume=float(c.get("volume", 0)),
-            ))
+            params = {
+                "granularity": granularity,
+                "start": str(cursor_start),
+                "end": str(cursor_end),
+            }
 
-        # Coinbase returns newest first — reverse for chronological order
-        candles.reverse()
-        return candles
+            try:
+                data = await self._get(
+                    f"/api/v3/brokerage/products/{product_id}/candles",
+                    params=params,
+                )
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    "Coinbase candles HTTP %s for %s: %s",
+                    e.response.status_code, product_id, e.response.text[:200],
+                )
+                break
+
+            batch = data.get("candles", [])
+            if not batch:
+                break
+
+            for c in batch:
+                all_candles.append(Candle(
+                    timestamp=datetime.fromtimestamp(int(c.get("start", 0)), tz=timezone.utc),
+                    open=float(c.get("open", 0)),
+                    high=float(c.get("high", 0)),
+                    low=float(c.get("low", 0)),
+                    close=float(c.get("close", 0)),
+                    volume=float(c.get("volume", 0)),
+                ))
+
+            # Move window back for next chunk
+            cursor_end = cursor_start
+
+        # Coinbase returns newest first per batch — sort all by timestamp ascending
+        all_candles.sort(key=lambda c: c.timestamp)
+        # Deduplicate (overlapping windows can cause dupes)
+        seen: set = set()
+        unique: list[Candle] = []
+        for c in all_candles:
+            key = c.timestamp.timestamp()
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
+
+        return unique[-count:] if len(unique) > count else unique
 
     async def get_price(self, symbol: str) -> PriceTick:
-        product_id = symbol.replace("/", "-")
+        product_id = _to_coinbase_product(symbol)
         data = await self._get(f"/api/v3/brokerage/products/{product_id}")
 
         price = float(data.get("price", 0))
@@ -476,7 +555,7 @@ class CoinbaseAdapter(BrokerAdapter):
         """
         import asyncio
 
-        product_ids = [s.replace("/", "-") for s in symbols]
+        product_ids = [_to_coinbase_product(s) for s in symbols]
 
         while True:
             for pid in product_ids:
