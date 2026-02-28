@@ -680,6 +680,7 @@ export type AgentStatus = "stopped" | "running" | "paused" | "error";
 export type AgentTradeStatus = "pending_confirmation" | "confirmed" | "executed" | "rejected" | "paper" | "closed";
 
 export interface AgentRiskConfig {
+  lot_size?: number;
   max_daily_loss?: number;
   max_daily_loss_pct?: number;
   max_open_positions?: number;

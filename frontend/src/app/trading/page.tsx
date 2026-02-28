@@ -9,6 +9,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useSettings } from "@/hooks/useSettings";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
+import type { Time } from "lightweight-charts";
 import type {
   AccountInfo,
   LivePosition,
@@ -337,7 +338,8 @@ export default function TradingPage() {
       const histogram = macdLine.map((v, i) => (v !== null && signalLine[i] !== null ? v - signalLine[i]! : null));
 
       const toSeries = (vals: (number | null)[]) =>
-        vals.map((v, i) => v !== null ? { time: times[i], value: v } : null).filter(Boolean) as { time: number; value: number }[];
+        vals.map((v, i) => v !== null ? { time: times[i] as Time, value: v } : null)
+            .filter((d): d is { time: Time; value: number } => d !== null);
 
       const histSeries = macdChart.addSeries(HistogramSeries, { color: "#22c55e", priceLineVisible: false });
       histSeries.setData(toSeries(histogram).map(p => ({
