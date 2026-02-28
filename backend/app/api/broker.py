@@ -424,7 +424,11 @@ async def get_candles(
 ):
     """Get historical candles for a symbol."""
     adapter = _get_adapter(broker)
-    candles = await adapter.get_candles(symbol, timeframe, count)
+    try:
+        candles = await adapter.get_candles(symbol, timeframe, count)
+    except Exception as e:
+        logger.warning("get_candles failed for %s/%s: %s", symbol, timeframe, e)
+        return []
 
     # Return time as Unix float to match CandleInput format expected by the chart
     return [

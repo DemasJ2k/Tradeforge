@@ -41,6 +41,29 @@ _TF_MAP = {
     "1h": "H1", "4h": "H4", "1d": "D", "1w": "W",
 }
 
+# Common symbol aliases → Oanda instrument format
+_SYMBOL_ALIASES: dict[str, str] = {
+    "XAUUSD": "XAU_USD", "XAGUSD": "XAG_USD",
+    "US30": "US30_USD", "NAS100": "NAS100_USD",
+    "SPX500": "SPX500_USD", "UK100": "UK100_GBP",
+    "JP225": "JP225_USD", "DE30": "DE30_EUR",
+    "USOIL": "WTICO_USD", "UKOIL": "BCO_USD",
+}
+
+
+def _to_oanda_instrument(symbol: str) -> str:
+    """Convert any common symbol format to Oanda instrument name."""
+    if symbol in _SYMBOL_ALIASES:
+        return _SYMBOL_ALIASES[symbol]
+    if "_" in symbol:
+        return symbol  # already Oanda format
+    if "/" in symbol:
+        return symbol.replace("/", "_")
+    # 6-char forex pairs: EURUSD → EUR_USD
+    if len(symbol) == 6 and symbol.isalpha():
+        return f"{symbol[:3]}_{symbol[3:]}"
+    return symbol
+
 
 class OandaAdapter(BrokerAdapter):
     """
@@ -274,7 +297,7 @@ class OandaAdapter(BrokerAdapter):
     # ── Orders ─────────────────────────────────────────
 
     async def place_order(self, request: OrderRequest) -> Order:
-        oanda_instrument = request.symbol.replace("/", "_")
+        oanda_instrument = _to_oanda_instrument(request.symbol)
 
         # Units: positive = buy, negative = sell
         units = request.size if request.side == OrderSide.BUY else -request.size
@@ -475,7 +498,7 @@ class OandaAdapter(BrokerAdapter):
         from_time: Optional[datetime] = None,
         to_time: Optional[datetime] = None,
     ) -> list[Candle]:
-        instrument = symbol.replace("/", "_")
+        instrument = _to_oanda_instrument(symbol)
         gran = _TF_MAP.get(timeframe, timeframe)
 
         params: dict = {
@@ -511,7 +534,7 @@ class OandaAdapter(BrokerAdapter):
         return candles
 
     async def get_price(self, symbol: str) -> PriceTick:
-        instrument = symbol.replace("/", "_")
+        instrument = _to_oanda_instrument(symbol)
         data = await self._get(
             f"/accounts/{self._account_id}/pricing",
             params={"instruments": instrument},
@@ -535,7 +558,7 @@ class OandaAdapter(BrokerAdapter):
     # ── Streaming ──────────────────────────────────────
 
     async def stream_prices(self, symbols: list[str]) -> AsyncGenerator[PriceTick, None]:
-        instruments = ",".join(s.replace("/", "_") for s in symbols)
+        instruments = ",".join(_to_oanda_instrument(s) for s in symbols)
         url = f"{self._stream_url}/v3/accounts/{self._account_id}/pricing/stream"
 
         async with httpx.AsyncClient(timeout=None) as client:
