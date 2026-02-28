@@ -107,6 +107,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
   // Track whether initial data has been set (to avoid .update() on empty series)
   const dataLoadedRef = useRef(false);
+  // Track the Unix timestamp (seconds) of the last bar in the series.
+  // updateBar() silently skips any bar whose time < lastSeriesTimeRef — this prevents
+  // "Cannot update oldest data" errors when live bar_update comes in for an M15 period
+  // that's already closed and present in the loaded historical data.
+  const lastSeriesTimeRef = useRef<number>(0);
 
   // Expose imperative handle for live updates
   const updateBar = useCallback((bar: CandleInput) => {
@@ -116,6 +121,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     // Validate time is a proper finite number (Unix timestamp in seconds)
     const t = typeof bar.time === "number" ? bar.time : Number(bar.time);
     if (!Number.isFinite(t) || t <= 0) return;
+
+    // Skip bars older than the most recent series bar.
+    // This prevents "Cannot update oldest data" errors when a bar_update arrives
+    // for an M15 period that is already closed and present in the loaded history.
+    // Lightweight-charts only allows .update() on the LAST bar or a newer one.
+    if (t < lastSeriesTimeRef.current) return;
 
     const candle: CandlestickData<Time> = {
       time: t as Time,
@@ -140,9 +151,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     try {
       candleSeriesRef.current.update(candle);
       volumeSeriesRef.current.update(volume);
+      // Track the highest bar time seen so far
+      if (t > lastSeriesTimeRef.current) lastSeriesTimeRef.current = t;
     } catch (e) {
-      // Ignore lightweight-charts ordering errors (e.g., stale data)
-      console.warn("[CandlestickChart] update error:", e);
+      // Log actual error message for debugging
+      const msg = e instanceof Error ? e.message : (typeof e === "object" && e !== null ? JSON.stringify(e) : String(e));
+      console.warn("[CandlestickChart] update error:", msg, "| bar.time=", bar.time);
     }
   }, []);
 
@@ -243,6 +257,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       maSeriesRef.current = null;
       emaSeriesRef.current = null;
       dataLoadedRef.current = false;
+      lastSeriesTimeRef.current = 0;
     };
   }, [height, upColor, downColor, showGrid, showCrosshair]);
 
@@ -282,6 +297,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(volumes);
     dataLoadedRef.current = true;
+
+    // Record the last bar time so updateBar can reject stale bar_updates
+    if (candles.length > 0) {
+      lastSeriesTimeRef.current = candles[candles.length - 1].time as number;
+    }
 
     if (candles.length > 100) {
       const from = candles[candles.length - 100].time;

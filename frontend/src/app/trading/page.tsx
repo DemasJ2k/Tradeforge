@@ -9,7 +9,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useSettings } from "@/hooks/useSettings";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
-import type { Time } from "lightweight-charts";
+import type { Time, LogicalRange } from "lightweight-charts";
 import type {
   AccountInfo,
   LivePosition,
@@ -156,9 +156,13 @@ export default function TradingPage() {
 
   // Ref tracking current bar state for direct tick→chart updates
   const liveBarStateRef = useRef<{ time: number; open: number; high: number; low: number; close: number; volume: number } | null>(null);
+  // Track whether we've already scrolled to realtime after first live bar
+  const scrolledToRealtimeRef = useRef<boolean>(false);
   // Track last tick update time for freshness display (re-render every second)
   const [tickAge, setTickAge] = useState<string>("—");
   const tickAgeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref so the interval callback can read latest lastTickMs without being a dep
+  const lastTickMsRef = useRef<Record<string, number>>({});
 
   // ── Connect WebSocket on mount ──
   useEffect(() => {
@@ -231,6 +235,7 @@ export default function TradingPage() {
   useEffect(() => {
     // Reset live bar state so stale data from previous symbol doesn't bleed through
     liveBarStateRef.current = null;
+    scrolledToRealtimeRef.current = false; // will re-scroll when first live bar arrives
     loadChartBars(chartSymbol, chartTimeframe);
   }, [chartSymbol, chartTimeframe, chartBroker, loadChartBars]);
 
@@ -275,6 +280,13 @@ export default function TradingPage() {
       // Keep liveBarStateRef in sync with bar_update data
       liveBarStateRef.current = { ...liveCurrentBar };
       chartRef.current.updateBar(liveCurrentBar);
+      // On first live bar, scroll chart to realtime so the live candle is visible.
+      // This handles the case where live data is ahead of the historical data range
+      // (e.g. historical ends Friday, live bar is Monday — gap hidden to the right).
+      if (!scrolledToRealtimeRef.current) {
+        scrolledToRealtimeRef.current = true;
+        chartRef.current.getChart()?.timeScale().scrollToRealTime();
+      }
     }
   }, [liveCurrentBar, chartMode, chartBars.length]);
 
@@ -302,7 +314,14 @@ export default function TradingPage() {
     }
   }, [currentTick, chartMode, chartBars.length]);
 
+  // Keep ref in sync so the interval reads latest values without being a dep
+  useEffect(() => {
+    lastTickMsRef.current = lastTickMs;
+  }, [lastTickMs]);
+
   // ── Tick age timer (update display every second) ──
+  // NOTE: lastTickMs intentionally excluded from deps — reads via ref so the
+  // 1-second interval isn't torn down and restarted on every 150ms MT5 tick.
   useEffect(() => {
     if (tickAgeTimerRef.current) clearInterval(tickAgeTimerRef.current);
     if (chartMode !== "live" || wsStatus !== "connected") {
@@ -310,13 +329,14 @@ export default function TradingPage() {
       return;
     }
     tickAgeTimerRef.current = setInterval(() => {
-      const ms = lastTickMs[chartSymbol];
+      const ms = lastTickMsRef.current[chartSymbol];
       setTickAge(ms ? relativeMs(ms) : "waiting…");
     }, 1000);
     return () => {
       if (tickAgeTimerRef.current) clearInterval(tickAgeTimerRef.current);
     };
-  }, [chartMode, wsStatus, chartSymbol, lastTickMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartMode, wsStatus, chartSymbol]); // lastTickMs read via ref — intentional
 
   // ── Chart auto-refresh polling fallback ──
   // When WebSocket bar updates aren't arriving (e.g. on deployed server without MT5),
@@ -358,28 +378,43 @@ export default function TradingPage() {
 
   // ── MACD chart ──
   useEffect(() => {
+    let cancelled = false;
+    // Stores the main-chart time-scale unsubscribe fn so we can remove it on cleanup
+    let unsubTimeSync: (() => void) | null = null;
+
     const destroy = () => {
+      unsubTimeSync?.();
+      unsubTimeSync = null;
       if (macdChartRef.current) {
         try { macdChartRef.current.remove(); } catch { /* already removed */ }
         macdChartRef.current = null;
       }
     };
+
     if (!indMACD || !macdContainerRef.current || chartBars.length < 26) {
       destroy();
-      return;
+      return () => { cancelled = true; };
     }
     destroy(); // ensure clean slate before creating
 
     // Dynamic import to avoid SSR issues
     import("lightweight-charts").then(({ createChart, LineSeries, HistogramSeries }) => {
-      if (!macdContainerRef.current) return;
+      if (cancelled || !macdContainerRef.current) return;
       const macdChart = createChart(macdContainerRef.current, {
         height: 120,
         layout: { background: { color: "transparent" }, textColor: "#9ca3af" },
         grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
         rightPriceScale: { borderColor: "#374151" },
-        timeScale: { borderColor: "#374151", timeVisible: true, secondsVisible: false },
+        timeScale: {
+          borderColor: "#374151",
+          timeVisible: true,
+          secondsVisible: false,
+          // Hide the MACD time axis to save space — main chart's axis is enough
+          visible: false,
+        },
         crosshair: { mode: 1 },
+        handleScroll: false,
+        handleScale: false,
       });
       macdChartRef.current = macdChart;
 
@@ -428,10 +463,35 @@ export default function TradingPage() {
       const signalSeries = macdChart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false });
       signalSeries.setData(toSeries(signalLine));
 
-      macdChart.timeScale().fitContent();
+      // ── Sync time scale with main chart ──────────────────────────────────
+      // The MACD chart has scroll/scale disabled — all navigation is driven
+      // by the main chart. We subscribe to the main chart's visible-range
+      // changes and mirror them onto the MACD chart.
+      const mainChart = chartRef.current?.getChart();
+      if (mainChart) {
+        // Apply the main chart's current visible range immediately
+        try {
+          const range: LogicalRange | null = mainChart.timeScale().getVisibleLogicalRange();
+          if (range) macdChart.timeScale().setVisibleLogicalRange(range);
+        } catch { /* ignore */ }
+
+        // Keep MACD in sync whenever the user scrolls/zooms the main chart
+        const syncHandler = (range: LogicalRange | null) => {
+          if (!range) return;
+          try { macdChart.timeScale().setVisibleLogicalRange(range); } catch { /* ignore */ }
+        };
+        mainChart.timeScale().subscribeVisibleLogicalRangeChange(syncHandler);
+        unsubTimeSync = () => {
+          try { mainChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncHandler); } catch { /* ignore */ }
+        };
+      } else {
+        // Fallback: show all data if main chart isn't ready
+        macdChart.timeScale().fitContent();
+      }
     });
 
     return () => {
+      cancelled = true;
       destroy();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
