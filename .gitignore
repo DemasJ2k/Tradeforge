@@ -22,3 +22,8 @@ backend/data/uploads/
 backend/data/ml_models/
 backend/data/*.db
 backend/*.db
+
+# User-requested local excludes
+Images/
+nul
+nul.*
