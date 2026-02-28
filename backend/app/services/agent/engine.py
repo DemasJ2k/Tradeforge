@@ -665,31 +665,86 @@ class AgentRunner:
                 symbol_info = mt5.symbol_info(self._symbol)
                 if symbol_info is None:
                     return None
+
                 price = symbol_info.ask if direction == "BUY" else symbol_info.bid
+                digits  = symbol_info.digits
+                point   = symbol_info.point
+                # Minimum stop distance in price units (retcode 10016 if violated)
+                min_dist = symbol_info.trade_stops_level * point
+
+                # ── Filling mode (retcode 10030 if wrong mode used) ──
+                # filling_mode is a bitmask: 1 = FOK supported, 2 = IOC supported
+                fill_mask = symbol_info.filling_mode
+                if fill_mask & 0x01:
+                    filling = mt5.ORDER_FILLING_FOK
+                elif fill_mask & 0x02:
+                    filling = mt5.ORDER_FILLING_IOC
+                else:
+                    filling = mt5.ORDER_FILLING_RETURN
+
+                # ── Validate & adjust SL/TP (retcode 10016 if too close) ──
+                sl = float(stop_loss)  if stop_loss  and stop_loss  > 0 else 0.0
+                tp = float(take_profit) if take_profit and take_profit > 0 else 0.0
+
+                if min_dist > 0:
+                    if direction == "BUY":
+                        # SL must be BELOW price by at least min_dist
+                        if sl and sl > price - min_dist:
+                            sl = round(price - min_dist, digits)
+                        # TP must be ABOVE price by at least min_dist
+                        if tp and tp < price + min_dist:
+                            tp = round(price + min_dist, digits)
+                    else:  # SELL
+                        # SL must be ABOVE price by at least min_dist
+                        if sl and sl < price + min_dist:
+                            sl = round(price + min_dist, digits)
+                        # TP must be BELOW price by at least min_dist
+                        if tp and tp > price - min_dist:
+                            tp = round(price - min_dist, digits)
+
+                # Normalise to correct decimal places
+                sl = round(sl, digits) if sl else 0.0
+                tp = round(tp, digits) if tp else 0.0
+
                 req = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": self._symbol,
                     "volume": lot_size,
                     "type": order_type,
-                    "price": price,
-                    "sl": stop_loss,
-                    "tp": take_profit,
+                    "price": round(price, digits),
+                    "sl": sl,
+                    "tp": tp,
                     "deviation": 20,
                     "magic": 234000,
                     "comment": f"TradeForge Agent#{self.agent_id}",
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_IOC,
+                    "type_filling": filling,
                 }
+                logger.debug("[Agent %d] MT5 order req: filling=%s sl=%.5f tp=%.5f min_dist=%.5f",
+                             self.agent_id, filling, sl, tp, min_dist)
                 return mt5.order_send(req)
 
             result = await loop.run_in_executor(_pool, _place_order)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                self._log("info", f"Direct MT5 order placed: ticket={result.order}")
+                self._log("info",
+                    f"MT5 order placed: {direction} {self._symbol} "
+                    f"ticket={result.order} sl={result.request.sl:.5f} tp={result.request.tp:.5f}")
                 return str(result.order)
             else:
                 retcode = result.retcode if result else "None"
                 comment = result.comment if result else "no result"
-                self._log("error", f"Direct MT5 order failed: retcode={retcode}, {comment}")
+                # Human-readable retcode hints
+                hints = {
+                    10016: "Invalid stops — SL/TP too close to price or zero",
+                    10030: "Unsupported filling mode — broker doesn't support this fill type",
+                    10006: "Order rejected by broker",
+                    10014: "Invalid volume — lot size too small/large for this symbol",
+                    10004: "Requote — price moved, retry",
+                }
+                hint = hints.get(retcode, "")
+                self._log("error",
+                    f"MT5 order failed: retcode={retcode} ({comment})"
+                    + (f" → {hint}" if hint else ""))
                 return None
         except ImportError:
             self._log("error", "MetaTrader5 package not available for direct execution")
