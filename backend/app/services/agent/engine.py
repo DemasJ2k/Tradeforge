@@ -64,7 +64,17 @@ class AgentRunner:
                 logger.error("[Agent %d] Not found in DB", self.agent_id)
                 return
 
-            self._mode = agent.mode
+            # Normalize mode to canonical values (handle legacy/alternate names)
+            raw_mode = (agent.mode or "paper").lower().strip()
+            if raw_mode in ("autonomous", "auto"):
+                self._mode = "auto"
+            elif raw_mode in ("confirm", "confirmation"):
+                self._mode = "confirmation"
+            elif raw_mode == "paper":
+                self._mode = "paper"
+            else:
+                logger.warning("[Agent %d] Unknown mode '%s', defaulting to paper", self.agent_id, raw_mode)
+                self._mode = "paper"
             self._symbol = agent.symbol
             self._timeframe = agent.timeframe
             self._broker_name = agent.broker_name or "mt5"
@@ -179,7 +189,18 @@ class AgentRunner:
         self._log("info", "Agent paused")
 
     async def _run_loop(self):
-        """Main agent loop — listen for bar events and evaluate."""
+        """Main agent loop — listen for bar events and evaluate.
+
+        MT5 agents use the tick aggregator (WebSocket push).
+        Non-MT5 agents (Oanda, Coinbase, Tradovate) use REST polling so their
+        data comes from the correct broker — not from MT5 ticks.
+        """
+        # Non-MT5 brokers: use REST polling (avoids using MT5 price data for Oanda/Coinbase)
+        if self._broker_name not in ("mt5", ""):
+            await self._run_polling_loop()
+            return
+
+        # MT5: use tick aggregator via WebSocket push
         channel = f"bars:{self._symbol}:{self._timeframe}"
         bar_queue: asyncio.Queue = asyncio.Queue()
 
@@ -224,57 +245,159 @@ class AgentRunner:
                 self._log("error", f"Loop error: {e}")
                 await asyncio.sleep(5)
 
+    async def _run_polling_loop(self):
+        """
+        Bar polling loop for non-MT5 brokers (Oanda, Coinbase, Tradovate).
+
+        Polls the broker's REST candle API periodically to detect new closed bars.
+        This ensures the agent uses the SAME price source as the chart (broker data),
+        not MT5 tick data which would be a completely different price stream.
+        """
+        # Poll intervals by timeframe (seconds): balance freshness vs API rate limits
+        _TF_POLL = {
+            "M1": 20, "M5": 40, "M10": 60, "M15": 90,
+            "M30": 120, "H1": 180, "H4": 360, "D1": 600,
+        }
+        poll_interval = _TF_POLL.get(self._timeframe, 120)
+
+        # Load initial bars from the correct broker
+        await self._load_initial_bars()
+
+        last_bar_time = self._bar_buffer[-1]["time"] if self._bar_buffer else 0
+        self._log("info",
+            f"Polling {self._broker_name} every {poll_interval}s "
+            f"for {self._symbol}/{self._timeframe} (last bar: {last_bar_time})")
+
+        while self._running:
+            try:
+                await asyncio.sleep(poll_interval)
+                if not self._running:
+                    break
+
+                from app.services.broker.manager import broker_manager
+                adapter = broker_manager.get_adapter(self._broker_name)
+                if not adapter or not await adapter.is_connected():
+                    self._log("warn", f"Broker {self._broker_name} not connected — skipping poll")
+                    continue
+
+                candles = await adapter.get_candles(self._symbol, self._timeframe, 10)
+                if not candles:
+                    continue
+
+                # Find bars that are newer than what we have
+                new_bars = []
+                for c in candles:
+                    bar_time = int(c.timestamp.timestamp())
+                    if bar_time > last_bar_time:
+                        new_bars.append({
+                            "time": bar_time,
+                            "open": c.open,
+                            "high": c.high,
+                            "low": c.low,
+                            "close": c.close,
+                            "volume": c.volume,
+                        })
+
+                if new_bars:
+                    new_bars.sort(key=lambda b: b["time"])
+                    self._bar_buffer.extend(new_bars)
+                    if len(self._bar_buffer) > 200:
+                        self._bar_buffer = self._bar_buffer[-200:]
+                    last_bar_time = new_bars[-1]["time"]
+
+                    logger.info("[Agent %d] Polled %d new bar(s) from %s (C=%.5f)",
+                                self.agent_id, len(new_bars), self._broker_name,
+                                new_bars[-1]["close"])
+                    await self._evaluate_signal()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("[Agent %d] Polling error: %s", self.agent_id, e)
+                self._log("error", f"Polling error: {e}")
+                await asyncio.sleep(10)
+
     async def _load_initial_bars(self):
-        """Load initial bar history for evaluator warmup."""
+        """Load initial bar history for evaluator warmup.
+
+        Uses the agent's configured broker so prices match the chart exactly.
+        Only falls back to direct MT5 when broker_name is "mt5" — never silently
+        uses MT5 data for Oanda/Coinbase agents (that would cause price mismatches).
+        """
         from app.services.broker.manager import broker_manager
 
-        # Try via broker_manager first (user-connected broker)
+        # Load from the configured broker (Oanda, Coinbase, MT5 adapter, etc.)
         try:
             adapter = broker_manager.get_adapter(self._broker_name)
             if adapter and await adapter.is_connected():
-                bars = await adapter.get_initial_bars(self._symbol, self._timeframe, 500)
+                # MT5 adapter has a dedicated get_initial_bars(); others use get_candles()
+                if hasattr(adapter, "get_initial_bars"):
+                    bars = await adapter.get_initial_bars(self._symbol, self._timeframe, 500)
+                else:
+                    candles = await adapter.get_candles(self._symbol, self._timeframe, 500)
+                    bars = [
+                        {
+                            "time": int(c.timestamp.timestamp()),
+                            "open": c.open,
+                            "high": c.high,
+                            "low": c.low,
+                            "close": c.close,
+                            "volume": c.volume,
+                        }
+                        for c in candles
+                    ]
                 if bars:
                     self._bar_buffer = bars
-                    self._log("info", f"Loaded {len(bars)} initial bars via broker manager")
+                    self._log("info",
+                        f"Loaded {len(bars)} initial bars via {self._broker_name} "
+                        f"({self._symbol}/{self._timeframe})")
                     return
-        except Exception as e:
-            logger.warning("[Agent %d] Broker manager load failed: %s", self.agent_id, e)
-
-        # Fallback: use MT5 directly (tick streamer already initialized MT5)
-        try:
-            import MetaTrader5 as mt5
-            from app.services.broker.mt5_bridge import _TF_MAP
-            from concurrent.futures import ThreadPoolExecutor
-
-            tf = _TF_MAP.get(self._timeframe, mt5.TIMEFRAME_H1)
-            loop = asyncio.get_event_loop()
-            _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-mt5")
-
-            def _fetch():
-                mt5.symbol_select(self._symbol, True)
-                return mt5.copy_rates_from_pos(self._symbol, tf, 0, 500)
-
-            raw = await loop.run_in_executor(_pool, _fetch)
-            if raw is not None and len(raw) > 0:
-                bars = []
-                for r in raw:
-                    bars.append({
-                        "time": int(r['time']),
-                        "open": float(r['open']),
-                        "high": float(r['high']),
-                        "low": float(r['low']),
-                        "close": float(r['close']),
-                        "volume": float(r['tick_volume']),
-                    })
-                self._bar_buffer = bars
-                self._log("info", f"Loaded {len(bars)} initial bars via direct MT5")
-                return
+                else:
+                    self._log("warn", f"Broker {self._broker_name} returned 0 bars for "
+                                      f"{self._symbol}/{self._timeframe}")
             else:
-                logger.warning("[Agent %d] Direct MT5 copy_rates returned empty", self.agent_id)
-        except ImportError:
-            logger.warning("[Agent %d] MetaTrader5 package not available for fallback", self.agent_id)
+                self._log("warn", f"Broker {self._broker_name} not connected for initial bar load")
         except Exception as e:
-            logger.warning("[Agent %d] Direct MT5 fallback failed: %s", self.agent_id, e)
+            logger.warning("[Agent %d] Initial bar load from %s failed: %s",
+                           self.agent_id, self._broker_name, e)
+            self._log("warn", f"Bar load from {self._broker_name} failed: {e}")
+
+        # For MT5 agents only: fall back to direct MT5 API if adapter isn't ready yet
+        # (e.g., the MQL5 bridge isn't fully connected but MT5 is available locally)
+        if self._broker_name == "mt5":
+            try:
+                import MetaTrader5 as mt5
+                from app.services.broker.mt5_bridge import _TF_MAP
+                from concurrent.futures import ThreadPoolExecutor
+
+                tf = _TF_MAP.get(self._timeframe, mt5.TIMEFRAME_H1)
+                loop = asyncio.get_event_loop()
+                _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-mt5")
+
+                def _fetch():
+                    mt5.symbol_select(self._symbol, True)
+                    return mt5.copy_rates_from_pos(self._symbol, tf, 0, 500)
+
+                raw = await loop.run_in_executor(_pool, _fetch)
+                if raw is not None and len(raw) > 0:
+                    bars = [
+                        {
+                            "time": int(r["time"]),
+                            "open": float(r["open"]),
+                            "high": float(r["high"]),
+                            "low": float(r["low"]),
+                            "close": float(r["close"]),
+                            "volume": float(r["tick_volume"]),
+                        }
+                        for r in raw
+                    ]
+                    self._bar_buffer = bars
+                    self._log("info", f"Loaded {len(bars)} initial bars via direct MT5")
+                    return
+            except ImportError:
+                logger.warning("[Agent %d] MetaTrader5 package not available", self.agent_id)
+            except Exception as e:
+                logger.warning("[Agent %d] Direct MT5 fallback failed: %s", self.agent_id, e)
 
         self._log("warn", "No initial bars loaded — evaluator will warm up as bars arrive")
 
@@ -486,29 +609,49 @@ class AgentRunner:
     async def _execute_on_broker(self, direction: str, lot_size: float,
                                     entry_price: float, stop_loss: float,
                                     take_profit: float) -> Optional[str]:
-        """Send a market order to the broker with SL/TP. Returns broker ticket or None."""
-        # Try via broker_manager first
+        """Send a market order to the configured broker with SL/TP.
+
+        Returns broker ticket string on success, or None on failure.
+        NEVER silently routes a non-MT5 agent's order to MT5.
+        """
+        from app.services.broker.manager import broker_manager
+        from app.services.broker.base import OrderRequest, OrderSide, OrderType
+
+        # Always use the agent's configured broker
         try:
-            from app.services.broker.manager import broker_manager
             adapter = broker_manager.get_adapter(self._broker_name)
             if adapter and await adapter.is_connected():
-                from app.schemas.broker import OrderRequest
                 request = OrderRequest(
                     symbol=self._symbol,
-                    side=direction,
+                    side=OrderSide(direction),
                     size=lot_size,
-                    order_type="MARKET",
+                    order_type=OrderType.MARKET,
                     stop_loss=stop_loss,
                     take_profit=take_profit,
+                    comment=f"TradeForge Agent#{self.agent_id}",
                 )
+                # place_order returns an Order dataclass (not a dict)
                 result = await adapter.place_order(request)
-                if result and result.get("ticket"):
-                    return str(result["ticket"])
+                if result and result.order_id:
+                    return str(result.order_id)
+                logger.warning("[Agent %d] %s order returned no order_id: %s",
+                               self.agent_id, self._broker_name, result)
+                return None
+            else:
+                self._log("error",
+                    f"Broker {self._broker_name} not connected — cannot execute order")
                 return None
         except Exception as e:
-            logger.warning("[Agent %d] Broker manager execution failed: %s", self.agent_id, e)
+            logger.warning("[Agent %d] %s order execution error: %s",
+                           self.agent_id, self._broker_name, e)
+            self._log("error", f"Order execution failed on {self._broker_name}: {e}")
 
-        # Fallback: use MT5 directly (tick streamer already initialized MT5)
+        # MT5-only direct fallback (only when broker_name == "mt5")
+        if self._broker_name != "mt5":
+            self._log("error",
+                f"Will not reroute {self._broker_name} order to MT5 — broker mismatch prevented")
+            return None
+
         try:
             import MetaTrader5 as mt5
             from concurrent.futures import ThreadPoolExecutor
@@ -522,9 +665,8 @@ class AgentRunner:
                 symbol_info = mt5.symbol_info(self._symbol)
                 if symbol_info is None:
                     return None
-
                 price = symbol_info.ask if direction == "BUY" else symbol_info.bid
-                request = {
+                req = {
                     "action": mt5.TRADE_ACTION_DEAL,
                     "symbol": self._symbol,
                     "volume": lot_size,
@@ -538,8 +680,7 @@ class AgentRunner:
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,
                 }
-                result = mt5.order_send(request)
-                return result
+                return mt5.order_send(req)
 
             result = await loop.run_in_executor(_pool, _place_order)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
@@ -558,75 +699,98 @@ class AgentRunner:
             return None
 
     async def _get_daily_bars(self) -> list[dict]:
-        """Fetch daily bars for ADR10 computation."""
-        # Try broker_manager first
+        """Fetch daily bars for ADR10 computation.
+
+        Uses the agent's configured broker so data matches the chart.
+        MT5 direct fallback only runs for MT5 agents.
+        """
+        # Try broker_manager first (works for Oanda, Coinbase, MT5 adapter, etc.)
         try:
             from app.services.broker.manager import broker_manager
             adapter = broker_manager.get_adapter(self._broker_name)
             if adapter and await adapter.is_connected():
-                bars = await adapter.get_initial_bars(self._symbol, "D1", 15)
-                if bars:
-                    return bars
-        except Exception:
-            pass
+                candles = await adapter.get_candles(self._symbol, "D1", 15)
+                if candles:
+                    return [
+                        {
+                            "time": int(c.timestamp.timestamp()),
+                            "open": c.open,
+                            "high": c.high,
+                            "low": c.low,
+                            "close": c.close,
+                            "volume": c.volume,
+                        }
+                        for c in candles
+                    ]
+        except Exception as e:
+            logger.debug("[Agent %d] Daily bars from %s failed: %s",
+                         self.agent_id, self._broker_name, e)
 
-        # Fallback: direct MT5
-        try:
-            import MetaTrader5 as mt5
-            from concurrent.futures import ThreadPoolExecutor
-            loop = asyncio.get_event_loop()
-            _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-daily")
+        # MT5-only direct fallback
+        if self._broker_name == "mt5":
+            try:
+                import MetaTrader5 as mt5
+                from concurrent.futures import ThreadPoolExecutor
+                loop = asyncio.get_event_loop()
+                _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-daily")
 
-            def _fetch():
-                mt5.symbol_select(self._symbol, True)
-                return mt5.copy_rates_from_pos(self._symbol, mt5.TIMEFRAME_D1, 0, 15)
+                def _fetch():
+                    mt5.symbol_select(self._symbol, True)
+                    return mt5.copy_rates_from_pos(self._symbol, mt5.TIMEFRAME_D1, 0, 15)
 
-            raw = await loop.run_in_executor(_pool, _fetch)
-            if raw is not None and len(raw) > 0:
-                return [
-                    {
-                        "time": int(r['time']),
-                        "open": float(r['open']),
-                        "high": float(r['high']),
-                        "low": float(r['low']),
-                        "close": float(r['close']),
-                        "volume": float(r['tick_volume']),
-                    }
-                    for r in raw
-                ]
-        except Exception:
-            pass
+                raw = await loop.run_in_executor(_pool, _fetch)
+                if raw is not None and len(raw) > 0:
+                    return [
+                        {
+                            "time": int(r["time"]),
+                            "open": float(r["open"]),
+                            "high": float(r["high"]),
+                            "low": float(r["low"]),
+                            "close": float(r["close"]),
+                            "volume": float(r["tick_volume"]),
+                        }
+                        for r in raw
+                    ]
+            except Exception:
+                pass
         return []
 
     async def _get_balance(self) -> float:
-        """Get current account balance from broker."""
-        # Try broker_manager first
+        """Get current account balance from broker.
+
+        get_account_info() returns an AccountInfo dataclass — use .balance attribute.
+        MT5 direct fallback only runs for MT5 agents.
+        """
+        # Try broker_manager first (works for Oanda, Coinbase, MT5 adapter, etc.)
         try:
             from app.services.broker.manager import broker_manager
             adapter = broker_manager.get_adapter(self._broker_name)
             if adapter and await adapter.is_connected():
                 info = await adapter.get_account_info()
-                if info:
-                    return info.get("balance", 10000.0)
-        except Exception:
-            pass
+                # AccountInfo is a dataclass — access .balance attribute directly
+                if info and info.balance is not None:
+                    return float(info.balance)
+        except Exception as e:
+            logger.debug("[Agent %d] Balance from %s failed: %s",
+                         self.agent_id, self._broker_name, e)
 
-        # Fallback: direct MT5
-        try:
-            import MetaTrader5 as mt5
-            from concurrent.futures import ThreadPoolExecutor
-            loop = asyncio.get_event_loop()
-            _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-bal")
+        # MT5-only direct fallback
+        if self._broker_name == "mt5":
+            try:
+                import MetaTrader5 as mt5
+                from concurrent.futures import ThreadPoolExecutor
+                loop = asyncio.get_event_loop()
+                _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-bal")
 
-            def _fetch():
-                info = mt5.account_info()
-                return info.balance if info else None
+                def _fetch():
+                    acct = mt5.account_info()
+                    return acct.balance if acct else None
 
-            balance = await loop.run_in_executor(_pool, _fetch)
-            if balance is not None:
-                return balance
-        except Exception:
-            pass
+                balance = await loop.run_in_executor(_pool, _fetch)
+                if balance is not None:
+                    return float(balance)
+            except Exception:
+                pass
         return 10000.0  # Default for paper trading
 
     def _log(self, level: str, message: str, data: Optional[dict] = None):

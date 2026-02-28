@@ -533,6 +533,29 @@ class OandaAdapter(BrokerAdapter):
 
         return candles
 
+    async def get_initial_bars(self, symbol: str, timeframe: str, count: int = 500) -> list[dict]:
+        """Return the last `count` bars as plain dicts (for agent warmup).
+
+        Convenience wrapper around get_candles() so the agent engine
+        can call the same method name on all adapters.
+        """
+        try:
+            candles = await self.get_candles(symbol, timeframe, count)
+            return [
+                {
+                    "time": int(c.timestamp.timestamp()),
+                    "open": c.open,
+                    "high": c.high,
+                    "low": c.low,
+                    "close": c.close,
+                    "volume": c.volume,
+                }
+                for c in candles
+            ]
+        except Exception as e:
+            logger.warning("get_initial_bars(%s, %s, %d) failed: %s", symbol, timeframe, count, e)
+            return []
+
     async def get_price(self, symbol: str) -> PriceTick:
         instrument = _to_oanda_instrument(symbol)
         data = await self._get(

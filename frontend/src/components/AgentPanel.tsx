@@ -830,8 +830,8 @@ export default function AgentPanel() {
               <select value={editMode} onChange={e => setEditMode(e.target.value)}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
                 <option value="paper">Paper Trading (simulated)</option>
-                <option value="confirm">Confirm Each Trade</option>
-                <option value="autonomous">Fully Autonomous</option>
+                <option value="confirmation">Confirm Each Trade</option>
+                <option value="auto">Fully Autonomous</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
