@@ -49,6 +49,56 @@ Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
+
+def _run_schema_migrations():
+    """
+    Idempotent column migrations for tables that existed before new columns
+    were added to the SQLAlchemy models.  Safe for PostgreSQL and SQLite.
+    """
+    from sqlalchemy import text, inspect
+    _log = logging.getLogger(__name__)
+
+    migrations = [
+        # (table, column, column_definition)
+        ("strategies", "strategy_type",   "VARCHAR(20)  DEFAULT 'builder'"),
+        ("strategies", "file_path",       "VARCHAR(500)"),
+        ("strategies", "settings_schema", "TEXT         DEFAULT '[]'"),
+        ("strategies", "settings_values", "TEXT         DEFAULT '{}'"),
+    ]
+
+    insp = inspect(engine)
+    with engine.connect() as conn:
+        for table, column, coldef in migrations:
+            try:
+                existing = [c["name"] for c in insp.get_columns(table)]
+            except Exception:
+                existing = []
+
+            if column in existing:
+                continue
+
+            try:
+                # PostgreSQL supports IF NOT EXISTS; SQLite does not but we
+                # catch the duplicate-column error below.
+                is_pg = engine.dialect.name == "postgresql"
+                if is_pg:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {coldef}"
+                    ))
+                else:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN {column} {coldef}"
+                    ))
+                conn.commit()
+                _log.info("Migration: added column %s.%s", table, column)
+            except Exception as exc:
+                # Already exists (SQLite raises OperationalError for duplicates)
+                conn.rollback()
+                _log.debug("Migration skipped %s.%s: %s", table, column, exc)
+
+
+_run_schema_migrations()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
