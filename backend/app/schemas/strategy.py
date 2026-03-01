@@ -58,6 +58,9 @@ class StrategyCreate(BaseModel):
     exit_rules: list[dict] = []
     risk_params: dict = {}
     filters: dict = {}
+    strategy_type: str = "builder"
+    settings_schema: list[dict] = []
+    settings_values: dict = {}
 
 
 class StrategyUpdate(BaseModel):
@@ -68,6 +71,13 @@ class StrategyUpdate(BaseModel):
     exit_rules: Optional[list[dict]] = None
     risk_params: Optional[dict] = None
     filters: Optional[dict] = None
+    settings_schema: Optional[list[dict]] = None
+    settings_values: Optional[dict] = None
+
+
+class StrategySettingsUpdate(BaseModel):
+    """Update only the settings_values for a file-based strategy."""
+    settings_values: dict
 
 
 class StrategyResponse(BaseModel):
@@ -81,6 +91,10 @@ class StrategyResponse(BaseModel):
     filters: dict
     creator_id: int
     is_system: bool = False
+    strategy_type: str = "builder"
+    file_path: Optional[str] = None
+    settings_schema: list[dict] = []
+    settings_values: dict = {}
     created_at: str
     updated_at: str
 

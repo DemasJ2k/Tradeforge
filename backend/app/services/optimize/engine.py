@@ -379,6 +379,36 @@ class OptimizerEngine:
 
     def _run_backtest(self, config: dict, bars):
         """Route backtest to the correct strategy engine."""
+        # File-based strategies (Python / JSON)
+        file_info = config.get("_file_strategy")
+        if file_info:
+            from app.services.strategy.file_runner import run_file_strategy
+            # Merge overridden settings_values from config
+            settings_vals = dict(file_info.get("settings_values", {}))
+            # Params with paths like "settings_values.key" override specific settings
+            for path_key in list(config.keys()):
+                if path_key.startswith("settings_values."):
+                    actual_key = path_key.split(".", 1)[1]
+                    settings_vals[actual_key] = config[path_key]
+            # Convert bars to dict format if needed
+            bars_raw = bars
+            if bars and hasattr(bars[0], "open"):
+                bars_raw = [
+                    {"time": b.time, "open": b.open, "high": b.high,
+                     "low": b.low, "close": b.close, "volume": b.volume}
+                    for b in bars
+                ]
+            return run_file_strategy(
+                strategy_type=file_info["strategy_type"],
+                file_path=file_info["file_path"],
+                settings_values=settings_vals,
+                bars_raw=bars_raw,
+                initial_balance=self.initial_balance,
+                spread_points=self.spread,
+                commission_per_lot=self.commission,
+                point_value=self.point_value,
+            )
+
         gold_config = config.get("gold_bt_config")
         mss_config = config.get("mss_config")
 

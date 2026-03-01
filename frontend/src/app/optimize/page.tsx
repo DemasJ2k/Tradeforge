@@ -16,40 +16,113 @@ import type {
 
 function extractOptimizableParams(strategy: Strategy): ParamRange[] {
   const params: ParamRange[] = [];
-  (strategy.indicators || []).forEach((ind, idx) => {
-    const p = ind.params || {};
-    Object.entries(p).forEach(([key, val]) => {
-      if (typeof val === "number") {
-        const isInt = Number.isInteger(val);
+
+  // File-based strategies — extract from settings_schema
+  if (strategy.strategy_type && strategy.strategy_type !== "builder" && strategy.settings_schema?.length > 0) {
+    for (const entry of strategy.settings_schema) {
+      if (entry.type === "int" || entry.type === "float") {
+        const val = (strategy.settings_values?.[entry.key] ?? entry.default ?? 0) as number;
         params.push({
-          param_path: `indicators.${idx}.params.${key}`,
-          param_type: isInt ? "int" : "float",
-          min_val: Math.max(1, Math.round(val * 0.5)),
-          max_val: Math.round(val * 2),
-          step: isInt ? 1 : undefined,
-          label: `${ind.type} ${key}`,
+          param_path: `settings_values.${entry.key}`,
+          param_type: entry.type,
+          min_val: entry.min ?? Math.max(0, Math.round(val * 0.3)),
+          max_val: entry.max ?? Math.round(val * 3),
+          step: entry.step ?? (entry.type === "int" ? 1 : undefined),
+          label: entry.label || entry.key,
+        });
+      }
+    }
+    return params;
+  }
+
+  const filters = (strategy.filters || {}) as Record<string, unknown>;
+  const mssConfig = filters.mss_config as Record<string, unknown> | undefined;
+  const goldConfig = filters.gold_bt_config as Record<string, unknown> | undefined;
+
+  if (mssConfig) {
+    /* ── MSS strategy params ── */
+    const mssDefs: { key: string; label: string; type: "int" | "float"; min: number; max: number; step?: number }[] = [
+      { key: "swing_lb", label: "MSS Swing Lookback", type: "int", min: 10, max: 100, step: 5 },
+      { key: "sl_pct", label: "MSS SL % of ADR", type: "float", min: 5, max: 60 },
+      { key: "tp1_pct", label: "MSS TP1 % of ADR", type: "float", min: 5, max: 60 },
+      { key: "tp2_pct", label: "MSS TP2 % of ADR", type: "float", min: 5, max: 80 },
+      { key: "pb_pct", label: "MSS Pullback Ratio", type: "float", min: 0.1, max: 0.9 },
+    ];
+    mssDefs.forEach(({ key, label, type, min, max, step }) => {
+      const val = mssConfig[key];
+      if (typeof val === "number") {
+        params.push({
+          param_path: `filters.mss_config.${key}`,
+          param_type: type,
+          min_val: min,
+          max_val: max,
+          step,
+          label,
         });
       }
     });
-  });
-  const risk = strategy.risk_params || {};
-  if (risk.stop_loss_value) {
-    params.push({
-      param_path: "risk_params.stop_loss_value",
-      param_type: "float",
-      min_val: Math.max(1, Math.round((risk.stop_loss_value as number) * 0.3)),
-      max_val: Math.round((risk.stop_loss_value as number) * 3),
-      label: "Stop Loss",
+  } else if (goldConfig) {
+    /* ── Gold BT strategy params ── */
+    const goldDefs: { key: string; label: string; type: "int" | "float"; min: number; max: number; step?: number }[] = [
+      { key: "box_height", label: "Gold Box Height", type: "float", min: 2, max: 30 },
+      { key: "trigger_interval_hours", label: "Gold Trigger Interval (h)", type: "int", min: 1, max: 8, step: 1 },
+      { key: "stop_line_buffer", label: "Gold Stop Buffer", type: "float", min: 0.5, max: 10 },
+      { key: "stop_to_tp_gap", label: "Gold Stop-to-TP Gap", type: "float", min: 0.5, max: 10 },
+      { key: "tp_zone_gap", label: "Gold TP Zone Gap", type: "float", min: 0.5, max: 5 },
+      { key: "tp1_height", label: "Gold TP1 Height", type: "float", min: 1, max: 15 },
+      { key: "tp2_height", label: "Gold TP2 Height", type: "float", min: 1, max: 15 },
+      { key: "sl_fixed_usd", label: "Gold Fixed SL ($)", type: "float", min: 5, max: 50 },
+    ];
+    goldDefs.forEach(({ key, label, type, min, max, step }) => {
+      const val = goldConfig[key];
+      if (typeof val === "number") {
+        params.push({
+          param_path: `filters.gold_bt_config.${key}`,
+          param_type: type,
+          min_val: min,
+          max_val: max,
+          step,
+          label,
+        });
+      }
     });
-  }
-  if (risk.take_profit_value) {
-    params.push({
-      param_path: "risk_params.take_profit_value",
-      param_type: "float",
-      min_val: Math.max(1, Math.round((risk.take_profit_value as number) * 0.3)),
-      max_val: Math.round((risk.take_profit_value as number) * 3),
-      label: "Take Profit",
+  } else {
+    /* ── Generic strategy params ── */
+    (strategy.indicators || []).forEach((ind, idx) => {
+      const p = ind.params || {};
+      Object.entries(p).forEach(([key, val]) => {
+        if (typeof val === "number") {
+          const isInt = Number.isInteger(val);
+          params.push({
+            param_path: `indicators.${idx}.params.${key}`,
+            param_type: isInt ? "int" : "float",
+            min_val: Math.max(1, Math.round(val * 0.5)),
+            max_val: Math.round(val * 2),
+            step: isInt ? 1 : undefined,
+            label: `${ind.type} ${key}`,
+          });
+        }
+      });
     });
+    const risk = strategy.risk_params || {};
+    if (risk.stop_loss_value) {
+      params.push({
+        param_path: "risk_params.stop_loss_value",
+        param_type: "float",
+        min_val: Math.max(1, Math.round((risk.stop_loss_value as number) * 0.3)),
+        max_val: Math.round((risk.stop_loss_value as number) * 3),
+        label: "Stop Loss",
+      });
+    }
+    if (risk.take_profit_value) {
+      params.push({
+        param_path: "risk_params.take_profit_value",
+        param_type: "float",
+        min_val: Math.max(1, Math.round((risk.take_profit_value as number) * 0.3)),
+        max_val: Math.round((risk.take_profit_value as number) * 3),
+        label: "Take Profit",
+      });
+    }
   }
   return params;
 }

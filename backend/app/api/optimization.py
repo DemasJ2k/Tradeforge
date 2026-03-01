@@ -171,6 +171,7 @@ def start_optimization(
         raise HTTPException(status_code=400, detail=f"Not enough data: {len(bars)} bars (need 100+)")
 
     # Build strategy config
+    strategy_type = getattr(strategy, "strategy_type", "builder") or "builder"
     strategy_config = {
         "indicators": strategy.indicators or [],
         "entry_rules": strategy.entry_rules or [],
@@ -178,6 +179,13 @@ def start_optimization(
         "risk_params": strategy.risk_params or {},
         "filters": strategy.filters or {},
     }
+    # Add file strategy metadata for the optimizer engine
+    if strategy_type in ("python", "json") and getattr(strategy, "file_path", None):
+        strategy_config["_file_strategy"] = {
+            "strategy_type": strategy_type,
+            "file_path": strategy.file_path,
+            "settings_values": getattr(strategy, "settings_values", None) or {},
+        }
 
     # Convert param specs
     param_specs = [

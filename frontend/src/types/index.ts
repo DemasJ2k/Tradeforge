@@ -116,6 +116,17 @@ export interface FilterConfig {
   max_adx: number;
 }
 
+export interface SettingsSchemaEntry {
+  key: string;
+  label: string;
+  type: "int" | "float" | "bool" | "string" | "select";
+  default?: number | string | boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: string[];
+}
+
 export interface Strategy {
   id: number;
   name: string;
@@ -127,6 +138,10 @@ export interface Strategy {
   filters: Partial<FilterConfig>;
   creator_id: number;
   is_system: boolean;
+  strategy_type: "builder" | "python" | "json" | "pinescript";
+  file_path?: string | null;
+  settings_schema: SettingsSchemaEntry[];
+  settings_values: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

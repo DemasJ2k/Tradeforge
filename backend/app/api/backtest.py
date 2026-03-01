@@ -142,14 +142,28 @@ def run_backtest(
     if len(bars) < 50:
         raise HTTPException(status_code=400, detail=f"Not enough data: {len(bars)} bars (need 50+)")
 
-    # Check for dedicated strategy engines (MSS / Gold BT)
+    # Route to appropriate backtest engine based on strategy type
+    strategy_type = getattr(strategy, "strategy_type", "builder") or "builder"
     filters = strategy.filters or {}
     mss_config = filters.get("mss_config")
     gold_bt_config = filters.get("gold_bt_config")
 
     t0 = time.time()
 
-    if mss_config:
+    if strategy_type in ("python", "json") and getattr(strategy, "file_path", None):
+        # File-based strategy — run via file_runner
+        from app.services.strategy.file_runner import run_file_strategy
+        result = run_file_strategy(
+            strategy_type=strategy_type,
+            file_path=strategy.file_path,
+            settings_values=getattr(strategy, "settings_values", None) or {},
+            bars_raw=bars,
+            initial_balance=payload.initial_balance,
+            spread_points=payload.spread_points,
+            commission_per_lot=payload.commission_per_lot,
+            point_value=payload.point_value,
+        )
+    elif mss_config:
         # Use dedicated MSS backtester (exact same logic as optimization script)
         result = backtest_mss(
             bars_raw=bars,

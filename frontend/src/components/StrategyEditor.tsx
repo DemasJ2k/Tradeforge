@@ -120,6 +120,29 @@ export default function StrategyEditor({ strategy, onSave, onCancel }: Props) {
     max_adx: 0,
     ...strategy?.filters,
   });
+
+  /* ── Detect dedicated strategy type (MSS / Gold BT / generic) ── */
+  const strategyType: "mss" | "gold_bt" | "generic" =
+    (filters as Record<string, unknown>).mss_config ? "mss"
+    : (filters as Record<string, unknown>).gold_bt_config ? "gold_bt"
+    : "generic";
+
+  const mssConfig = (filters as Record<string, unknown>).mss_config as Record<string, unknown> | undefined;
+  const goldConfig = (filters as Record<string, unknown>).gold_bt_config as Record<string, unknown> | undefined;
+
+  const updateMssConfig = (key: string, val: unknown) => {
+    setFilters({
+      ...filters,
+      mss_config: { ...(mssConfig || {}), [key]: val },
+    } as typeof filters);
+  };
+
+  const updateGoldConfig = (key: string, val: unknown) => {
+    setFilters({
+      ...filters,
+      gold_bt_config: { ...(goldConfig || {}), [key]: val },
+    } as typeof filters);
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"indicators" | "entry" | "exit" | "risk" | "filters">("indicators");
@@ -499,211 +522,432 @@ export default function StrategyEditor({ strategy, onSave, onCancel }: Props) {
         {/* ═══ RISK MANAGEMENT TAB ═══ */}
         {activeTab === "risk" && (
           <div className="space-y-6">
-            {/* Position Sizing */}
-            <div>
-              <p className={sectionTitle}>Position Sizing</p>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div className="space-y-2">
-                  <label className={labelCls}>Size Type</label>
-                  <select
-                    value={riskParams.position_size_type}
-                    onChange={(e) => setRiskParams({ ...riskParams, position_size_type: e.target.value })}
-                    className={selectCls}
-                  >
-                    <option value="fixed_lot">Fixed Lot Size</option>
-                    <option value="percent_risk">% Risk per Trade</option>
-                    <option value="percent_equity">% of Equity</option>
-                  </select>
+            {/* ── MSS Strategy Params ── */}
+            {strategyType === "mss" && mssConfig && (
+              <>
+                <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-2.5">
+                  <p className="text-xs text-accent font-medium">MSS (Market Structure Shift) Strategy</p>
+                  <p className="text-xs text-muted mt-0.5">These parameters directly control backtest behavior. Values are percentages of ADR10.</p>
                 </div>
-                <div className="space-y-2">
-                  <label className={labelCls}>
-                    {riskParams.position_size_type === "fixed_lot" ? "Lot Size" : riskParams.position_size_type === "percent_risk" ? "Risk %" : "Equity %"}
-                  </label>
-                  <input
-                    type="number" step="0.01"
-                    value={riskParams.position_size_value}
-                    onChange={(e) => setRiskParams({ ...riskParams, position_size_value: Number(e.target.value) })}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            </div>
 
-            {/* Stop Loss */}
-            <div>
-              <p className={sectionTitle}>Stop Loss</p>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div className="space-y-2">
-                  <label className={labelCls}>SL Type</label>
-                  <select
-                    value={riskParams.stop_loss_type}
-                    onChange={(e) => setRiskParams({ ...riskParams, stop_loss_type: e.target.value })}
-                    className={selectCls}
-                  >
-                    {SL_TP_TYPES.filter((t) => t.value !== "rr_ratio").map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                    <option value="swing">Swing High/Low</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className={labelCls}>SL Value</label>
-                  <input
-                    type="number" step="0.1"
-                    value={riskParams.stop_loss_value}
-                    onChange={(e) => setRiskParams({ ...riskParams, stop_loss_value: Number(e.target.value) })}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Take Profit 1 */}
-            <div>
-              <p className={sectionTitle}>Take Profit 1</p>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div className="space-y-2">
-                  <label className={labelCls}>TP Type</label>
-                  <select
-                    value={riskParams.take_profit_type}
-                    onChange={(e) => setRiskParams({ ...riskParams, take_profit_type: e.target.value })}
-                    className={selectCls}
-                  >
-                    {SL_TP_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className={labelCls}>TP Value</label>
-                  <input
-                    type="number" step="0.1"
-                    value={riskParams.take_profit_value}
-                    onChange={(e) => setRiskParams({ ...riskParams, take_profit_value: Number(e.target.value) })}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Take Profit 2 + Lot Split */}
-            <div>
-              <p className={sectionTitle}>Take Profit 2 (Optional)</p>
-              <p className="text-xs text-muted mt-1 mb-3">Enable a second take-profit level with lot splitting.</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className={labelCls}>TP2 Type</label>
-                  <select
-                    value={riskParams.take_profit_2_type}
-                    onChange={(e) => {
-                      const tp2Type = e.target.value;
-                      const updates: Record<string, unknown> = { take_profit_2_type: tp2Type };
-                      if (tp2Type && (!riskParams.lot_split || riskParams.lot_split.length !== 2)) {
-                        updates.lot_split = [0.6, 0.4];
-                      }
-                      if (!tp2Type) {
-                        updates.lot_split = [];
-                        updates.take_profit_2_value = 0;
-                        updates.breakeven_on_tp1 = false;
-                      }
-                      setRiskParams({ ...riskParams, ...updates } as typeof riskParams);
-                    }}
-                    className={selectCls}
-                  >
-                    <option value="">Disabled</option>
-                    {SL_TP_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                {riskParams.take_profit_2_type && (
-                  <div className="space-y-2">
-                    <label className={labelCls}>TP2 Value</label>
-                    <input
-                      type="number" step="0.1"
-                      value={riskParams.take_profit_2_value}
-                      onChange={(e) => setRiskParams({ ...riskParams, take_profit_2_value: Number(e.target.value) })}
-                      className={inputCls}
-                    />
-                  </div>
-                )}
-              </div>
-              {riskParams.take_profit_2_type && (
-                <div className="mt-4 space-y-4">
-                  {/* Lot Split */}
-                  <div className="space-y-2">
-                    <label className={labelCls}>
-                      Lot Split (TP1: {Math.round((riskParams.lot_split?.[0] ?? 0.6) * 100)}% / TP2: {Math.round((riskParams.lot_split?.[1] ?? 0.4) * 100)}%)
-                    </label>
-                    <input
-                      type="range" min="10" max="90" step="5"
-                      value={Math.round((riskParams.lot_split?.[0] ?? 0.6) * 100)}
-                      onChange={(e) => {
-                        const pct = Number(e.target.value) / 100;
-                        setRiskParams({ ...riskParams, lot_split: [pct, Math.round((1 - pct) * 100) / 100] });
-                      }}
-                      className="w-full accent-accent"
-                    />
-                    <div className="flex justify-between text-xs text-muted">
-                      <span>10% TP1</span>
-                      <span>90% TP1</span>
-                    </div>
-                  </div>
-                  {/* Breakeven on TP1 */}
-                  <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={riskParams.breakeven_on_tp1}
-                      onChange={(e) => setRiskParams({ ...riskParams, breakeven_on_tp1: e.target.checked })}
-                      className="rounded accent-accent"
-                    />
-                    Move SL to breakeven when TP1 is hit
-                  </label>
-                </div>
-              )}
-            </div>
-
-            {/* Trailing Stop */}
-            <div>
-              <p className={sectionTitle}>Trailing Stop</p>
-              <div className="mt-3 space-y-3">
-                <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={riskParams.trailing_stop}
-                    onChange={(e) => setRiskParams({ ...riskParams, trailing_stop: e.target.checked })}
-                    className="rounded accent-accent"
-                  />
-                  Enable Trailing Stop
-                </label>
-                {riskParams.trailing_stop && (
-                  <div className="grid grid-cols-2 gap-4">
+                {/* MSS Core Params */}
+                <div>
+                  <p className={sectionTitle}>Structure Detection</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
                     <div className="space-y-2">
-                      <label className={labelCls}>Trail Type</label>
+                      <label className={labelCls}>Swing Lookback (bars)</label>
+                      <input
+                        type="number" min="5" max="200" step="1"
+                        value={Number(mssConfig.swing_lb ?? 42)}
+                        onChange={(e) => updateMssConfig("swing_lb", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                      <p className="text-xs text-muted">Bars to look back for swing high/low pivots</p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>Confirmation Mode</label>
                       <select
-                        value={riskParams.trailing_stop_type}
-                        onChange={(e) => setRiskParams({ ...riskParams, trailing_stop_type: e.target.value })}
+                        value={String(mssConfig.confirm ?? "close")}
+                        onChange={(e) => updateMssConfig("confirm", e.target.value)}
                         className={selectCls}
                       >
-                        <option value="fixed_pips">Fixed Pips</option>
-                        <option value="atr_multiple">ATR Multiple</option>
+                        <option value="close">Close-based (conservative)</option>
+                        <option value="wick">Wick-based (aggressive)</option>
                       </select>
                     </div>
+                  </div>
+                </div>
+
+                {/* MSS SL/TP */}
+                <div>
+                  <p className={sectionTitle}>Stop Loss & Take Profit (% of ADR10)</p>
+                  <div className="grid grid-cols-3 gap-4 mt-3">
                     <div className="space-y-2">
-                      <label className={labelCls}>Trail Distance</label>
+                      <label className={labelCls}>SL % of ADR</label>
                       <input
-                        type="number" step="0.1"
-                        value={riskParams.trailing_stop_value}
-                        onChange={(e) => setRiskParams({ ...riskParams, trailing_stop_value: Number(e.target.value) })}
+                        type="number" step="0.5" min="1" max="100"
+                        value={Number(mssConfig.sl_pct ?? 25)}
+                        onChange={(e) => updateMssConfig("sl_pct", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP1 % of ADR</label>
+                      <input
+                        type="number" step="0.5" min="1" max="100"
+                        value={Number(mssConfig.tp1_pct ?? 15)}
+                        onChange={(e) => updateMssConfig("tp1_pct", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP2 % of ADR</label>
+                      <input
+                        type="number" step="0.5" min="1" max="100"
+                        value={Number(mssConfig.tp2_pct ?? 25)}
+                        onChange={(e) => updateMssConfig("tp2_pct", Number(e.target.value))}
                         className={inputCls}
                       />
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            {/* Risk Limits */}
+                {/* MSS Pullback */}
+                <div>
+                  <p className={sectionTitle}>Pullback Entry</p>
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(mssConfig.use_pullback ?? true)}
+                        onChange={(e) => updateMssConfig("use_pullback", e.target.checked)}
+                        className="rounded accent-accent"
+                      />
+                      Wait for pullback before entry
+                    </label>
+                    {Boolean(mssConfig.use_pullback ?? true) && (
+                      <div className="w-1/2 space-y-2">
+                        <label className={labelCls}>Pullback Ratio (Fibonacci)</label>
+                        <input
+                          type="number" step="0.01" min="0.05" max="1.0"
+                          value={Number(mssConfig.pb_pct ?? 0.382)}
+                          onChange={(e) => updateMssConfig("pb_pct", Number(e.target.value))}
+                          className={inputCls}
+                        />
+                        <p className="text-xs text-muted">0.382 = 38.2% retracement, 0.5 = 50%, 0.618 = 61.8%</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Gold BT Strategy Params ── */}
+            {strategyType === "gold_bt" && goldConfig && (
+              <>
+                <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-2.5">
+                  <p className="text-xs text-yellow-400 font-medium">Gold Breakout Trader Strategy</p>
+                  <p className="text-xs text-muted mt-0.5">These parameters directly control backtest behavior.</p>
+                </div>
+
+                {/* Gold BT Box & Trigger */}
+                <div>
+                  <p className={sectionTitle}>Box Configuration</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>Box Height ($)</label>
+                      <input
+                        type="number" step="0.5" min="1"
+                        value={Number(goldConfig.box_height ?? 10)}
+                        onChange={(e) => updateGoldConfig("box_height", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>Trigger Interval (hours)</label>
+                      <input
+                        type="number" step="0.5" min="0.5"
+                        value={Number(goldConfig.trigger_interval_hours ?? 2)}
+                        onChange={(e) => updateGoldConfig("trigger_interval_hours", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gold BT Risk */}
+                <div>
+                  <p className={sectionTitle}>Stop Loss & Take Profit</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>SL Type</label>
+                      <select
+                        value={String(goldConfig.sl_type ?? "opposite_stop")}
+                        onChange={(e) => updateGoldConfig("sl_type", e.target.value)}
+                        className={selectCls}
+                      >
+                        <option value="opposite_stop">Opposite Stop Line</option>
+                        <option value="fixed_usd">Fixed USD Amount</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>SL Fixed USD (if fixed)</label>
+                      <input
+                        type="number" step="0.5" min="1"
+                        value={Number(goldConfig.sl_fixed_usd ?? 14)}
+                        onChange={(e) => updateGoldConfig("sl_fixed_usd", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-2">
+                      <label className={labelCls}>Stop Line Buffer ($)</label>
+                      <input
+                        type="number" step="0.5" min="0"
+                        value={Number(goldConfig.stop_line_buffer ?? 2)}
+                        onChange={(e) => updateGoldConfig("stop_line_buffer", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>Stop-to-TP Gap ($)</label>
+                      <input
+                        type="number" step="0.5" min="0"
+                        value={Number(goldConfig.stop_to_tp_gap ?? 2)}
+                        onChange={(e) => updateGoldConfig("stop_to_tp_gap", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gold BT TP Zones */}
+                <div>
+                  <p className={sectionTitle}>Take Profit Zones</p>
+                  <div className="grid grid-cols-3 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP Zone Gap ($)</label>
+                      <input
+                        type="number" step="0.5" min="0"
+                        value={Number(goldConfig.tp_zone_gap ?? 1)}
+                        onChange={(e) => updateGoldConfig("tp_zone_gap", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP1 Height ($)</label>
+                      <input
+                        type="number" step="0.5" min="0.5"
+                        value={Number(goldConfig.tp1_height ?? 4)}
+                        onChange={(e) => updateGoldConfig("tp1_height", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP2 Height ($)</label>
+                      <input
+                        type="number" step="0.5" min="0.5"
+                        value={Number(goldConfig.tp2_height ?? 4)}
+                        onChange={(e) => updateGoldConfig("tp2_height", Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Generic Strategy Risk Params ── */}
+            {strategyType === "generic" && (
+              <>
+                {/* Position Sizing */}
+                <div>
+                  <p className={sectionTitle}>Position Sizing</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>Size Type</label>
+                      <select
+                        value={riskParams.position_size_type}
+                        onChange={(e) => setRiskParams({ ...riskParams, position_size_type: e.target.value })}
+                        className={selectCls}
+                      >
+                        <option value="fixed_lot">Fixed Lot Size</option>
+                        <option value="percent_risk">% Risk per Trade</option>
+                        <option value="percent_equity">% of Equity</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>
+                        {riskParams.position_size_type === "fixed_lot" ? "Lot Size" : riskParams.position_size_type === "percent_risk" ? "Risk %" : "Equity %"}
+                      </label>
+                      <input
+                        type="number" step="0.01"
+                        value={riskParams.position_size_value}
+                        onChange={(e) => setRiskParams({ ...riskParams, position_size_value: Number(e.target.value) })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stop Loss */}
+                <div>
+                  <p className={sectionTitle}>Stop Loss</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>SL Type</label>
+                      <select
+                        value={riskParams.stop_loss_type}
+                        onChange={(e) => setRiskParams({ ...riskParams, stop_loss_type: e.target.value })}
+                        className={selectCls}
+                      >
+                        {SL_TP_TYPES.filter((t) => t.value !== "rr_ratio").map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                        <option value="swing">Swing High/Low</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>SL Value</label>
+                      <input
+                        type="number" step="0.1"
+                        value={riskParams.stop_loss_value}
+                        onChange={(e) => setRiskParams({ ...riskParams, stop_loss_value: Number(e.target.value) })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Take Profit 1 */}
+                <div>
+                  <p className={sectionTitle}>Take Profit 1</p>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP Type</label>
+                      <select
+                        value={riskParams.take_profit_type}
+                        onChange={(e) => setRiskParams({ ...riskParams, take_profit_type: e.target.value })}
+                        className={selectCls}
+                      >
+                        {SL_TP_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP Value</label>
+                      <input
+                        type="number" step="0.1"
+                        value={riskParams.take_profit_value}
+                        onChange={(e) => setRiskParams({ ...riskParams, take_profit_value: Number(e.target.value) })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Take Profit 2 + Lot Split */}
+                <div>
+                  <p className={sectionTitle}>Take Profit 2 (Optional)</p>
+                  <p className="text-xs text-muted mt-1 mb-3">Enable a second take-profit level with lot splitting.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className={labelCls}>TP2 Type</label>
+                      <select
+                        value={riskParams.take_profit_2_type}
+                        onChange={(e) => {
+                          const tp2Type = e.target.value;
+                          const updates: Record<string, unknown> = { take_profit_2_type: tp2Type };
+                          if (tp2Type && (!riskParams.lot_split || riskParams.lot_split.length !== 2)) {
+                            updates.lot_split = [0.6, 0.4];
+                          }
+                          if (!tp2Type) {
+                            updates.lot_split = [];
+                            updates.take_profit_2_value = 0;
+                            updates.breakeven_on_tp1 = false;
+                          }
+                          setRiskParams({ ...riskParams, ...updates } as typeof riskParams);
+                        }}
+                        className={selectCls}
+                      >
+                        <option value="">Disabled</option>
+                        {SL_TP_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {riskParams.take_profit_2_type && (
+                      <div className="space-y-2">
+                        <label className={labelCls}>TP2 Value</label>
+                        <input
+                          type="number" step="0.1"
+                          value={riskParams.take_profit_2_value}
+                          onChange={(e) => setRiskParams({ ...riskParams, take_profit_2_value: Number(e.target.value) })}
+                          className={inputCls}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {riskParams.take_profit_2_type && (
+                    <div className="mt-4 space-y-4">
+                      {/* Lot Split */}
+                      <div className="space-y-2">
+                        <label className={labelCls}>
+                          Lot Split (TP1: {Math.round((riskParams.lot_split?.[0] ?? 0.6) * 100)}% / TP2: {Math.round((riskParams.lot_split?.[1] ?? 0.4) * 100)}%)
+                        </label>
+                        <input
+                          type="range" min="10" max="90" step="5"
+                          value={Math.round((riskParams.lot_split?.[0] ?? 0.6) * 100)}
+                          onChange={(e) => {
+                            const pct = Number(e.target.value) / 100;
+                            setRiskParams({ ...riskParams, lot_split: [pct, Math.round((1 - pct) * 100) / 100] });
+                          }}
+                          className="w-full accent-accent"
+                        />
+                        <div className="flex justify-between text-xs text-muted">
+                          <span>10% TP1</span>
+                          <span>90% TP1</span>
+                        </div>
+                      </div>
+                      {/* Breakeven on TP1 */}
+                      <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={riskParams.breakeven_on_tp1}
+                          onChange={(e) => setRiskParams({ ...riskParams, breakeven_on_tp1: e.target.checked })}
+                          className="rounded accent-accent"
+                        />
+                        Move SL to breakeven when TP1 is hit
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Trailing Stop */}
+                <div>
+                  <p className={sectionTitle}>Trailing Stop</p>
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={riskParams.trailing_stop}
+                        onChange={(e) => setRiskParams({ ...riskParams, trailing_stop: e.target.checked })}
+                        className="rounded accent-accent"
+                      />
+                      Enable Trailing Stop
+                    </label>
+                    {riskParams.trailing_stop && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className={labelCls}>Trail Type</label>
+                          <select
+                            value={riskParams.trailing_stop_type}
+                            onChange={(e) => setRiskParams({ ...riskParams, trailing_stop_type: e.target.value })}
+                            className={selectCls}
+                          >
+                            <option value="fixed_pips">Fixed Pips</option>
+                            <option value="atr_multiple">ATR Multiple</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className={labelCls}>Trail Distance</label>
+                          <input
+                            type="number" step="0.1"
+                            value={riskParams.trailing_stop_value}
+                            onChange={(e) => setRiskParams({ ...riskParams, trailing_stop_value: Number(e.target.value) })}
+                            className={inputCls}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Risk Limits (shared across all strategy types) */}
             <div>
               <p className={sectionTitle}>Risk Limits</p>
               <div className="grid grid-cols-2 gap-4 mt-3">
