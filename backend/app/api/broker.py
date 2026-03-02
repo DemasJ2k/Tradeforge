@@ -78,12 +78,23 @@ async def connect_broker(
             api_secret=payload.extra.get("api_secret", payload.account_id),
         )
     elif payload.broker == "mt5":
-        from app.services.broker.mt5_bridge import MT5Adapter
-        adapter = MT5Adapter(
-            server=payload.extra.get("server", ""),
-            login=int(payload.extra.get("login", payload.account_id or "0")),
-            password=payload.api_key,
-        )
+        # Use remote bridge adapter when MT5_BRIDGE_URL is configured (Linux/Render),
+        # otherwise fall back to local MT5 terminal adapter (Windows dev).
+        import os
+        if os.getenv("MT5_BRIDGE_URL"):
+            from app.services.broker.mt5_remote import MT5RemoteAdapter
+            adapter = MT5RemoteAdapter(
+                server=payload.extra.get("server", ""),
+                login=int(payload.extra.get("login", payload.account_id or "0")),
+                password=payload.api_key,
+            )
+        else:
+            from app.services.broker.mt5_bridge import MT5Adapter
+            adapter = MT5Adapter(
+                server=payload.extra.get("server", ""),
+                login=int(payload.extra.get("login", payload.account_id or "0")),
+                password=payload.api_key,
+            )
     elif payload.broker == "tradovate":
         from app.services.broker.tradovate import TradovateAdapter
         adapter = TradovateAdapter(

@@ -78,6 +78,14 @@ def _run_schema_migrations():
         # DataSource ownership columns
         ("datasources", "creator_id",  "INTEGER DEFAULT 1"),
         ("datasources", "is_public",   "INTEGER DEFAULT 1"),
+        # DataSource instrument profile columns
+        ("datasources", "pip_value",          "REAL DEFAULT 10.0"),
+        ("datasources", "is_jpy_pair",        "INTEGER DEFAULT 0"),
+        ("datasources", "point_value",        "REAL DEFAULT 1.0"),
+        ("datasources", "lot_size",           "REAL DEFAULT 100000.0"),
+        ("datasources", "default_spread",     "REAL DEFAULT 0.3"),
+        ("datasources", "commission_model",   "VARCHAR(20) DEFAULT 'per_lot'"),
+        ("datasources", "default_commission", "REAL DEFAULT 7.0"),
         # Optimization datasource tracking
         ("optimizations", "datasource_id", "INTEGER"),
         # ML model ownership
