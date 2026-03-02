@@ -38,11 +38,11 @@ export default function BacktestPage() {
   // Load initial data
   useEffect(() => {
     Promise.all([
-      api.get<Strategy[]>('/api/strategy').catch(() => []),
-      api.get<{ items: DataSource[] }>('/api/datasource').catch(() => ({ items: [] })),
+      api.get<{ items: Strategy[] }>('/api/strategies').catch(() => ({ items: [] })),
+      api.get<{ items: DataSource[] }>('/api/data/sources').catch(() => ({ items: [] })),
       api.get<BacktestListItem[]>('/api/backtest').catch(() => []),
     ]).then(([strats, ds, hist]) => {
-      setStrategies(Array.isArray(strats) ? strats : []);
+      setStrategies(Array.isArray(strats) ? strats : (strats as { items: Strategy[] }).items || []);
       setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
       setHistory(Array.isArray(hist) ? hist : []);
     });

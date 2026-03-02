@@ -541,6 +541,8 @@ async def fetch_from_broker(
             filepath = upload_dir / safe_name
             filepath.write_text(csv_content, encoding="utf-8")
 
+            profile = _build_instrument_profile(req.symbol)
+
             ds = DataSource(
                 filename=filename,
                 filepath=str(filepath),
@@ -554,6 +556,14 @@ async def fetch_from_broker(
                 file_size_mb=len(csv_content) // (1024 * 1024),
                 source_type="broker",
                 broker_name=req.broker,
+                pip_value=profile.get("pip_value", 10.0),
+                is_jpy_pair=profile.get("is_jpy_pair", False),
+                point_value=profile.get("point_value", 1.0),
+                lot_size=profile.get("lot_size", 100000.0),
+                default_spread=profile.get("default_spread", 0.3),
+                commission_model="per_lot",
+                default_commission=profile.get("default_commission", 7.0),
+                creator_id=user.id,
             )
             db.add(ds)
             db.commit()

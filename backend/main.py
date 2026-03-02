@@ -77,10 +77,10 @@ def _run_schema_migrations():
         ("user_settings", "notification_telegram_chat_id",        "VARCHAR(100)"),
         # DataSource ownership columns
         ("datasources", "creator_id",  "INTEGER DEFAULT 1"),
-        ("datasources", "is_public",   "INTEGER DEFAULT 1"),
+        ("datasources", "is_public",   "BOOLEAN DEFAULT TRUE"),
         # DataSource instrument profile columns
         ("datasources", "pip_value",          "REAL DEFAULT 10.0"),
-        ("datasources", "is_jpy_pair",        "INTEGER DEFAULT 0"),
+        ("datasources", "is_jpy_pair",        "BOOLEAN DEFAULT FALSE"),
         ("datasources", "point_value",        "REAL DEFAULT 1.0"),
         ("datasources", "lot_size",           "REAL DEFAULT 100000.0"),
         ("datasources", "default_spread",     "REAL DEFAULT 0.3"),
@@ -128,6 +128,33 @@ def _run_schema_migrations():
 
 
 _run_schema_migrations()
+
+
+def _fix_boolean_columns():
+    """Fix INTEGER columns that should be BOOLEAN (PostgreSQL strict typing)."""
+    from sqlalchemy import text
+    _log = logging.getLogger(__name__)
+    with engine.connect() as conn:
+        if engine.dialect.name != "postgresql":
+            return
+        # List of (table, column) that were incorrectly created as INTEGER
+        fixes = [
+            ("datasources", "is_jpy_pair"),
+            ("datasources", "is_public"),
+        ]
+        for table, column in fixes:
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} "
+                    f"TYPE BOOLEAN USING {column}::int::boolean"
+                ))
+                conn.commit()
+                _log.info("Fixed %s.%s: INTEGER -> BOOLEAN", table, column)
+            except Exception:
+                conn.rollback()
+
+
+_fix_boolean_columns()
 
 app = FastAPI(
     title=settings.APP_NAME,
