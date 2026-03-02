@@ -409,6 +409,289 @@ def run_backtest(
     raise HTTPException(status_code=500, detail="Unexpected routing error")
 
 
+@router.post("/run-v3", response_model=BacktestResponse)
+def run_backtest_v3(
+    payload: BacktestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run a backtest using the V3 engine (hybrid architecture)."""
+    from app.services.backtest_engine.v3_adapter import (
+        run_v3_backtest, v3_result_to_api_response,
+    )
+
+    # Load strategy (user-owned OR system)
+    strategy = (
+        db.query(Strategy)
+        .filter(
+            Strategy.id == payload.strategy_id,
+            or_(Strategy.creator_id == current_user.id, Strategy.is_system == True),
+        )
+        .first()
+    )
+    if not strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    # Load datasource
+    datasource = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Data source not found")
+
+    file_path = Path(datasource.filepath)
+    if not file_path.exists():
+        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="CSV file not found on disk")
+
+    bars = _load_bars_from_csv(str(file_path))
+    if len(bars) < 50:
+        raise HTTPException(status_code=400, detail=f"Not enough data: {len(bars)} bars (need 50+)")
+
+    # Build strategy config
+    filters = strategy.filters or {}
+    strategy_config = {
+        "indicators": strategy.indicators or [],
+        "entry_rules": strategy.entry_rules or [],
+        "exit_rules": strategy.exit_rules or [],
+        "risk_params": strategy.risk_params or {},
+        "filters": filters,
+    }
+
+    symbol = datasource.symbol or "ASSET"
+
+    try:
+        v3_result = run_v3_backtest(
+            bars=bars,
+            strategy_config=strategy_config,
+            symbol=symbol,
+            initial_balance=payload.initial_balance,
+            spread_points=payload.spread_points,
+            commission_per_lot=payload.commission_per_lot,
+            point_value=payload.point_value,
+            slippage_pct=payload.slippage_pct,
+            margin_rate=payload.margin_rate,
+            tick_mode=getattr(payload, "tick_mode", "ohlc_pessimistic"),
+        )
+    except Exception as e:
+        logger.exception("V3 backtest failed")
+        raise HTTPException(status_code=500, detail=f"V3 engine error: {str(e)}")
+
+    elapsed = v3_result.execution_time_ms / 1000
+    api_data = v3_result_to_api_response(v3_result, payload.initial_balance, len(bars))
+
+    # Save to DB
+    bt = Backtest(
+        strategy_id=strategy.id,
+        symbol=symbol,
+        timeframe=datasource.timeframe or "",
+        date_from=datasource.date_from or "",
+        date_to=datasource.date_to or "",
+        initial_balance=payload.initial_balance,
+        status="completed",
+        results={
+            "engine_version": "v3",
+            "stats": api_data["stats"],
+            "v2_stats": api_data["v2_stats"],
+            "trades": api_data["trades"],
+            "equity_curve": api_data["equity_curve"],
+            "elapsed_seconds": round(elapsed, 3),
+        },
+        creator_id=current_user.id,
+    )
+    db.add(bt)
+    db.commit()
+    db.refresh(bt)
+
+    stats = BacktestStats(**api_data["stats"])
+    trades_out = [TradeResult(**t) for t in api_data["trades"]]
+
+    _fire_notification(
+        current_user.id,
+        f"Backtest completed – {symbol}",
+        f"V3 backtest on {symbol} finished in {round(elapsed, 1)}s. "
+        f"Net P/L: {api_data['stats'].get('net_profit', 0):.2f}, "
+        f"Win rate: {api_data['stats'].get('win_rate', 0):.1f}%, "
+        f"Trades: {api_data['stats'].get('total_trades', 0)}",
+    )
+
+    return BacktestResponse(
+        id=bt.id,
+        strategy_id=bt.strategy_id,
+        datasource_id=payload.datasource_id,
+        status="completed",
+        stats=stats,
+        trades=trades_out,
+        equity_curve=api_data["equity_curve"],
+        engine_version="v3",
+        v2_stats=api_data["v2_stats"],
+        tearsheet=api_data["tearsheet"],
+        elapsed_seconds=api_data["elapsed_seconds"],
+    )
+
+
+@router.post("/walk-forward-v3", response_model=WalkForwardResponse)
+def run_walk_forward_v3(
+    payload: WalkForwardRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run walk-forward validation using V3 engine."""
+    from app.services.backtest_engine.v3_adapter import run_v3_walk_forward
+
+    strategy = (
+        db.query(Strategy)
+        .filter(
+            Strategy.id == payload.strategy_id,
+            or_(Strategy.creator_id == current_user.id, Strategy.is_system == True),
+        )
+        .first()
+    )
+    if not strategy:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    strategy_config = {
+        "indicators": strategy.indicators or [],
+        "entry_rules": strategy.entry_rules or [],
+        "exit_rules": strategy.exit_rules or [],
+        "risk_params": strategy.risk_params or {},
+        "filters": strategy.filters or {},
+    }
+
+    datasource = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail="Data source not found")
+
+    file_path = Path(datasource.filepath)
+    if not file_path.exists():
+        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="CSV file not found on disk")
+
+    bars = _load_bars_from_csv(str(file_path))
+    if len(bars) < 200:
+        raise HTTPException(status_code=400, detail=f"Need 200+ bars for walk-forward, got {len(bars)}")
+
+    symbol = getattr(datasource, "symbol", None) or "UNKNOWN"
+
+    wf_result = run_v3_walk_forward(
+        bars=bars,
+        strategy_config=strategy_config,
+        symbol=symbol,
+        n_folds=payload.n_folds,
+        train_pct=payload.train_pct,
+        mode=payload.mode,
+        initial_balance=payload.initial_balance,
+        spread_points=payload.spread_points,
+        commission_per_lot=payload.commission_per_lot,
+        point_value=payload.point_value,
+    )
+
+    window_stats = [
+        WFWindowStats(
+            fold=w.fold,
+            train_bars=w.train_end - w.train_start,
+            test_bars=w.test_end - w.test_start,
+            train_stats=w.train_stats or {},
+            test_stats=w.test_stats or {},
+        )
+        for w in wf_result.windows
+    ]
+
+    trades_out = [
+        TradeResult(**t) for t in wf_result.oos_trades
+    ]
+
+    eq = wf_result.oos_equity_curve
+    if len(eq) > 2000:
+        step = len(eq) // 2000
+        eq = eq[::step] + [eq[-1]]
+
+    return WalkForwardResponse(
+        strategy_id=payload.strategy_id,
+        datasource_id=payload.datasource_id,
+        n_folds=wf_result.n_folds,
+        mode=payload.mode,
+        oos_total_trades=wf_result.oos_total_trades,
+        oos_win_rate=wf_result.oos_win_rate,
+        oos_net_profit=wf_result.oos_net_profit,
+        oos_profit_factor=wf_result.oos_profit_factor,
+        oos_max_drawdown=wf_result.oos_max_drawdown,
+        oos_max_drawdown_pct=wf_result.oos_max_drawdown_pct,
+        oos_sharpe_ratio=wf_result.oos_sharpe_ratio,
+        oos_expectancy=wf_result.oos_expectancy,
+        oos_avg_win=wf_result.oos_avg_win,
+        oos_avg_loss=wf_result.oos_avg_loss,
+        windows=window_stats,
+        fold_win_rates=wf_result.fold_win_rates,
+        fold_profit_factors=wf_result.fold_profit_factors,
+        fold_net_profits=[round(p, 2) for p in wf_result.fold_net_profits],
+        consistency_score=wf_result.consistency_score,
+        oos_equity_curve=[round(v, 2) for v in eq],
+        trades=trades_out,
+    )
+
+
+@router.post("/monte-carlo")
+def run_monte_carlo(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run Monte Carlo simulation on a completed backtest."""
+    from app.services.backtest_engine.v3_adapter import run_v3_monte_carlo
+
+    backtest_id = payload.get("backtest_id")
+    n_simulations = payload.get("n_simulations", 1000)
+
+    if not backtest_id:
+        raise HTTPException(400, "backtest_id required")
+
+    bt = db.query(Backtest).filter(
+        Backtest.id == backtest_id,
+        Backtest.creator_id == current_user.id,
+    ).first()
+    if not bt:
+        raise HTTPException(404, "Backtest not found")
+
+    results = bt.results or {}
+    trades = results.get("trades", [])
+    if not trades:
+        raise HTTPException(400, "No trades in backtest to simulate")
+
+    mc_result = run_v3_monte_carlo(
+        trades=trades,
+        initial_balance=bt.initial_balance or 10000,
+        n_simulations=n_simulations,
+    )
+
+    return {
+        "n_simulations": mc_result.n_simulations,
+        "final_equity": {
+            "p5": mc_result.final_equity_p5,
+            "p25": mc_result.final_equity_p25,
+            "p50": mc_result.final_equity_p50,
+            "p75": mc_result.final_equity_p75,
+            "p95": mc_result.final_equity_p95,
+        },
+        "max_drawdown": {
+            "p5": mc_result.max_dd_p5,
+            "p25": mc_result.max_dd_p25,
+            "p50": mc_result.max_dd_p50,
+            "p75": mc_result.max_dd_p75,
+            "p95": mc_result.max_dd_p95,
+        },
+        "max_drawdown_pct": {
+            "p5": mc_result.max_dd_pct_p5,
+            "p25": mc_result.max_dd_pct_p25,
+            "p50": mc_result.max_dd_pct_p50,
+            "p75": mc_result.max_dd_pct_p75,
+            "p95": mc_result.max_dd_pct_p95,
+        },
+        "prob_ruin": mc_result.prob_ruin,
+        "equity_paths": mc_result.equity_paths[:20],  # Limit for API
+    }
+
+
 @router.post("/walk-forward", response_model=WalkForwardResponse)
 def run_walk_forward(
     payload: WalkForwardRequest,
