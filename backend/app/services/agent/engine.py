@@ -682,6 +682,9 @@ class AgentRunner:
             logger.warning("[Agent %d] %s order execution error: %s",
                            self.agent_id, self._broker_name, e)
             self._log("error", f"Order execution failed on {self._broker_name}: {e}")
+            # Non-MT5 brokers: stop here, do NOT fall through to MT5 fallback
+            if self._broker_name != "mt5":
+                return None
 
         # MT5-only direct fallback (only when broker_name == "mt5")
         if self._broker_name != "mt5":

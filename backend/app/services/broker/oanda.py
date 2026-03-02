@@ -50,6 +50,16 @@ _SYMBOL_ALIASES: dict[str, str] = {
     "USOIL": "WTICO_USD", "UKOIL": "BCO_USD",
 }
 
+# Default display precision by instrument type (Oanda rejects prices with too many decimals)
+# Forex pairs = 5, JPY pairs = 3, indices = 1, metals = 2/3, oil = 3
+_DEFAULT_PRECISION: dict[str, int] = {
+    "XAU_USD": 3, "XAG_USD": 5,
+    "US30_USD": 1, "NAS100_USD": 1, "SPX500_USD": 1, "UK100_GBP": 1,
+    "JP225_USD": 1, "DE30_EUR": 1, "US2000_USD": 1,
+    "WTICO_USD": 3, "BCO_USD": 3, "NATGAS_USD": 3,
+    "WHEAT_USD": 1, "CORN_USD": 1, "SUGAR_USD": 4, "SOYBN_USD": 1,
+}
+
 
 def _to_oanda_instrument(symbol: str) -> str:
     """Convert any common symbol format to Oanda instrument name."""
@@ -97,6 +107,8 @@ class OandaAdapter(BrokerAdapter):
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
         self._last_error: str = ""
+        # Cache: instrument → displayPrecision (fetched from Oanda on first use)
+        self._precision_cache: dict[str, int] = {}
 
     # ── helpers ────────────────────────────────────────
 
@@ -296,8 +308,47 @@ class OandaAdapter(BrokerAdapter):
 
     # ── Orders ─────────────────────────────────────────
 
+    async def _get_precision(self, instrument: str) -> int:
+        """Get displayPrecision for an Oanda instrument (cached).
+
+        Oanda rejects orders whose SL/TP prices have more decimal places
+        than the instrument's displayPrecision.  We first check our
+        hardcoded defaults, then query the Oanda API as a fallback.
+        """
+        if instrument in self._precision_cache:
+            return self._precision_cache[instrument]
+
+        # Check hardcoded defaults first
+        if instrument in _DEFAULT_PRECISION:
+            self._precision_cache[instrument] = _DEFAULT_PRECISION[instrument]
+            return _DEFAULT_PRECISION[instrument]
+
+        # Fallback: query Oanda API for the single instrument
+        try:
+            data = await self._get(
+                f"/accounts/{self._account_id}/instruments",
+                params={"instruments": instrument},
+            )
+            for inst in data.get("instruments", []):
+                if inst.get("name") == instrument:
+                    prec = int(inst.get("displayPrecision", 5))
+                    self._precision_cache[instrument] = prec
+                    return prec
+        except Exception as e:
+            logger.warning("Failed to fetch precision for %s: %s", instrument, e)
+
+        # Last resort: forex default
+        prec = 3 if instrument.endswith("_JPY") else 5
+        self._precision_cache[instrument] = prec
+        return prec
+
+    def _fmt_price(self, price: float, precision: int) -> str:
+        """Format a price to the correct decimal places for Oanda."""
+        return f"{price:.{precision}f}"
+
     async def place_order(self, request: OrderRequest) -> Order:
         oanda_instrument = _to_oanda_instrument(request.symbol)
+        precision = await self._get_precision(oanda_instrument)
 
         # Units: positive = buy, negative = sell
         units = request.size if request.side == OrderSide.BUY else -request.size
@@ -311,15 +362,20 @@ class OandaAdapter(BrokerAdapter):
 
         # Price for limit / stop
         if request.price and request.order_type != OrderType.MARKET:
-            order_body["price"] = str(request.price)
+            order_body["price"] = self._fmt_price(request.price, precision)
 
-        # SL / TP
+        # SL / TP — round to instrument precision (Oanda 400s on excess decimals)
         if request.stop_loss:
-            order_body["stopLossOnFill"] = {"price": str(request.stop_loss)}
+            order_body["stopLossOnFill"] = {"price": self._fmt_price(request.stop_loss, precision)}
         if request.take_profit:
-            order_body["takeProfitOnFill"] = {"price": str(request.take_profit)}
+            order_body["takeProfitOnFill"] = {"price": self._fmt_price(request.take_profit, precision)}
         if request.trailing_stop_distance:
-            order_body["trailingStopLossOnFill"] = {"distance": str(request.trailing_stop_distance)}
+            order_body["trailingStopLossOnFill"] = {"distance": self._fmt_price(request.trailing_stop_distance, precision)}
+
+        logger.info("Oanda order: %s %s %.0f units, SL=%s, TP=%s",
+                    request.side.value, oanda_instrument, abs(units),
+                    order_body.get('stopLossOnFill', {}).get('price', 'none'),
+                    order_body.get('takeProfitOnFill', {}).get('price', 'none'))
 
         data = await self._post(
             f"/accounts/{self._account_id}/orders",

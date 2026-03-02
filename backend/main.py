@@ -171,6 +171,94 @@ def _fix_boolean_columns():
 
 _fix_boolean_columns()
 
+
+def _remove_incompatible_strategies():
+    """Remove strategies that use unsupported indicator types or are python-file
+    strategies without V3 engine support.  Also cleans up orphaned agents,
+    agent logs, agent trades, and backtests that referenced them.
+
+    This runs once at startup and is idempotent (no-op if already cleaned).
+    """
+    import json
+    from sqlalchemy import text
+    _log = logging.getLogger(__name__)
+
+    SUPPORTED_INDICATORS = {
+        "sma", "ema", "wma", "rsi", "atr", "adx", "macd", "bollinger",
+        "bbands", "stochastic", "vwap", "supertrend", "pivot", "adr",
+        "volume_sma", "obv", "cci", "williams_r", "mfi", "ichimoku",
+    }
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT id, strategy_type, file_path, indicators, entry_rules FROM strategies"
+        )).fetchall()
+
+        ids_to_remove = []
+        for r in rows:
+            sid, stype, fpath, ind_json, rules_json = r
+            stype = stype or "builder"
+            fpath = fpath or ""
+
+            try:
+                indicators = json.loads(ind_json) if ind_json else []
+            except Exception:
+                indicators = []
+            try:
+                entry_rules = json.loads(rules_json) if rules_json else []
+            except Exception:
+                entry_rules = []
+
+            # Python-file strategies are not V3-engine compatible
+            if stype == "python" and fpath:
+                ids_to_remove.append(sid)
+                continue
+
+            # Builder strategies must have indicators and entry rules
+            if stype == "builder":
+                if not indicators or not entry_rules:
+                    ids_to_remove.append(sid)
+                    continue
+                # Check for unsupported indicator types
+                for ind in indicators:
+                    itype = (ind.get("type", "") or "").lower().strip()
+                    if itype and itype not in SUPPORTED_INDICATORS:
+                        ids_to_remove.append(sid)
+                        break
+
+        if not ids_to_remove:
+            _log.info("No incompatible strategies to remove")
+            return
+
+        id_list = ",".join(str(i) for i in ids_to_remove)
+        _log.info("Removing %d incompatible strategies: %s", len(ids_to_remove), id_list)
+
+        # Delete orphaned agents first (FK to strategies)
+        conn.execute(text(
+            f"DELETE FROM agent_logs WHERE agent_id IN "
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
+        ))
+        conn.execute(text(
+            f"DELETE FROM agent_trades WHERE agent_id IN "
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
+        ))
+        conn.execute(text(
+            f"DELETE FROM trading_agents WHERE strategy_id IN ({id_list})"
+        ))
+        # Delete orphaned backtests
+        conn.execute(text(
+            f"DELETE FROM backtests WHERE strategy_id IN ({id_list})"
+        ))
+        # Delete the strategies
+        result = conn.execute(text(
+            f"DELETE FROM strategies WHERE id IN ({id_list})"
+        ))
+        conn.commit()
+        _log.info("Removed %d incompatible strategies and orphaned records", result.rowcount)
+
+
+_remove_incompatible_strategies()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -617,6 +705,7 @@ def _seed_all_strategies():
 async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
+    _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     await ws_manager.start()
     await tick_aggregator.start()
     try:
