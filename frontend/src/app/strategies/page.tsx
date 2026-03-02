@@ -361,9 +361,9 @@ export default function StrategiesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Strategies</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h2 className="text-lg sm:text-xl font-semibold">Strategies</h2>
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => setShowNewFolder(true)} className="gap-1.5 text-xs">
             <FolderPlus className="h-3.5 w-3.5" />
             New Folder

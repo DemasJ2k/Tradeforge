@@ -658,9 +658,9 @@ export default function TradingPage() {
   return (
     <div className="space-y-4">
       {/* ── Header ─────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Live Trading</h2>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h2 className="text-lg sm:text-xl font-semibold">Live Trading</h2>
+        <div className="flex items-center gap-2 sm:gap-3">
           {connected && (
             <>
               <span className="flex items-center gap-1.5 text-sm text-green-400">
@@ -700,8 +700,8 @@ export default function TradingPage() {
       {/* ── Chart Panel ────────────────────────── */}
       <div className="rounded-xl border border-card-border bg-card-bg overflow-hidden">
         {/* Chart toolbar */}
-        <div className="flex items-center justify-between border-b border-card-border px-4 py-2">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-card-border px-2 sm:px-4 py-2 gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Symbol combobox — type any symbol or pick from list */}
             <div className="relative">
               <div className="flex items-center rounded-lg border border-card-border bg-background focus-within:border-accent">
@@ -794,7 +794,7 @@ export default function TradingPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Live tick display — smart decimal formatting based on spread */}
             {currentTick && chartMode === "live" && (
               <div className="flex items-center gap-2 text-xs font-mono">

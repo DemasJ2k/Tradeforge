@@ -458,7 +458,7 @@ export default function MLPage() {
       )}
 
       {/* Level Overview Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[1, 2, 3].map(level => {
           const levelModels = models.filter(m => m.level === level);
           const ready = levelModels.filter(m => m.status === "ready");
@@ -598,7 +598,7 @@ export default function MLPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label className="text-xs text-muted-foreground mb-1">Model Type</Label>
               <select value={tModelType} onChange={e => setTModelType(e.target.value)}
@@ -629,7 +629,7 @@ export default function MLPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <Label className="text-xs text-muted-foreground mb-1">Symbol</Label>
               <Input value={tSymbol} onChange={e => setTSymbol(e.target.value)} placeholder="Auto from dataset" />
@@ -694,7 +694,7 @@ export default function MLPage() {
           {features && (
             <div>
               <label className="block text-xs text-muted-foreground mb-2">Features (leave empty for all)</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {features.available_features.map(f => (
                   <label key={f} className="flex items-center gap-2 text-xs cursor-pointer">
                     <input type="checkbox" checked={tFeatures.includes(f)}
@@ -817,7 +817,7 @@ export default function MLPage() {
           )}
 
           {/* Config details */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="bg-card-bg border-card-border">
               <CardContent className="p-4">
               <h4 className="text-xs font-medium text-muted-foreground mb-2">Target</h4>
@@ -888,7 +888,7 @@ export default function MLPage() {
           {/* Prediction results */}
           {predictions && (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="bg-card-bg border-card-border">
                   <CardContent className="p-4">
                     <div className="text-xs text-muted-foreground mb-1">Total Predictions</div>

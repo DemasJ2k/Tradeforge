@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/resizable';
 import BacktestTradeChart from '@/components/BacktestTradeChart';
 import StrategySettingsModal from '@/components/StrategySettingsModal';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -338,6 +339,7 @@ export default function BacktestPage() {
   const [activeTab, setActiveTab] = useState<'equity' | 'trades' | 'monthly' | 'tearsheet' | 'portfolio' | 'chart'>('equity');
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const { accounts, activeBroker } = useBrokerAccounts();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const h = authHeaders();
@@ -549,17 +551,17 @@ export default function BacktestPage() {
   return (
     <div className="space-y-4 h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Backtesting</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Backtesting</h1>
           <p className="text-muted-foreground text-sm mt-1">Test strategies against historical data</p>
         </div>
       </div>
 
-      <ResizablePanelGroup orientation="horizontal" className="min-h-[calc(100vh-200px)] rounded-xl border border-card-border">
+      <ResizablePanelGroup orientation={isMobile ? "vertical" : "horizontal"} className={`${isMobile ? 'min-h-0' : 'min-h-[calc(100vh-200px)]'} rounded-xl border border-card-border`}>
         {/* ─── LEFT: Config Panel ─── */}
-        <ResizablePanel defaultSize={35} minSize={5}>
-          <div className="h-full overflow-y-auto p-5 bg-card-bg">
+        <ResizablePanel defaultSize={isMobile ? 50 : 35} minSize={5}>
+          <div className={`h-full overflow-y-auto ${isMobile ? 'p-3' : 'p-5'} bg-card-bg`}>
             <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">Configuration</h2>
             <div className="space-y-4">
               <div>
@@ -773,8 +775,8 @@ export default function BacktestPage() {
         <ResizableHandle withHandle />
 
         {/* ─── RIGHT: Results Panel ─── */}
-        <ResizablePanel defaultSize={65} minSize={5}>
-          <div className="h-full overflow-y-auto p-5 bg-background">
+        <ResizablePanel defaultSize={isMobile ? 50 : 65} minSize={5}>
+          <div className={`h-full overflow-y-auto ${isMobile ? 'p-3' : 'p-5'} bg-background`}>
       {/* Results */}
       {stats && result ? (
         <div className="space-y-5">
@@ -795,7 +797,7 @@ export default function BacktestPage() {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
             <StatCard label="Total Trades" value={String(stats.total_trades)} />
             <StatCard
               label="Win Rate"
@@ -852,7 +854,7 @@ export default function BacktestPage() {
 
           {/* Tabs */}
           <div className="bg-card-bg rounded-xl border border-card-border">
-            <div className="flex border-b border-card-border">
+            <div className="flex overflow-x-auto border-b border-card-border">
               {(['equity', 'chart', 'trades', 'monthly',
                 ...(result.engine_version === 'v2' ? ['tearsheet'] : []),
                 ...(result.portfolio_analytics ? ['portfolio'] : []),
@@ -860,7 +862,7 @@ export default function BacktestPage() {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab as typeof activeTab)}
-                  className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-fa-accent border-b-2 border-fa-accent' : 'text-muted-foreground hover:text-foreground/90'}`}
+                  className={`px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'text-fa-accent border-b-2 border-fa-accent' : 'text-muted-foreground hover:text-foreground/90'}`}
                 >
                   {tab === 'equity' ? 'Equity Curve' : tab === 'chart' ? 'Trade Chart' : tab === 'trades' ? 'Trade Log' : tab === 'monthly' ? 'Monthly Returns' : tab === 'tearsheet' ? 'Tearsheet' : 'Portfolio'}
                 </button>
@@ -894,7 +896,7 @@ export default function BacktestPage() {
               {activeTab === 'tearsheet' && result.v2_stats && (
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-foreground/80">Full V2 Metrics (55+)</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                     {Object.entries(result.v2_stats)
                       .filter(([, v]) => typeof v === 'number')
                       .map(([key, val]) => (
@@ -911,7 +913,7 @@ export default function BacktestPage() {
                   {!!result.tearsheet?.monte_carlo && (
                     <div>
                       <h3 className="text-sm font-semibold text-foreground/80 mt-4 mb-2">Monte Carlo Simulation</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                         {Object.entries(result.tearsheet.monte_carlo as Record<string, unknown>)
                           .filter(([, v]) => typeof v === 'number')
                           .slice(0, 8)
@@ -1057,7 +1059,7 @@ export default function BacktestPage() {
           </div>
 
           {/* OOS Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
             <StatCard label="OOS Trades" value={String(wfResult.oos_total_trades)} />
             <StatCard label="OOS Win Rate" value={`${wfResult.oos_win_rate}%`}
               color={wfResult.oos_win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'} />
@@ -1078,7 +1080,7 @@ export default function BacktestPage() {
           {/* Per-Fold Breakdown */}
           <div>
             <h3 className="text-sm font-semibold text-foreground/80 mb-2">Per-Fold OOS Performance</h3>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
               {wfResult.windows?.map((w: any) => (
                 <div key={w.fold} className={`rounded-lg p-3 border text-center ${w.test_stats.net_profit >= 0 ? 'border-green-800/50 bg-green-900/10' : 'border-red-800/50 bg-red-900/10'}`}>
                   <div className="text-xs text-muted-foreground">Fold {w.fold}</div>

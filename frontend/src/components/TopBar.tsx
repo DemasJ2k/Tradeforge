@@ -11,6 +11,7 @@ import {
   Search,
   LogOut,
   User,
+  Menu,
 } from "lucide-react";
 
 const fmtBalance = (n: number, currency: string) => {
@@ -37,7 +38,7 @@ const ROUTE_LABELS: Record<string, string> = {
 export default function TopBar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { toggle } = useSidebar();
+  const { toggle, toggleMobile } = useSidebar();
   const { accounts, activeBroker, setActiveBroker, refreshAccounts } = useBrokerAccounts();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -79,33 +80,41 @@ export default function TopBar() {
   const pageLabel = ROUTE_LABELS[pathname] || pathname.split("/").pop() || "Page";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-fa-card-border bg-fa-sidebar-bg px-4">
-      {/* Left: breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">FlowrexAlgo</span>
-        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
-        <span className="font-medium text-foreground">{pageLabel}</span>
+    <header className="flex h-14 items-center justify-between border-b border-fa-card-border bg-fa-sidebar-bg px-2 sm:px-4">
+      {/* Left: hamburger (mobile) + breadcrumb */}
+      <div className="flex items-center gap-1.5 text-sm min-w-0">
+        {/* Mobile hamburger */}
+        <button
+          onClick={toggleMobile}
+          className="flex md:hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-fa-sidebar-hover hover:text-foreground transition-colors"
+          title="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <span className="hidden sm:inline text-muted-foreground">FlowrexAlgo</span>
+        <ChevronRight className="hidden sm:inline h-3.5 w-3.5 text-muted-foreground/50" />
+        <span className="font-medium text-foreground truncate">{pageLabel}</span>
       </div>
 
       {/* Right: search + broker + user */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         {/* Ctrl+K search trigger */}
         <button
           onClick={() => {
             const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true });
             document.dispatchEvent(event);
           }}
-          className="flex items-center gap-2 rounded-lg border border-fa-card-border bg-fa-card-bg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-2 rounded-lg border border-fa-card-border bg-fa-card-bg px-2 sm:px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <Search className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Search...</span>
-          <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-fa-card-border bg-fa-sidebar-bg px-1.5 font-mono text-[10px] text-muted-foreground">
+          <kbd className="hidden md:inline-flex h-5 items-center gap-0.5 rounded border border-fa-card-border bg-fa-sidebar-bg px-1.5 font-mono text-[10px] text-muted-foreground">
             Ctrl K
           </kbd>
         </button>
 
         {/* Broker account switcher */}
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative hidden sm:block" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen((o) => !o)}
             className="flex items-center gap-2 rounded-lg bg-fa-card-bg px-3 py-1.5 text-xs hover:bg-fa-sidebar-hover transition-colors"
@@ -178,15 +187,15 @@ export default function TopBar() {
 
         {/* User menu */}
         {user && (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
               <User className="h-4 w-4" />
               <span>{user.username}</span>
             </div>
             <button
               onClick={logout}
               title="Logout"
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-fa-sidebar-hover hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 rounded-lg px-2 sm:px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-fa-sidebar-hover hover:text-foreground transition-colors"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Logout</span>

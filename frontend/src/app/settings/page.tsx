@@ -413,22 +413,37 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">Configure your FlowrexAlgo experience</p>
       </div>
 
-      <div className="flex gap-4">
-        {/* Collapseable Tab Sidebar */}
-        <div className={`shrink-0 transition-all duration-200 ${sidebarOpen ? 'w-48' : 'w-12'}`}>
-          {/* Toggle button */}
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Tab navigation — horizontal scroll on mobile, vertical sidebar on desktop */}
+        <div className={`shrink-0 transition-all duration-200 md:block ${sidebarOpen ? 'md:w-48' : 'md:w-12'}`}>
+          {/* Toggle button — desktop only */}
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="mb-2 flex h-9 w-full items-center justify-center rounded-lg border border-card-border text-muted-foreground hover:bg-card-bg hover:text-foreground transition-colors text-sm"
+            className="mb-2 hidden md:flex h-9 w-full items-center justify-center rounded-lg border border-card-border text-muted-foreground hover:bg-card-bg hover:text-foreground transition-colors text-sm"
             title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
           >
             {sidebarOpen ? '◀' : '▶'}
           </button>
-          <div className="space-y-1">
+          {/* Mobile: horizontal scroll tabs */}
+          <div className="flex md:hidden overflow-x-auto gap-1 pb-1 -mx-1 px-1">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap px-3 py-2
+                  ${tab === t.id ? 'bg-fa-accent/20 text-fa-accent' : 'text-muted-foreground hover:bg-card-bg hover:text-foreground'}`}
+              >
+                <t.icon className="w-3.5 h-3.5 shrink-0" />
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          {/* Desktop: vertical sidebar */}
+          <div className="hidden md:block space-y-1">
             {TABS.map(t => (
               <button
                 key={t.id}
@@ -446,7 +461,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 bg-card-bg rounded-xl border border-card-border p-6 min-h-[500px] max-h-[calc(100vh-180px)] overflow-y-auto">
+        <div className="flex-1 bg-card-bg rounded-xl border border-card-border p-4 sm:p-6 min-h-[400px] md:min-h-[500px] max-h-[calc(100vh-180px)] overflow-y-auto">
           {/* ─── Profile ─── */}
           {tab === 'profile' && (
             <div className="space-y-6 max-w-lg">
@@ -572,7 +587,7 @@ export default function SettingsPage() {
                 <>
                   <hr className="border-card-border" />
                   <h3 className="text-md font-semibold text-foreground">Invite Users (Admin)</h3>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     <Field label="Email">
                       <input type="email" value={invEmail} onChange={e => setInvEmail(e.target.value)} className={inputCls} placeholder="user@email.com" />
                     </Field>
@@ -932,7 +947,7 @@ export default function SettingsPage() {
 
               <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-foreground">Chart Colors</h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Bullish Candle">
                   <input type="color" value={s.chart_up_color} onChange={e => set('chart_up_color', e.target.value)} className="w-full h-9 rounded bg-transparent cursor-pointer" />
                 </Field>

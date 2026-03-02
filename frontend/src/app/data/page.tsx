@@ -109,8 +109,8 @@ export default function DataPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Data Sources</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h2 className="text-lg sm:text-xl font-semibold">Data Sources</h2>
         <Button onClick={() => setShowFetchModal(true)} className="gap-1.5">
           <Download className="h-4 w-4" /> Fetch from Broker
         </Button>

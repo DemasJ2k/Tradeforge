@@ -501,7 +501,7 @@ export default function OptimizePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Optimization Engine</h1>
           <p className="text-sm text-muted-foreground mt-1">Bayesian + Genetic hybrid parameter optimization</p>
@@ -513,7 +513,7 @@ export default function OptimizePage() {
         <CardContent className="p-5 space-y-5">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Configuration</h2>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label className="text-xs text-muted-foreground mb-1">Strategy</Label>
             <select
@@ -544,7 +544,7 @@ export default function OptimizePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <div>
             <Label className="text-xs text-muted-foreground mb-1">Objective</Label>
             <select value={objective} onChange={(e) => setObjective(e.target.value)}
@@ -604,7 +604,7 @@ export default function OptimizePage() {
             <span className="text-xs text-muted-foreground font-medium">Add secondary objective filter</span>
           </label>
           {useSecondary && (
-            <div className="grid grid-cols-3 gap-3 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
               <div>
                 <Label className="text-xs text-muted-foreground mb-1">Secondary Metric</Label>
                 <select
@@ -654,7 +654,7 @@ export default function OptimizePage() {
           )}
         </div>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <div>
             <Label className="text-xs text-muted-foreground mb-1">Balance ($)</Label>
             <input type="number" value={balance} onChange={(e) => setBalance(Number(e.target.value))}
@@ -691,12 +691,12 @@ export default function OptimizePage() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Parameter Space</h2>
           <div className="space-y-3">
             {paramSpace.map((p, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg border border-card-border bg-black/20 p-3">
+              <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-lg border border-card-border bg-black/20 p-3">
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-medium text-accent">{p.label}</span>
                   <span className="text-xs text-muted-foreground ml-2">({p.param_type})</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Label className="text-xs text-muted-foreground">Min</Label>
                   <input type="number" value={p.min_val ?? 0}
                     onChange={(e) => updateParam(i, "min_val", Number(e.target.value))}
@@ -927,7 +927,7 @@ export default function OptimizePage() {
             </div>
 
             {/* Config row */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <div>
                 <Label className="text-xs text-muted-foreground mb-1">Windows</Label>
                 <input type="number" value={robustWindows} min={3} max={30}

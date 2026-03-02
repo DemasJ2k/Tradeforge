@@ -312,7 +312,7 @@ export default function DocumentsPage() {
                   )}
 
                   {progress && progress.total_articles > 0 && (
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="rounded-xl border border-card-border bg-card-bg p-4">
                         <div className="text-xs text-muted-foreground mb-1">Articles</div>
                         <div className="text-lg font-semibold">{progress.total_articles}</div>

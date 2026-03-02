@@ -125,9 +125,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* ── Header Row ─────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">Dashboard</h2>
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-3 text-xs flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className={`inline-block h-2 w-2 rounded-full ${a.broker_connected ? "bg-success" : "bg-danger"}`} />
             {a.broker_connected ? `${a.broker_name} connected` : "No broker"}
@@ -201,7 +201,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Stats Cards ────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           icon={<Wallet className="h-4 w-4" />}
           label="Account Balance"
@@ -233,7 +233,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Middle Row: Positions + Quick Stats ─────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
 
         {/* Positions / Portfolio */}
         <Card className="lg:col-span-2 bg-card-bg border-card-border">
@@ -321,7 +321,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Bottom Row: Trades + Agents ────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
 
         {/* Recent Trades */}
         <Card className="bg-card-bg border-card-border">
@@ -462,7 +462,7 @@ function DashSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="h-7 w-32 rounded bg-card-border/30" />
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {[...Array(4)].map((_, i) => (
           <Card key={i} className="bg-card-bg border-card-border">
             <CardContent className="p-5 space-y-2">
@@ -473,8 +473,8 @@ function DashSkeleton() {
           </Card>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="col-span-2 bg-card-bg border-card-border">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="lg:col-span-2 bg-card-bg border-card-border">
           <CardContent className="p-5 h-48" />
         </Card>
         <Card className="bg-card-bg border-card-border">

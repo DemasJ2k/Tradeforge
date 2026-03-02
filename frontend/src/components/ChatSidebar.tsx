@@ -375,10 +375,9 @@ export default function ChatSidebar() {
 
       {/* Sidebar panel */}
       <div
-        className={`fixed right-0 top-0 z-40 h-screen flex flex-col bg-sidebar-bg border-l border-card-border shadow-xl transition-transform duration-200 ${
+        className={`fixed right-0 top-0 z-40 h-screen w-full sm:w-[380px] flex flex-col bg-sidebar-bg border-l border-card-border shadow-xl transition-transform duration-200 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
-        style={{ width: "380px" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
