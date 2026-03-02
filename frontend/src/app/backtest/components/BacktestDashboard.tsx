@@ -7,12 +7,12 @@
  *  1. Overview  — Stats cards + equity curve
  *  2. Trades    — Full trade log table
  *  3. Monthly   — Monthly/yearly returns heatmap
- *  4. Analysis  — Extended tearsheet metrics
+ *  4. Charts   — Equity + trade markers, P/L waterfall
+ *  5. Analysis  — Extended tearsheet metrics
  */
 
 import type { BacktestResponse } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, TrendingUp, TrendingDown, GitCompare } from 'lucide-react';
@@ -20,6 +20,8 @@ import StatsCards from './StatsCards';
 import EquityCurveChart from './EquityCurveChart';
 import TradeLogTable from './TradeLogTable';
 import MonthlyHeatmap from './MonthlyHeatmap';
+import TearsheetPanel from './TearsheetPanel';
+import TradeChartOverlay from './TradeChartOverlay';
 
 interface Props {
   result: BacktestResponse;
@@ -65,6 +67,7 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
         <TabsList className="bg-card-bg border border-card-border">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="trades">Trades</TabsTrigger>
+          <TabsTrigger value="charts">Charts</TabsTrigger>
           <TabsTrigger value="monthly">Monthly</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
@@ -83,6 +86,11 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
           <TradeLogTable trades={result.trades} />
         </TabsContent>
 
+        {/* Charts Tab */}
+        <TabsContent value="charts" className="mt-4">
+          <TradeChartOverlay trades={result.trades} equityCurve={result.equity_curve} />
+        </TabsContent>
+
         {/* Monthly Tab */}
         <TabsContent value="monthly" className="mt-4">
           <MonthlyHeatmap
@@ -92,33 +100,15 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
 
         {/* Analysis Tab */}
         <TabsContent value="analysis" className="mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <MetricCard label="Sharpe Ratio" value={stats.sharpe_ratio?.toFixed(4)} />
-            <MetricCard label="Sortino Ratio" value={(v2.sortino_ratio as number)?.toFixed(4) || '—'} />
-            <MetricCard label="Calmar Ratio" value={(v2.calmar_ratio as number)?.toFixed(4) || '—'} />
-            <MetricCard label="SQN" value={stats.sqn?.toFixed(2)} />
-            <MetricCard label="Recovery Factor" value={(v2.recovery_factor as number)?.toFixed(2) || '—'} />
-            <MetricCard label="Payoff Ratio" value={(v2.payoff_ratio as number)?.toFixed(2) || '—'} />
-            <MetricCard label="Max Consec Wins" value={String((v2.max_consecutive_wins as number) ?? '—')} />
-            <MetricCard label="Max Consec Losses" value={String((v2.max_consecutive_losses as number) ?? '—')} />
-            <MetricCard label="Avg Bars Held" value={(v2.avg_bars_held as number)?.toFixed(1) || '—'} />
-            <MetricCard label="Expectancy" value={`$${stats.expectancy?.toFixed(2)}`} />
-            <MetricCard label="Initial Balance" value={`$${(v2.initial_balance as number)?.toLocaleString() || '—'}`} />
-            <MetricCard label="Final Balance" value={`$${(v2.final_balance as number)?.toLocaleString() || '—'}`} />
-          </div>
+          <TearsheetPanel
+            stats={stats}
+            v2Stats={v2}
+            trades={result.trades}
+            equityCurve={result.equity_curve}
+          />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value?: string }) {
-  return (
-    <Card className="bg-card-bg border-card-border">
-      <CardContent className="p-3">
-        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
-        <div className="text-base font-bold font-mono">{value || '—'}</div>
-      </CardContent>
-    </Card>
-  );
-}

@@ -698,6 +698,12 @@ class AgentRunner:
             order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
 
             def _place_order():
+                # Ensure MT5 is initialized before sending orders
+                if not mt5.terminal_info():
+                    if not mt5.initialize():
+                        logger.warning("[Agent %d] MT5 not initialized for direct fallback", self.agent_id)
+                        return None
+
                 mt5.symbol_select(self._symbol, True)
                 symbol_info = mt5.symbol_info(self._symbol)
                 if symbol_info is None:
@@ -759,7 +765,16 @@ class AgentRunner:
                 }
                 logger.debug("[Agent %d] MT5 order req: filling=%s sl=%.5f tp=%.5f min_dist=%.5f",
                              self.agent_id, filling, sl, tp, min_dist)
-                return mt5.order_send(req)
+                # Try filling modes with fallback (retcode 10030 = wrong filling)
+                for fill_mode in [filling, mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]:
+                    req["type_filling"] = fill_mode
+                    res = mt5.order_send(req)
+                    if res is None:
+                        continue
+                    if res.retcode == 10030:  # unsupported filling
+                        continue
+                    return res
+                return None
 
             result = await loop.run_in_executor(_pool, _place_order)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:

@@ -27,7 +27,10 @@ export default function MonthlyHeatmap({ monthlyReturns, mode = 'pct' }: Props) 
 
     Object.entries(monthlyReturns).forEach(([key, val]) => {
       const [y] = key.split('-');
-      yearSet.add(Number(y));
+      const yearNum = Number(y);
+      if (isNaN(yearNum) || yearNum < 1900 || yearNum > 2100) return;
+      if (typeof val !== 'number' || isNaN(val)) return;
+      yearSet.add(yearNum);
       map.set(key, val);
     });
 
@@ -58,7 +61,7 @@ export default function MonthlyHeatmap({ monthlyReturns, mode = 'pct' }: Props) 
   }, [years, grid]);
 
   const fmt = (v: number | null) => {
-    if (v === null) return '';
+    if (v === null || v === undefined || isNaN(v)) return '';
     return mode === 'pct' ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : `${v >= 0 ? '+' : ''}$${v.toFixed(0)}`;
   };
 

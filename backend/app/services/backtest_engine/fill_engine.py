@@ -111,7 +111,7 @@ class FillEngine:
                 triggered = self._check_trigger(order, tick_price, bar)
                 if triggered:
                     fill_price = self._compute_fill_price(
-                        order, tick_price, instrument
+                        order, tick_price, instrument, tick_index=tick_idx
                     )
                     commission = instrument.compute_commission(
                         order.quantity, fill_price
@@ -221,9 +221,33 @@ class FillEngine:
 
     def _compute_fill_price(
         self, order: Order, trigger_price: float, instrument: Instrument,
+        tick_index: int = 0,
     ) -> float:
-        """Compute actual fill price with slippage."""
-        fill_price = trigger_price
+        """Compute actual fill price with slippage.
+
+        For stop/limit orders:
+        - If triggered on bar open (tick_index==0) and price gapped past the
+          order level, fill at the gap price (trigger_price).
+        - Otherwise, the price must have traversed through the order level
+          during the bar, so fill at the order price.
+        """
+        # Default: fill at the order's price level (price crossed through it)
+        fill_price = order.price
+
+        # Gap fill: only applies when triggered at bar OPEN (tick 0)
+        # If the open already gapped past the order price, fill at the open
+        if tick_index == 0:
+            if order.order_type == OrderType.STOP:
+                if order.is_buy and trigger_price > order.price:
+                    fill_price = trigger_price   # gapped up past buy stop
+                elif not order.is_buy and trigger_price < order.price:
+                    fill_price = trigger_price   # gapped down past sell stop
+            elif order.order_type == OrderType.LIMIT:
+                # For limits, gap past means better fill at trigger price
+                if order.is_buy and trigger_price < order.price:
+                    fill_price = trigger_price
+                elif not order.is_buy and trigger_price > order.price:
+                    fill_price = trigger_price
 
         # For stop orders, apply slippage in the adverse direction
         if order.order_type == OrderType.STOP and self.slippage_pct > 0:

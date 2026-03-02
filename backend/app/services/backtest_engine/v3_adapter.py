@@ -35,6 +35,40 @@ from app.services.backtest_engine.monte_carlo import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_indicator_configs(raw_configs: list[dict]) -> list[dict]:
+    """Translate frontend indicator configs into compute_indicators format.
+
+    Frontend format:
+        {"id": "sma_1", "type": "SMA", "params": {"period": 5, "source": "close"}}
+    Engine format (flat):
+        {"type": "sma", "name": "sma_1", "period": 5, "source": "close"}
+    """
+    out: list[dict] = []
+    for cfg in raw_configs:
+        flat: dict = {}
+        # "type" field exists in both formats — lowercase it
+        ind_type = (cfg.get("type") or cfg.get("name") or "").lower()
+        flat["type"] = ind_type
+
+        # Use "id" as the storage key ("name" in engine terms)
+        flat["name"] = cfg.get("id") or cfg.get("name", f"{ind_type}")
+
+        # Flatten "params" sub-dict if present
+        params = cfg.get("params", {})
+        for k, v in params.items():
+            flat[k] = v
+
+        # Also copy top-level keys that engine may use (period, source, etc.)
+        for k in ("period", "source", "fast_period", "slow_period",
+                   "signal_period", "std_dev", "k_period", "d_period",
+                   "multiplier", "adr_period"):
+            if k in cfg and k not in flat:
+                flat[k] = cfg[k]
+
+        out.append(flat)
+    return out
+
+
 def convert_bars_to_v3(bars: list) -> list[V3Bar]:
     """Convert V1/V2 Bar objects (with .time) to V3 Bar objects (with .timestamp)."""
     v3_bars: list[V3Bar] = []
@@ -153,7 +187,9 @@ def run_v3_backtest(
 
     # Build data feed with indicators
     feed = DataFeed()
-    indicator_configs = strategy_config.get("indicators", [])
+    indicator_configs = _normalize_indicator_configs(
+        strategy_config.get("indicators", [])
+    )
     feed.add_symbol(symbol, v3_bars, indicator_configs=indicator_configs)
 
     # Build strategy
@@ -257,7 +293,9 @@ def run_v3_walk_forward(
 ) -> WFResult:
     """Run walk-forward validation with V3 engine."""
     v3_bars = convert_bars_to_v3(bars)
-    indicator_configs = strategy_config.get("indicators", [])
+    indicator_configs = _normalize_indicator_configs(
+        strategy_config.get("indicators", [])
+    )
 
     risk_params = strategy_config.get("risk_params", {})
     config = EngineConfig(
