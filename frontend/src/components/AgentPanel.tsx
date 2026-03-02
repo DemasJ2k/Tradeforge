@@ -132,7 +132,8 @@ export default function AgentPanel() {
 
   // ── Load agents & strategies on mount ──
   const didLoad = useRef(false);
-  if (!didLoad.current) {
+  useEffect(() => {
+    if (didLoad.current) return;
     didLoad.current = true;
     loadAgents();
     api
@@ -143,7 +144,7 @@ export default function AgentPanel() {
       .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>("/api/ml/models?status=ready")
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
       .catch(() => {});
-  }
+  }, []);
 
   // ── Default cBroker to activeBroker when it first becomes available ──
   useEffect(() => {
