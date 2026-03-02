@@ -17,6 +17,7 @@ class MLModel(Base):
     level = Column(Integer, default=1)  # 1=adaptive params, 2=signal, 3=RL
     model_type = Column(String(50), default="random_forest")  # random_forest, xgboost, lstm, etc.
     strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     symbol = Column(String(50), default="")
     timeframe = Column(String(10), default="H1")
     # Training config

@@ -3,6 +3,12 @@ Dedicated backtester for MSS and Gold BT strategies.
 
 Uses the EXACT same logic as the optimization scripts and strategy engines,
 producing results in the standard BacktestResult format for the UI.
+
+.. deprecated:: Phase 1C
+    Superseded by V2-native ``MSSStrategy`` and ``GoldBreakoutStrategy``
+    in ``app.services.backtest.v2.engine.strategies``.  The API now routes
+    all strategy types via ``v2_adapter.run_unified_backtest()``.
+    Kept for walk-forward / optimiser scripts until they migrate to V2.
 """
 
 import math
@@ -578,5 +584,19 @@ def _build_result(
         variance = sum((p - mean_pnl) ** 2 for p in pnls) / (len(pnls) - 1)
         std = math.sqrt(variance) if variance > 0 else 1
         result.sharpe_ratio = (mean_pnl / std) * math.sqrt(252) if std > 0 else 0
+        # SQN = (mean / std) * sqrt(N) — Van Tharp formula
+        result.sqn = round((mean_pnl / std) * math.sqrt(len(trades)), 4) if std > 0 else 0.0
+
+    # Yearly PnL breakdown
+    yearly: dict[str, float] = {}
+    for t in trades:
+        if t.exit_time:
+            try:
+                year = str(datetime.fromtimestamp(t.exit_time, tz=timezone.utc).year)
+                yearly[year] = round(yearly.get(year, 0.0) + t.pnl, 2)
+            except Exception:
+                pass
+    result.yearly_pnl = yearly
+    result.negative_years = sum(1 for v in yearly.values() if v < 0)
 
     return result

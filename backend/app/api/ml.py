@@ -71,7 +71,10 @@ async def list_models(
     db: Session = Depends(get_db),
 ):
     """List all ML models."""
-    q = db.query(MLModel)
+    from sqlalchemy import or_
+    q = db.query(MLModel).filter(
+        or_(MLModel.creator_id == user.id, MLModel.creator_id == None)  # noqa: E711
+    )
     if level:
         q = q.filter(MLModel.level == level)
     if status:
@@ -138,6 +141,8 @@ async def delete_model(
     m = db.query(MLModel).filter(MLModel.id == model_id).first()
     if not m:
         raise HTTPException(404, "Model not found")
+    if m.creator_id and m.creator_id != user.id:
+        raise HTTPException(403, "Not your model")
 
     # Delete model file
     if m.model_path:
@@ -202,8 +207,7 @@ async def train_model(
         name=payload.name,
         level=payload.level,
         model_type=effective_model_type,
-        strategy_id=payload.strategy_id,
-        symbol=payload.symbol or ds.symbol or "",
+        strategy_id=payload.strategy_id,        creator_id=user.id,        symbol=payload.symbol or ds.symbol or "",
         timeframe=payload.timeframe or ds.timeframe or "H1",
         features_config=features_config,
         target_config=target_config,

@@ -24,6 +24,7 @@ class Strategy(Base):
     file_path = Column(String(500), nullable=True)          # path to uploaded strategy file
     settings_schema = Column(JSON, default=list)            # [{key, label, type, default, min, max, step, options}]
     settings_values = Column(JSON, default=dict)            # {key: current_value}
+    folder = Column(String(100), nullable=True)                # user folder grouping (None = root)
 
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

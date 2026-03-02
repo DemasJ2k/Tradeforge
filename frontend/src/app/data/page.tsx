@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
 import type { DataSource, DataSourceList } from "@/types";
 import ChatHelpers from "@/components/ChatHelpers";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Upload, Database, Download, Trash2, ChevronDown, ChevronUp, Info } from "lucide-react";
 
 const BROKERS = [
   { id: "mt5", label: "MetaTrader 5" },
@@ -14,13 +22,6 @@ const BROKERS = [
 ];
 
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
-
-const inputCls =
-  "w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none";
-const btnPrimary =
-  "px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-40";
-const btnSecondary =
-  "px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium transition-colors";
 
 export default function DataPage() {
   const [sources, setSources] = useState<DataSource[]>([]);
@@ -35,6 +36,7 @@ export default function DataPage() {
   const [fetchBars, setFetchBars] = useState("5000");
   const [fetching, setFetching] = useState(false);
   const [fetchMsg, setFetchMsg] = useState("");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const loadSources = useCallback(async () => {
     try {
@@ -109,25 +111,24 @@ export default function DataPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Data Sources</h2>
-        <button onClick={() => setShowFetchModal(true)} className={btnPrimary}>
-          Fetch from Broker
-        </button>
+        <Button onClick={() => setShowFetchModal(true)} className="gap-1.5">
+          <Download className="h-4 w-4" /> Fetch from Broker
+        </Button>
       </div>
 
       {/* Fetch from Broker modal */}
-      {showFetchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md bg-[#151923] rounded-xl border border-gray-800 p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Fetch from Broker</h3>
-              <button onClick={() => { setShowFetchModal(false); setFetchMsg(""); }}
-                className="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
-            </div>
-            <p className="text-sm text-gray-400">Download historical candle data from a broker. Save API credentials in <span className="text-blue-400">Settings → Brokers</span> first.</p>
+      <Dialog open={showFetchModal} onOpenChange={(open) => { if (!open) { setShowFetchModal(false); setFetchMsg(""); } }}>
+        <DialogContent className="bg-card-bg border-card-border">
+          <DialogHeader>
+            <DialogTitle>Fetch from Broker</DialogTitle>
+            <DialogDescription>Download historical candle data from a broker. Save API credentials in Settings → Brokers first.</DialogDescription>
+          </DialogHeader>
 
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Broker</label>
-              <select value={fetchBroker} onChange={e => setFetchBroker(e.target.value)} className={inputCls}>
+              <Label className="text-xs text-muted-foreground mb-1">Broker</Label>
+              <select value={fetchBroker} onChange={e => setFetchBroker(e.target.value)}
+                className="w-full bg-input-bg border border-card-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-accent focus:outline-none">
                 {BROKERS.map(b => (
                   <option key={b.id} value={b.id}>{b.label}</option>
                 ))}
@@ -135,34 +136,35 @@ export default function DataPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Symbol</label>
-              <input type="text" value={fetchSymbol} onChange={e => setFetchSymbol(e.target.value)}
-                placeholder="e.g. XAUUSD, EURUSD, NAS100" className={inputCls} />
+              <Label className="text-xs text-muted-foreground mb-1">Symbol</Label>
+              <Input type="text" value={fetchSymbol} onChange={e => setFetchSymbol(e.target.value)}
+                placeholder="e.g. XAUUSD, EURUSD, NAS100" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Timeframe</label>
-                <select value={fetchTimeframe} onChange={e => setFetchTimeframe(e.target.value)} className={inputCls}>
+                <Label className="text-xs text-muted-foreground mb-1">Timeframe</Label>
+                <select value={fetchTimeframe} onChange={e => setFetchTimeframe(e.target.value)}
+                  className="w-full bg-input-bg border border-card-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-accent focus:outline-none">
                   {TIMEFRAMES.map(tf => (
                     <option key={tf} value={tf}>{tf}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Bars</label>
-                <input type="number" value={fetchBars} onChange={e => setFetchBars(e.target.value)}
-                  min="100" max="100000" className={inputCls} />
+                <Label className="text-xs text-muted-foreground mb-1">Bars</Label>
+                <Input type="number" value={fetchBars} onChange={e => setFetchBars(e.target.value)}
+                  min={100} max={100000} />
               </div>
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button onClick={fetchFromBroker} disabled={fetching || !fetchSymbol} className={btnPrimary}>
+              <Button onClick={fetchFromBroker} disabled={fetching || !fetchSymbol}>
                 {fetching ? "Fetching..." : "Fetch Data"}
-              </button>
-              <button onClick={() => { setShowFetchModal(false); setFetchMsg(""); }} className={btnSecondary}>
+              </Button>
+              <Button variant="outline" onClick={() => { setShowFetchModal(false); setFetchMsg(""); }}>
                 Cancel
-              </button>
+              </Button>
             </div>
 
             {fetchMsg && (
@@ -171,34 +173,31 @@ export default function DataPage() {
               </p>
             )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Upload zone */}
-      <div
-        {...getRootProps()}
-        className={`rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
-          isDragActive
-            ? "border-accent bg-accent/5"
-            : "border-card-border hover:border-muted"
-        }`}
-      >
-        <input {...getInputProps()} />
-        {uploading ? (
-          <p className="text-sm text-accent">Uploading...</p>
-        ) : isDragActive ? (
-          <p className="text-sm text-accent">Drop CSV files here</p>
-        ) : (
-          <div>
-            <p className="text-sm text-foreground mb-1">
-              Drag & drop CSV files here, or click to browse
-            </p>
-            <p className="text-xs text-muted">
-              Supports MT5 export, generic OHLCV, and tick data formats
-            </p>
-          </div>
-        )}
-      </div>
+      <Card className="bg-card-bg border-card-border border-dashed border-2 hover:border-accent/40 transition-colors cursor-pointer"
+        {...getRootProps()}>
+        <CardContent className="p-10 text-center">
+          <input {...getInputProps()} />
+          {uploading ? (
+            <p className="text-sm text-accent">Uploading...</p>
+          ) : isDragActive ? (
+            <p className="text-sm text-accent">Drop CSV files here</p>
+          ) : (
+            <div>
+              <Upload className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm text-foreground mb-1">
+                Drag & drop CSV files here, or click to browse
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Supports MT5 export, generic OHLCV, and tick data formats
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {error && (
         <p className="text-sm text-danger">{error}</p>
@@ -206,70 +205,125 @@ export default function DataPage() {
 
       {/* Data sources table */}
       {sources.length > 0 ? (
-        <div className="rounded-xl border border-card-border bg-card-bg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-card-border text-left text-xs text-muted">
-                <th className="px-4 py-3 font-medium">Symbol</th>
-                <th className="px-4 py-3 font-medium">Timeframe</th>
-                <th className="px-4 py-3 font-medium">Rows</th>
-                <th className="px-4 py-3 font-medium">Date Range</th>
-                <th className="px-4 py-3 font-medium">Source</th>
-                <th className="px-4 py-3 font-medium">Size</th>
-                <th className="px-4 py-3 font-medium">File</th>
-                <th className="px-4 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="bg-card-bg border-card-border overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-card-border">
+                <TableHead>Symbol</TableHead>
+                <TableHead>Timeframe</TableHead>
+                <TableHead>Rows</TableHead>
+                <TableHead>Date Range</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead>File</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {sources.map((s) => (
-                <tr
-                  key={s.id}
-                  className="border-b border-card-border/50 hover:bg-sidebar-hover transition-colors"
+                <Fragment key={s.id}>
+                <TableRow
+                  className="border-card-border/50 hover:bg-sidebar-hover cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
                 >
-                  <td className="px-4 py-3 font-medium text-accent">
-                    {s.symbol || "—"}
-                  </td>
-                  <td className="px-4 py-3">{s.timeframe || "—"}</td>
-                  <td className="px-4 py-3 text-muted">
+                  <TableCell className="font-medium text-accent">
+                    <div className="flex items-center gap-1.5">
+                      {expandedId === s.id ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+                      {s.symbol || "—"}
+                    </div>
+                  </TableCell>
+                  <TableCell>{s.timeframe || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
                     {s.row_count.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-muted text-xs">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
                     {s.date_from} — {s.date_to}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TableCell>
+                  <TableCell>
                     {s.source_type === "broker" ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400">
+                      <Badge variant="secondary" className="bg-blue-900/30 text-fa-accent">
                         {s.broker_name?.toUpperCase() || "Broker"}
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700/50 text-gray-400">
+                      <Badge variant="outline" className="text-muted-foreground">
                         Upload
-                      </span>
+                      </Badge>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-muted">{s.file_size_mb}MB</td>
-                  <td className="px-4 py-3 text-muted text-xs truncate max-w-48">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{s.file_size_mb}MB</TableCell>
+                  <TableCell className="text-muted-foreground text-xs truncate max-w-48">
                     {s.filename}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => deleteSource(s.id)}
-                      className="text-xs text-muted hover:text-danger transition-colors"
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); deleteSource(s.id); }}
+                      className="text-muted-foreground hover:text-danger h-7 gap-1"
                     >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                {expandedId === s.id && (
+                  <TableRow key={`${s.id}-profile`} className="border-card-border/30 bg-card-bg/50">
+                    <TableCell colSpan={8} className="py-3 px-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info className="h-3.5 w-3.5 text-accent" />
+                        <span className="text-xs font-medium text-accent uppercase tracking-wide">Instrument Profile</span>
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Pip Value</div>
+                          <div className="text-sm font-medium">{s.pip_value ?? "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Point Value</div>
+                          <div className="text-sm font-medium">{s.point_value ?? "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Lot Size</div>
+                          <div className="text-sm font-medium">{s.lot_size ?? "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Spread</div>
+                          <div className="text-sm font-medium">{s.default_spread ?? "—"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Commission</div>
+                          <div className="text-sm font-medium">{s.default_commission ?? "—"} <span className="text-muted-foreground text-[10px]">{s.commission_model || ""}</span></div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">JPY Pair</div>
+                          <div className="text-sm font-medium">{s.is_jpy_pair ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       ) : (
-        <div className="rounded-xl border border-card-border bg-card-bg p-8 text-center">
-          <p className="text-sm text-muted">
-            No data sources yet. Upload a CSV file or fetch from a broker to get started.
-          </p>
-        </div>
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="flex flex-col items-center justify-center p-16 text-center">
+            <Database className="h-10 w-10 text-muted-foreground/30 mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Data Sources Yet</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-md">
+              Upload a CSV file above or fetch from a broker to get started with backtesting and ML.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={() => setShowFetchModal(true)} className="gap-1.5">
+                <Download className="h-4 w-4" /> Fetch from Broker
+              </Button>
+              <Button onClick={() => document.querySelector<HTMLInputElement>('input[type=file]')?.click()} className="gap-1.5">
+                <Upload className="h-4 w-4" /> Upload CSV
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <ChatHelpers />

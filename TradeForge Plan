@@ -1,0 +1,426 @@
+Context
+The MSS live trading bot is complete and running on MT5. The user wants to build a full-featured web trading platform for a small group (friends/team). Requirements gathered over 3 rounds of Q&A:
+
+Architecture: Next.js frontend + Python FastAPI backend (web app)
+Brokers: API-first (Oanda, Coinbase first), MT5 bridge + Tradovate later
+Backtest: Tick-level simulation, CSV upload initially, later market data APIs
+Charts: TradingView Lightweight Charts, later Polygon/Databento MCP for live data
+Optimization: Bayesian (Optuna) + Genetic (DEAP) hybrid
+ML: Progressive — param optimization → signal prediction → full ML strategies
+Strategy Builder: Form-based configuration (dropdowns, condition rows)
+Knowledge: All sources (manual, AI-generated, external links, community) + quizzes
+Deployment: Local only for now
+Timeline: Ongoing / no deadline
+
+
+Repo Structure
+D:\Doc\DATA\tradeforge\
+├── frontend/                 # Next.js + TypeScript + TailwindCSS
+│   ├── src/
+│   │   ├── app/              # App Router pages
+│   │   ├── components/       # React components
+│   │   ├── hooks/            # Custom hooks
+│   │   ├── lib/              # API client, utils
+│   │   └── types/            # TypeScript types
+│   └── package.json
+├── backend/                  # Python FastAPI
+│   ├── app/
+│   │   ├── api/              # Route handlers
+│   │   ├── core/             # Config, auth, DB
+│   │   ├── models/           # SQLAlchemy models
+│   │   ├── services/         # Business logic
+│   │   │   ├── backtest/     # Backtest engine
+│   │   │   ├── broker/       # Broker adapters
+│   │   │   ├── optimize/     # Optimization engine
+│   │   │   ├── ml/           # Machine learning
+│   │   │   ├── llm/          # LLM providers, memory, context
+│   │   │   └── strategy/     # Strategy builder/runner
+│   │   └── schemas/          # Pydantic schemas
+│   ├── data/                 # SQLite DB, uploaded CSVs
+│   └── main.py
+└── start.bat                 # Launch both apps
+
+Phase 1: Foundation
+1.1 — Project Scaffolding
+
+npx create-next-app@latest frontend --typescript --tailwind --app --src-dir
+FastAPI backend with uvicorn, SQLite + SQLAlchemy, Alembic migrations
+CORS config, WebSocket endpoint, start.bat to launch both
+Simple local auth (username + bcrypt password hash, JWT tokens)
+
+1.2 — Database Models
+
+User — username, password_hash, created_at
+Strategy — name, entry/exit rules (JSON), indicators, risk params, creator_id
+Backtest — strategy_id, symbol, timeframe, date_range, results (JSON), status
+Optimization — strategy_id, param_space, best_params, history
+Trade — broker, symbol, direction, entry/exit, PnL, strategy_id
+DataSource — CSV metadata (filename, symbol, timeframe, rows, date_range)
+KnowledgeArticle — title, content (markdown), category, difficulty, quiz (JSON)
+QuizAttempt — user_id, article_id, score
+UserSettings — user_id, settings (JSON), llm_provider, llm_api_key_encrypted, llm_model
+LLMMemory — user_id, key, value, category, confidence, timestamps
+LLMConversation — user_id, page_context, messages (JSON), title, timestamps
+LLMUsage — user_id, provider, model, tokens_in, tokens_out, cost_estimate
+
+1.3 — Layout Shell
+
+Sidebar nav: Dashboard, Strategies, Backtest, Optimize, ML, Chart, Live Trading, Knowledge
+Dark theme (trading standard), TailwindCSS
+Top bar: connection status, active broker, account info
+Desktop-first (min 1280px)
+
+
+Phase 2: Data & Charts
+2.1 — CSV Upload
+
+Drag-and-drop upload (react-dropzone)
+Auto-detect columns: datetime, O, H, L, C, volume (+ tick: timestamp, bid, ask)
+Validate, store metadata in DB, keep CSV on disk
+Data browser: list datasets, preview rows, delete
+
+2.2 — TradingView Lightweight Charts
+
+Candlestick series with timeframe selector
+Symbol selector (from uploaded data or live feed)
+Overlay indicators: SMA, EMA as line series
+Volume histogram, trade entry/exit markers
+WebSocket hook for live updates (Phase 5)
+
+2.3 — Market Data APIs (later)
+
+DataProvider interface: CSV provider → broker provider → Polygon/Databento MCP
+Add when API keys available
+
+
+Phase 3: Strategy Builder & Backtesting
+3.1 — Form-Based Strategy Builder
+
+Indicator selection: dropdown (SMA, EMA, RSI, MACD, Bollinger, ATR, Pivots, custom)
+Entry conditions: form rows — "When [indicator A] [crosses above / > / < / etc.] [indicator B / value]", AND/OR logic
+Exit conditions: same structure, plus TP/SL (fixed, ATR multiple, %), trailing stop, time exit
+Risk management: position sizing (fixed lot, % risk), max positions, max drawdown stop
+Filters: time-of-day, day-of-week, volatility
+Strategy saved as JSON in DB
+Indicator → Strategy converter: pick indicator, define signal conditions, auto-generate config
+
+3.2 — Backtest Engine (Tick-Level)
+
+Bar-by-bar loop (tick-by-tick when tick data available)
+Order simulation: market fills at next open, limit fills on price cross
+Slippage + spread + commission models
+Position tracking: open/close, partial close, breakeven
+Multi-symbol support
+Results: equity curve, trade list, stats (win rate, PF, max DD, Sharpe, Sortino, expectancy)
+WebSocket progress for long runs
+POST /api/backtest/run
+
+3.3 — Backtest Results UI
+
+Equity curve chart, trade markers on price chart
+Stats dashboard cards
+Trade log table (sortable)
+Monthly returns heatmap, drawdown chart
+Compare multiple runs side-by-side
+
+
+Phase 4: Optimization & ML
+4.1 — Optimization Engine
+
+UI: define param ranges (numeric min/max/step, categorical options)
+Optuna (TPE Bayesian) for efficient search + DEAP (genetic) for broad exploration
+Hybrid: Optuna narrows regions → DEAP refines
+Walk-forward validation (in-sample optimize, out-of-sample validate)
+Results: param importance, optimization history, best params + OOS performance
+POST /api/optimize/run with WebSocket progress
+
+4.2 — ML Level 1: Adaptive Parameters
+
+Predict which params work in current market regime
+Features: volatility, trend strength, correlation
+Model: Random Forest / XGBoost
+
+4.3 — ML Level 2: Signal Prediction
+
+Predict next-bar direction/movement
+Features: indicator values, price patterns, volume, time
+Models: XGBoost → LSTM → Transformer (progressive)
+ML predictions as indicator in strategy builder
+
+4.4 — ML Level 3: Full ML Strategies
+
+End-to-end RL trading agents
+Feature store, model registry, A/B testing
+
+
+Phase 5: Live Trading
+5.1 — Broker Adapter Interface
+pythonclass BrokerAdapter(ABC):
+    connect(), get_account_info(), get_positions()
+    place_order(), modify_order(), cancel_order()
+    get_candles(), stream_prices(), get_symbols()
+5.2 — Oanda Adapter (first)
+
+REST API v20, streaming prices, forex + CFDs
+
+5.3 — Coinbase Adapter
+
+Advanced Trade API, WebSocket feed, crypto pairs
+
+5.4 — MT5 Bridge
+
+Wrap existing MetaTrader5 Python package + MSSTradeManager
+Symbol alias resolution
+
+5.5 — Tradovate Adapter
+
+REST + WebSocket, futures, contract rollover
+
+5.6 — Live Trading Dashboard
+
+Positions table with real-time PnL
+Open orders, one-click close/modify
+Strategy → symbol auto-execution link
+Risk monitor: drawdown, exposure
+
+
+Phase 6: Settings & Configuration
+6.1 — Settings Page (Frontend + Backend)
+Profile & Account:
+
+Display name, username, password change
+Avatar upload (optional)
+Session management (active sessions, logout all)
+
+Appearance:
+
+Theme selection (dark/light/system, accent color)
+Font size, compact mode toggle
+Default chart colors (candle body, wicks, volume)
+
+LLM Configuration:
+
+Provider selector: Claude / OpenAI / Gemini / Custom endpoint
+API key input (masked, stored encrypted in DB)
+Model selector per provider (e.g., claude-sonnet-4, gpt-4o, gemini-2.5-pro)
+Temperature / max tokens / system prompt customization
+Connection test button ("Verify API Key")
+Usage stats display (tokens used, cost estimate)
+
+Default Trading Parameters:
+
+Default initial balance, spread, commission, point value
+Default position sizing, risk per trade %
+Preferred instruments list
+Default timeframes
+
+Broker Defaults:
+
+Default broker selection
+API key storage per broker (encrypted)
+Account ID / subaccount selection
+Auto-connect on startup toggle
+
+Data Management:
+
+CSV auto-cleanup (delete after X days, or keep forever)
+Data retention policy (max storage, oldest-first purge)
+Export settings (format: CSV/JSON/Excel, include headers)
+Database backup/restore (download SQLite, upload restore)
+Clear all data (with confirmation)
+
+Platform Configuration:
+
+Chart preferences: default indicators, color scheme, grid, crosshair style
+Keyboard shortcuts reference + customization
+Session timeout (auto-logout after idle)
+Notification preferences (backtest complete, optimization done, trade executed)
+WebSocket reconnect behavior
+
+API Endpoints:
+
+GET /api/settings — get all user settings
+PUT /api/settings — update settings (partial update)
+POST /api/settings/test-llm — test LLM API key connectivity
+POST /api/settings/backup — download DB backup
+POST /api/settings/restore — upload DB restore
+
+DB Model:
+
+UserSettings — user_id (FK), settings_json (JSON blob), llm_provider, llm_api_key_encrypted, llm_model, updated_at
+
+
+Phase 7: AI Assistant (LLM Integration)
+7.1 — LLM Service Layer (Backend)
+
+LLMService class with provider abstraction:
+
+python  class LLMService:
+      providers: dict[str, LLMProvider]  # claude, openai, gemini
+      async def chat(user_id, messages, context) -> str
+      async def stream(user_id, messages, context) -> AsyncGenerator
+
+Provider implementations:
+
+ClaudeProvider — Anthropic SDK (anthropic package)
+OpenAIProvider — OpenAI SDK (openai package)
+GeminiProvider — Google GenAI SDK (google-generativeai package)
+
+
+API key loaded from user settings (encrypted at rest)
+System prompt builder: injects current page context, user profile, active strategy, recent backtest results
+Token counting + cost tracking per user
+Rate limiting (per-user, per-minute)
+
+7.2 — Memory System
+Structured User Profile (auto-extracted):
+
+Trading style: scalper / day trader / swing / position
+Risk tolerance: conservative / moderate / aggressive
+Preferred instruments, timeframes, sessions
+Goals, milestones, pain points
+Custom notes the user pins
+Auto-updated from conversations (LLM extracts and confirms)
+
+Conversation History:
+
+Full chat log stored per-user in DB
+Searchable by keyword, date, topic
+Conversation threading (each page interaction = thread)
+Context window management: recent messages + relevant memories injected
+Configurable history depth (last N messages, or token budget)
+
+DB Models:
+
+LLMMemory — user_id, key, value, category, confidence, created_at, updated_at
+LLMConversation — user_id, page_context, messages (JSON), title (auto-generated), created_at
+LLMUsage — user_id, provider, model, tokens_in, tokens_out, cost_estimate, created_at
+
+API Endpoints:
+
+POST /api/llm/chat — send message, get response (with streaming SSE option)
+GET /api/llm/conversations — list past conversations
+GET /api/llm/conversations/{id} — get conversation messages
+GET /api/llm/memories — get user profile memories
+PUT /api/llm/memories/{id} — edit/pin/delete a memory
+GET /api/llm/usage — usage stats
+
+7.3 — Persistent Chat Sidebar (Frontend)
+
+Collapsible right-side panel (toggle with hotkey or button)
+Persists across page navigations (state in global store)
+Auto-detects current page context and injects:
+
+Strategies page: active strategy config, indicators, rules
+Backtest page: last backtest results, stats, trade summary
+Chart page: current symbol, timeframe, visible range
+Optimize page: param space, best results, progress
+ML Lab page: model config, training status, predictions
+Data page: loaded datasets, column info
+
+
+Markdown rendering for responses (code blocks, tables, lists)
+Streaming response display (token-by-token)
+Conversation history dropdown (switch between past chats)
+"New Chat" button, search past conversations
+Memory panel: view/edit extracted profile memories
+
+7.4 — Contextual Helper Buttons (per-page)
+
+Strategy Builder:
+
+"Suggest entry/exit rules for [instrument]"
+"Explain this indicator combination"
+"Generate strategy from description" (natural language → JSON config)
+"Review my strategy for risks"
+
+
+Backtest Results:
+
+"Explain these results"
+"Why did this strategy underperform in [month]?"
+"Suggest improvements based on trade log"
+"Compare with benchmark"
+
+
+Optimization:
+
+"Suggest parameter ranges"
+"Explain parameter importance"
+"Is this overfitting?"
+
+
+Chart:
+
+"What patterns do you see?"
+"Annotate support/resistance levels"
+
+
+Knowledge:
+
+"Generate article on [topic]"
+"Create quiz for this article"
+
+
+Each button pre-fills the sidebar chat with relevant context + prompt
+
+
+Phase 8: Knowledge & Education
+8.1 — Knowledge Base
+
+Categories: Basics, TA, FA, Risk Management, Psychology, Platform Guide
+Difficulty: Beginner → Intermediate → Advanced
+Markdown articles, progress tracking
+
+8.2 — Content
+
+Manual articles (markdown editor)
+AI-generated drafts (Claude API, human-reviewed)
+External links (curated), community submissions
+
+8.3 — Quizzes
+
+Multiple choice per article, immediate feedback
+Progress tracking, leaderboard
+
+
+Build Order
+
+Project scaffolding (1.1) ✅
+Database models (1.2) ✅
+Layout shell + dark theme (1.3) ✅
+CSV upload (2.1) ✅
+Chart component (2.2) ✅
+Strategy builder (3.1) ✅
+Backtest engine (3.2) ✅
+Backtest results UI (3.3) ✅
+Settings page (6.1) ← NEXT
+LLM service + memory system (7.1-7.2)
+LLM chat sidebar + contextual helpers (7.3-7.4)
+Optimization engine (4.1)
+Oanda adapter (5.2)
+Live trading dashboard (5.6)
+Knowledge base (8.1-8.3)
+Coinbase adapter (5.3)
+MT5 bridge (5.4)
+ML Level 1-3 (4.2-4.4)
+Tradovate (5.5)
+Market data APIs (2.3)
+
+
+Key Dependencies
+Frontend: next, react, typescript, tailwindcss, lightweight-charts, zustand, react-hook-form, zod, recharts, react-dropzone, socket.io-client
+Backend: fastapi, uvicorn, sqlalchemy, alembic, pydantic, pandas, numpy, optuna, deap, scikit-learn, xgboost, torch (later), oandapyV20, MetaTrader5, python-socketio, passlib[bcrypt], python-jose[cryptography], anthropic, openai, google-generativeai, cryptography (for API key encryption), sse-starlette (for streaming responses)
+
+First Session Deliverable
+Steps 1.1 + 1.2 + 1.3: both apps running, database initialized, navigation shell with dark theme in the browser. This is the foundation every subsequent feature builds on.
+
+Verification
+
+npm run dev serves frontend on localhost:3000
+uvicorn main:app serves backend on localhost:8000
+Frontend renders dark-themed sidebar with all nav items
+Backend /api/health returns 200
+SQLite DB created with all tables via Alembic migration
+Auth endpoints work: register, login, get current user
+WebSocket connection established between frontend and backend

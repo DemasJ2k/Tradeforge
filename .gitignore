@@ -22,3 +22,4 @@ backend/data/uploads/
 backend/data/ml_models/
 backend/data/*.db
 backend/*.db
+nul

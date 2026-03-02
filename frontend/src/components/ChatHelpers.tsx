@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Lightbulb, ArrowRight } from "lucide-react";
 
 interface HelperButton {
   icon: string;
@@ -281,16 +282,14 @@ export default function ChatHelpers() {
     accent: "bg-accent/10 border-accent/30 text-accent hover:bg-accent/20 hover:border-accent/50",
     success: "bg-success/10 border-success/30 text-success hover:bg-success/20 hover:border-success/50",
     danger: "bg-danger/10 border-danger/30 text-danger hover:bg-danger/20 hover:border-danger/50",
-    info: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50",
+    info: "bg-fa-accent/10 border-blue-500/30 text-fa-accent hover:bg-fa-accent/80/20 hover:border-blue-500/50",
   };
 
   return (
     <div className="mt-8 space-y-3">
       <div className="flex items-center gap-2">
-        <svg className="h-4 w-4 text-muted" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5h.01" />
-        </svg>
-        <span className="text-xs font-medium text-muted">AI Assistant Suggestions</span>
+        <Lightbulb className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-medium text-muted-foreground">AI Assistant Suggestions</span>
       </div>
 
       <div className="grid gap-2">
@@ -304,9 +303,7 @@ export default function ChatHelpers() {
           >
             <span className="mt-0.5 text-lg">{btn.icon}</span>
             <span className="flex-1 font-medium">{btn.label}</span>
-            <svg className="h-4 w-4 shrink-0 opacity-40" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
+            <ArrowRight className="h-4 w-4 shrink-0 opacity-40" />
           </button>
         ))}
       </div>
@@ -314,7 +311,7 @@ export default function ChatHelpers() {
       {buttons.length > 2 && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="text-xs text-muted hover:text-foreground transition-colors px-3 py-1"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1"
         >
           {showAll ? `← Show less` : `+ Show ${buttons.length - 2} more suggestions`}
         </button>

@@ -30,6 +30,8 @@ export interface ChartHandle {
   updateBar: (bar: CandleInput) => void;
   /** Get the underlying chart API. */
   getChart: () => IChartApi | null;
+  /** Get the candle series for markers / overlays. */
+  getCandleSeries: () => ISeriesApi<"Candlestick"> | null;
 }
 
 export interface IndicatorConfig {
@@ -163,6 +165,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
   useImperativeHandle(ref, () => ({
     updateBar,
     getChart: () => chartRef.current,
+    getCandleSeries: () => candleSeriesRef.current,
   }), [updateBar]);
 
   // Create chart
@@ -216,8 +219,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     // MA series (always created, hidden until enabled)
     const maSeries = chart.addSeries(LineSeries, {
-      color: "#f59e0b",
-      lineWidth: 1,
+      color: "#fbbf24",
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
@@ -227,7 +230,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     // EMA series
     const emaSeries = chart.addSeries(LineSeries, {
       color: "#a78bfa",
-      lineWidth: 1,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,

@@ -5,6 +5,7 @@ import type { UserSettings, StorageInfo, Invitation, BrokerCredentialMasked } fr
 import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
+import { User, Palette, Bot, TrendingUp, Link, HardDrive, Cog, ChevronDown, Bell, type LucideIcon } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -21,35 +22,71 @@ function authHeaders(): Record<string, string> {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs text-muted-foreground mb-1">{label}</label>
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none";
+const inputCls = "w-full bg-input-bg border border-card-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-blue-500 focus:outline-none";
 const selectCls = inputCls;
-const btnPrimary = "px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-40";
-const btnDanger = "px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 text-white text-sm font-medium transition-colors";
-const btnSecondary = "px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium transition-colors";
+const btnPrimary = "px-4 py-2 rounded-lg bg-fa-accent hover:bg-fa-accent/80 text-foreground text-sm font-medium transition-colors disabled:opacity-40";
+const btnDanger = "px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 text-foreground text-sm font-medium transition-colors";
+const btnSecondary = "px-4 py-2 rounded-lg bg-input-bg hover:bg-input-bg text-foreground/90 text-sm font-medium transition-colors";
 
-// Accent color hex values for preview
-const ACCENT_HEX: Record<string, string> = {
-  blue: '#3b82f6',
-  green: '#22c55e',
-  orange: '#f59e0b',
-  purple: '#a855f7',
-  red: '#ef4444',
-};
+// Theme presets with preview colors
+const THEME_PRESETS = [
+  { id: 'midnight-teal', label: 'Midnight Teal', accent: '#06b6d4', bg: '#0c1425', desc: 'Default dark theme' },
+  { id: 'ocean-blue', label: 'Ocean Blue', accent: '#3b82f6', bg: '#0a1628', desc: 'Deep blue tones' },
+  { id: 'emerald-trader', label: 'Emerald Trader', accent: '#10b981', bg: '#0a1a14', desc: 'Green finance feel' },
+  { id: 'sunset-gold', label: 'Sunset Gold', accent: '#f59e0b', bg: '#1a1408', desc: 'Warm amber tones' },
+  { id: 'neon-purple', label: 'Neon Purple', accent: '#a855f7', bg: '#14081e', desc: 'Vibrant purple' },
+  { id: 'classic-dark', label: 'Classic Dark', accent: '#6b7280', bg: '#111111', desc: 'Neutral & minimal' },
+  { id: 'warm-stone', label: 'Warm Stone', accent: '#a8a29e', bg: '#1c1917', desc: 'Earthy warm tones' },
+  { id: 'arctic-light', label: 'Arctic Light', accent: '#0ea5e9', bg: '#0c1a2a', desc: 'Cool & crisp' },
+] as const;
 
-// Color swatch button
+// Preset card component
+function PresetCard({ preset, active, onSelect }: {
+  preset: typeof THEME_PRESETS[number];
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button onClick={onSelect}
+      className={`relative rounded-xl p-3 text-left transition-all border-2 ${
+        active
+          ? 'border-fa-accent ring-2 ring-fa-accent/30 scale-[1.02]'
+          : 'border-card-border hover:border-fa-accent/40 hover:scale-[1.01]'
+      }`}
+      style={{ backgroundColor: preset.bg }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.accent }} />
+        <span className="text-xs font-semibold text-foreground">{preset.label}</span>
+      </div>
+      {/* Mini preview bars */}
+      <div className="flex gap-1 mb-1.5">
+        <div className="h-1.5 w-8 rounded-full" style={{ backgroundColor: preset.accent, opacity: 0.8 }} />
+        <div className="h-1.5 w-5 rounded-full bg-white/10" />
+        <div className="h-1.5 w-6 rounded-full bg-white/10" />
+      </div>
+      <p className="text-[10px] text-muted-foreground">{preset.desc}</p>
+      {active && (
+        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-fa-accent" />
+      )}
+    </button>
+  );
+}
+
+// Color swatch button (kept for chart colors)
 function ColorPick({ value, onChange, colors }: { value: string; onChange: (v: string) => void; colors: string[] }) {
   return (
     <div className="flex gap-2 flex-wrap">
       {colors.map(c => (
         <button key={c} onClick={() => onChange(c)}
           className={`w-7 h-7 rounded-full border-2 transition-all ${value === c ? 'border-white scale-110' : 'border-transparent opacity-60 hover:opacity-100'}`}
-          style={{ backgroundColor: ACCENT_HEX[c] || c }}
+          style={{ backgroundColor: c }}
         />
       ))}
     </div>
@@ -60,10 +97,10 @@ function ColorPick({ value, onChange, colors }: { value: string; onChange: (v: s
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button onClick={() => onChange(!value)} className="flex items-center gap-3 group">
-      <div className={`relative w-10 h-5 rounded-full transition-colors ${value ? 'bg-blue-600' : 'bg-gray-600'}`}>
+      <div className={`relative w-10 h-5 rounded-full transition-colors ${value ? 'bg-fa-accent' : 'bg-input-bg'}`}>
         <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${value ? 'translate-x-5' : ''}`} />
       </div>
-      <span className="text-sm text-gray-300 group-hover:text-white">{label}</span>
+      <span className="text-sm text-foreground/80 group-hover:text-foreground">{label}</span>
     </button>
   );
 }
@@ -86,15 +123,16 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
-const TABS = [
-  { id: 'profile',    label: 'Profile',           icon: '👤' },
-  { id: 'appearance', label: 'Appearance',         icon: '🎨' },
-  { id: 'llm',        label: 'AI / LLM',           icon: '🤖' },
-  { id: 'trading',    label: 'Trading Defaults',   icon: '📈' },
-  { id: 'brokers',    label: 'Brokers',            icon: '🔗' },
-  { id: 'data',       label: 'Data Management',    icon: '💾' },
-  { id: 'platform',   label: 'Platform',           icon: '⚙️' },
-] as const;
+const TABS: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: 'profile',       label: 'Profile',           icon: User },
+  { id: 'appearance',    label: 'Appearance',         icon: Palette },
+  { id: 'llm',           label: 'AI / LLM',           icon: Bot },
+  { id: 'trading',       label: 'Trading Defaults',   icon: TrendingUp },
+  { id: 'brokers',       label: 'Brokers',            icon: Link },
+  { id: 'data',          label: 'Data Management',    icon: HardDrive },
+  { id: 'notifications', label: 'Notifications',      icon: Bell },
+  { id: 'platform',      label: 'Platform',           icon: Cog },
+];
 type TabId = typeof TABS[number]['id'];
 
 export default function SettingsPage() {
@@ -159,6 +197,12 @@ export default function SettingsPage() {
   const [brokerBusy, setBrokerBusy] = useState<Record<string, boolean>>({});
   const [brokerMsg, setBrokerMsg] = useState<Record<string, string>>({});
   const [expandedBroker, setExpandedBroker] = useState<string | null>(null);
+
+  // Notification channel state
+  const [notifSmtpPass, setNotifSmtpPass] = useState('');
+  const [notifTelegramToken, setNotifTelegramToken] = useState('');
+  const [notifTesting, setNotifTesting] = useState<string | null>(null); // 'email' | 'telegram' | null
+  const [notifTestResult, setNotifTestResult] = useState<Record<string, string>>({});
 
   // Load profile data when user loads
   useEffect(() => {
@@ -359,7 +403,7 @@ export default function SettingsPage() {
   if (loading || !settings) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading settings...</div>
+        <div className="text-muted-foreground">Loading settings...</div>
       </div>
     );
   }
@@ -369,8 +413,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-gray-400 text-sm mt-1">Configure your TradeForge experience</p>
+        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <p className="text-muted-foreground text-sm mt-1">Configure your FlowrexAlgo experience</p>
       </div>
 
       <div className="flex gap-4">
@@ -379,7 +423,7 @@ export default function SettingsPage() {
           {/* Toggle button */}
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="mb-2 flex h-9 w-full items-center justify-center rounded-lg border border-gray-800 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors text-sm"
+            className="mb-2 flex h-9 w-full items-center justify-center rounded-lg border border-card-border text-muted-foreground hover:bg-card-bg hover:text-foreground transition-colors text-sm"
             title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
           >
             {sidebarOpen ? '◀' : '▶'}
@@ -392,9 +436,9 @@ export default function SettingsPage() {
                 title={!sidebarOpen ? t.label : undefined}
                 className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors overflow-hidden
                   ${sidebarOpen ? 'px-3 py-2.5 text-left' : 'px-0 py-2.5 justify-center'}
-                  ${tab === t.id ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}
+                  ${tab === t.id ? 'bg-fa-accent/20 text-fa-accent' : 'text-muted-foreground hover:bg-card-bg hover:text-foreground'}`}
               >
-                <span className="text-base shrink-0">{t.icon}</span>
+                <t.icon className="w-4 h-4 shrink-0" />
                 {sidebarOpen && <span className="truncate">{t.label}</span>}
               </button>
             ))}
@@ -402,11 +446,11 @@ export default function SettingsPage() {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 bg-[#151923] rounded-xl border border-gray-800 p-6 min-h-[500px] max-h-[calc(100vh-180px)] overflow-y-auto">
+        <div className="flex-1 bg-card-bg rounded-xl border border-card-border p-6 min-h-[500px] max-h-[calc(100vh-180px)] overflow-y-auto">
           {/* ─── Profile ─── */}
           {tab === 'profile' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-white">Profile & Account</h2>
+              <h2 className="text-lg font-semibold text-foreground">Profile & Account</h2>
               <Field label="Display Name">
                 <input type="text" value={s.display_name} onChange={e => set('display_name', e.target.value)} className={inputCls} placeholder="Your name" />
               </Field>
@@ -416,8 +460,8 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Contact Information</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Contact Information</h3>
               <Field label="Email">
                 <input type="email" value={profileEmail} onChange={e => setProfileEmail(e.target.value)} className={inputCls} placeholder="you@example.com" />
               </Field>
@@ -438,8 +482,8 @@ export default function SettingsPage() {
               }} className={btnPrimary}>Save Contact Info</button>
               {profileMsg && <p className={`text-sm ${profileMsg.includes('saved') ? 'text-green-400' : 'text-red-400'}`}>{profileMsg}</p>}
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Two-Factor Authentication (2FA)</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Two-Factor Authentication (2FA)</h3>
               {user?.totp_enabled ? (
                 <div className="space-y-3">
                   <p className="text-sm text-green-400">2FA is enabled</p>
@@ -466,12 +510,12 @@ export default function SettingsPage() {
                 </div>
               ) : totpSetup ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-400">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</p>
+                  <p className="text-sm text-muted-foreground">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</p>
                   <div className="flex justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URIs can't use next/image */}
                     <img src={`data:image/png;base64,${totpSetup.qr_base64}`} alt="TOTP QR" className="w-48 h-48 rounded-lg" />
                   </div>
-                  <p className="text-xs text-gray-500 text-center break-all">Manual key: {totpSetup.secret}</p>
+                  <p className="text-xs text-muted-foreground/60 text-center break-all">Manual key: {totpSetup.secret}</p>
                   <Field label="Enter the 6-digit code to confirm">
                     <div className="flex gap-2">
                       <input type="text" inputMode="numeric" maxLength={6} value={totpCode}
@@ -495,7 +539,7 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-400">Add an extra layer of security to your account.</p>
+                  <p className="text-sm text-muted-foreground">Add an extra layer of security to your account.</p>
                   <button onClick={async () => {
                     setTotpMsg('');
                     try {
@@ -512,8 +556,8 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Change Password</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Change Password</h3>
               <Field label="Current Password">
                 <input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} className={inputCls} />
               </Field>
@@ -526,8 +570,8 @@ export default function SettingsPage() {
               {/* ─── Admin: Invitations ─── */}
               {user?.is_admin && (
                 <>
-                  <hr className="border-gray-800" />
-                  <h3 className="text-md font-semibold text-white">Invite Users (Admin)</h3>
+                  <hr className="border-card-border" />
+                  <h3 className="text-md font-semibold text-foreground">Invite Users (Admin)</h3>
                   <div className="grid grid-cols-3 gap-2">
                     <Field label="Email">
                       <input type="email" value={invEmail} onChange={e => setInvEmail(e.target.value)} className={inputCls} placeholder="user@email.com" />
@@ -563,10 +607,10 @@ export default function SettingsPage() {
                   {invMsg && <p className={`text-sm ${invMsg.includes('created') ? 'text-green-400' : 'text-red-400'}`}>{invMsg}</p>}
 
                   {invitations.length > 0 && (
-                    <div className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                    <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                          <tr className="border-b border-card-border text-muted-foreground text-xs">
                             <th className="text-left px-3 py-2">Username</th>
                             <th className="text-left px-3 py-2">Email</th>
                             <th className="text-left px-3 py-2">Status</th>
@@ -575,9 +619,9 @@ export default function SettingsPage() {
                         </thead>
                         <tbody>
                           {invitations.map(inv => (
-                            <tr key={inv.id} className="border-b border-gray-800/50">
-                              <td className="px-3 py-2 text-white">{inv.username}</td>
-                              <td className="px-3 py-2 text-gray-400">{inv.email}</td>
+                            <tr key={inv.id} className="border-b border-card-border">
+                              <td className="px-3 py-2 text-foreground">{inv.username}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{inv.email}</td>
                               <td className="px-3 py-2">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${
                                   inv.status === 'accepted' ? 'bg-green-900/30 text-green-400' :
@@ -596,7 +640,7 @@ export default function SettingsPage() {
                                   <button onClick={async () => {
                                     const r = await fetch(`${API}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
                                     if (r.ok) setInvitations(prev => prev.filter(i => i.id !== inv.id));
-                                  }} className="text-xs text-gray-500 hover:text-red-400">Delete</button>
+                                  }} className="text-xs text-muted-foreground/60 hover:text-red-400">Delete</button>
                                 )}
                               </td>
                             </tr>
@@ -606,15 +650,15 @@ export default function SettingsPage() {
                     </div>
                   )}
                   {/* ─── Admin: Password Reset Requests ─── */}
-                  <hr className="border-gray-800" />
-                  <h3 className="text-md font-semibold text-white">Password Reset Requests (Admin)</h3>
+                  <hr className="border-card-border" />
+                  <h3 className="text-md font-semibold text-foreground">Password Reset Requests (Admin)</h3>
                   {resetRequests.length === 0 ? (
-                    <p className="text-xs text-gray-500">No password reset requests yet.</p>
+                    <p className="text-xs text-muted-foreground/60">No password reset requests yet.</p>
                   ) : (
-                    <div className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                    <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                          <tr className="border-b border-card-border text-muted-foreground text-xs">
                             <th className="text-left px-3 py-2">Username</th>
                             <th className="text-left px-3 py-2">Email</th>
                             <th className="text-left px-3 py-2">Requested</th>
@@ -624,10 +668,10 @@ export default function SettingsPage() {
                         </thead>
                         <tbody>
                           {resetRequests.map(req => (
-                            <tr key={req.id} className="border-b border-gray-800/50">
-                              <td className="px-3 py-2 text-white">{req.username}</td>
-                              <td className="px-3 py-2 text-gray-400">{req.email}</td>
-                              <td className="px-3 py-2 text-gray-400 text-xs">{req.created_at}</td>
+                            <tr key={req.id} className="border-b border-card-border">
+                              <td className="px-3 py-2 text-foreground">{req.username}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{req.email}</td>
+                              <td className="px-3 py-2 text-muted-foreground text-xs">{req.created_at}</td>
                               <td className="px-3 py-2">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${
                                   req.used ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'
@@ -637,7 +681,7 @@ export default function SettingsPage() {
                                 {!req.used && (
                                   <button
                                     onClick={() => { setManualResetUserId(req.user_id); setManualResetPw(''); setManualResetMsg(''); }}
-                                    className="text-xs text-blue-400 hover:text-blue-300"
+                                    className="text-xs text-fa-accent hover:text-blue-300"
                                   >
                                     Manual Reset
                                   </button>
@@ -651,18 +695,18 @@ export default function SettingsPage() {
                   )}
 
                   {/* ─── Admin: Registered Users ─── */}
-                  <hr className="border-gray-800" />
-                  <h3 className="text-md font-semibold text-white">Registered Users (Admin)</h3>
+                  <hr className="border-card-border" />
+                  <h3 className="text-md font-semibold text-foreground">Registered Users (Admin)</h3>
                   {deleteMsg && (
                     <p className={`text-xs ${deleteMsg.includes('deleted') ? 'text-green-400' : 'text-red-400'}`}>{deleteMsg}</p>
                   )}
                   {registeredUsers.length === 0 ? (
-                    <p className="text-xs text-gray-500">No registered users yet.</p>
+                    <p className="text-xs text-muted-foreground/60">No registered users yet.</p>
                   ) : (
-                    <div className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                    <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                          <tr className="border-b border-card-border text-muted-foreground text-xs">
                             <th className="text-left px-3 py-2">Username</th>
                             <th className="text-left px-3 py-2">Email</th>
                             <th className="text-left px-3 py-2">Joined</th>
@@ -672,13 +716,13 @@ export default function SettingsPage() {
                         </thead>
                         <tbody>
                           {registeredUsers.map(u => (
-                            <tr key={u.id} className="border-b border-gray-800/50">
-                              <td className="px-3 py-2 text-white font-medium">{u.username}</td>
-                              <td className="px-3 py-2 text-gray-400 text-xs">{u.email || '—'}</td>
-                              <td className="px-3 py-2 text-gray-400 text-xs">{u.created_at}</td>
+                            <tr key={u.id} className="border-b border-card-border">
+                              <td className="px-3 py-2 text-foreground font-medium">{u.username}</td>
+                              <td className="px-3 py-2 text-muted-foreground text-xs">{u.email || '—'}</td>
+                              <td className="px-3 py-2 text-muted-foreground text-xs">{u.created_at}</td>
                               <td className="px-3 py-2">
                                 {u.is_admin ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400">admin</span>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-fa-accent">admin</span>
                                 ) : u.must_change_password ? (
                                   <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400">must change pw</span>
                                 ) : (
@@ -707,11 +751,11 @@ export default function SettingsPage() {
                     const target = registeredUsers.find(u => u.id === deleteConfirmId);
                     return (
                       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                        <div className="w-full max-w-sm rounded-xl border border-gray-700 bg-[#151923] p-6 space-y-4">
-                          <h3 className="font-semibold text-white">Delete User Account</h3>
-                          <p className="text-sm text-gray-300">
+                        <div className="w-full max-w-sm rounded-xl border border-card-border bg-card-bg p-6 space-y-4">
+                          <h3 className="font-semibold text-foreground">Delete User Account</h3>
+                          <p className="text-sm text-foreground/80">
                             Are you sure you want to permanently delete{' '}
-                            <strong className="text-white">{target?.username}</strong>{target?.email ? ` (${target.email})` : ''}?
+                            <strong className="text-foreground">{target?.username}</strong>{target?.email ? ` (${target.email})` : ''}?
                           </p>
                           <p className="text-xs text-red-400">
                             This removes their account, settings, LLM data, and access. This cannot be undone.
@@ -734,13 +778,13 @@ export default function SettingsPage() {
                                 } catch { setDeleteMsg('Request failed.'); }
                                 setDeleteConfirmId(null);
                               }}
-                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-medium text-foreground hover:bg-red-700 transition-colors"
                             >
                               Yes, Delete
                             </button>
                             <button
                               onClick={() => setDeleteConfirmId(null)}
-                              className="flex-1 rounded-lg border border-gray-700 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                              className="flex-1 rounded-lg border border-card-border py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                             >
                               Cancel
                             </button>
@@ -753,9 +797,9 @@ export default function SettingsPage() {
                   {/* Manual Reset Modal */}
                   {manualResetUserId !== null && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                      <div className="w-full max-w-sm rounded-xl border border-gray-700 bg-[#151923] p-6 space-y-4">
-                        <h3 className="font-semibold text-white">Manual Password Reset</h3>
-                        <p className="text-xs text-gray-400">
+                      <div className="w-full max-w-sm rounded-xl border border-card-border bg-card-bg p-6 space-y-4">
+                        <h3 className="font-semibold text-foreground">Manual Password Reset</h3>
+                        <p className="text-xs text-muted-foreground">
                           Set a temporary password for this user. They will be required to change it on next login.
                         </p>
                         <input
@@ -794,7 +838,7 @@ export default function SettingsPage() {
                           </button>
                           <button
                             onClick={() => { setManualResetUserId(null); setManualResetPw(''); setManualResetMsg(''); }}
-                            className="flex-1 rounded-lg border border-gray-700 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                            className="flex-1 rounded-lg border border-card-border py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                           >
                             Cancel
                           </button>
@@ -809,30 +853,85 @@ export default function SettingsPage() {
 
           {/* ─── Appearance ─── */}
           {tab === 'appearance' && (
-            <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-white">Appearance</h2>
-              <Field label="Theme">
-                <select value={s.theme} onChange={e => set('theme', e.target.value)} className={selectCls}>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                  <option value="system">System</option>
-                </select>
-              </Field>
-              <Field label="Accent Color">
-                <ColorPick value={s.accent_color} onChange={v => set('accent_color', v)}
-                  colors={['blue', 'green', 'orange', 'purple', 'red']} />
-              </Field>
-              <Field label="Font Size">
-                <select value={s.font_size} onChange={e => set('font_size', e.target.value)} className={selectCls}>
-                  <option value="small">Small</option>
-                  <option value="normal">Normal</option>
-                  <option value="large">Large</option>
-                </select>
-              </Field>
+            <div className="space-y-8 max-w-2xl">
+              <h2 className="text-lg font-semibold text-foreground">Appearance</h2>
+
+              {/* Mode toggle */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Mode</label>
+                <div className="flex gap-2">
+                  {(['dark', 'light', 'system'] as const).map(mode => (
+                    <button key={mode} onClick={() => set('theme', mode)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
+                        s.theme === mode
+                          ? 'bg-fa-accent text-foreground'
+                          : 'bg-card-bg border border-card-border text-muted-foreground hover:text-foreground hover:border-fa-accent/40'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Theme presets */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider">Theme Preset</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {THEME_PRESETS.map(preset => (
+                    <PresetCard
+                      key={preset.id}
+                      preset={preset}
+                      active={s.accent_color === `preset:${preset.id}` || (preset.id === 'midnight-teal' && !s.accent_color?.startsWith('preset:') && !s.accent_color?.startsWith('#'))}
+                      onSelect={() => set('accent_color', `preset:${preset.id}`)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom accent color */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Custom Accent</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={s.accent_color?.startsWith('#') ? s.accent_color : '#06b6d4'}
+                    onChange={e => set('accent_color', e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-card-border bg-transparent cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={s.accent_color?.startsWith('#') ? s.accent_color : ''}
+                    onChange={e => { if (/^#[0-9a-f]{0,6}$/i.test(e.target.value)) set('accent_color', e.target.value); }}
+                    placeholder="#06b6d4"
+                    className={inputCls + ' w-32 font-mono'}
+                  />
+                  <span className="text-xs text-muted-foreground">or pick a preset above</span>
+                </div>
+              </div>
+
+              {/* Font size */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Font Size</label>
+                <div className="flex gap-2">
+                  {(['small', 'normal', 'large'] as const).map(sz => (
+                    <button key={sz} onClick={() => set('font_size', sz)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
+                        s.font_size === sz
+                          ? 'bg-fa-accent text-foreground'
+                          : 'bg-card-bg border border-card-border text-muted-foreground hover:text-foreground hover:border-fa-accent/40'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <Toggle value={s.compact_mode} onChange={v => set('compact_mode', v)} label="Compact Mode" />
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Chart Colors</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Chart Colors</h3>
               <div className="grid grid-cols-3 gap-4">
                 <Field label="Bullish Candle">
                   <input type="color" value={s.chart_up_color} onChange={e => set('chart_up_color', e.target.value)} className="w-full h-9 rounded bg-transparent cursor-pointer" />
@@ -864,8 +963,8 @@ export default function SettingsPage() {
           {/* ─── AI / LLM ─── */}
           {tab === 'llm' && (
             <div className="space-y-6 max-w-xl">
-              <h2 className="text-lg font-semibold text-white">AI Assistant Configuration</h2>
-              <p className="text-sm text-gray-400">Connect your preferred LLM provider to enable the AI trading assistant across all pages.</p>
+              <h2 className="text-lg font-semibold text-foreground">AI Assistant Configuration</h2>
+              <p className="text-sm text-muted-foreground">Connect your preferred LLM provider to enable the AI trading assistant across all pages.</p>
 
               <Field label="Provider">
                 <select value={s.llm_provider} onChange={e => { set('llm_provider', e.target.value); set('llm_model', ''); }} className={selectCls}>
@@ -914,7 +1013,7 @@ export default function SettingsPage() {
                 <textarea value={s.llm_system_prompt} onChange={e => set('llm_system_prompt', e.target.value)}
                   rows={3} placeholder="Additional instructions for the AI assistant..."
                   className={inputCls + ' resize-y'} />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground/60 mt-1">
                   The system prompt is prepended to every AI conversation. Use it to set the assistant&apos;s personality,
                   focus on specific trading strategies, or add constraints (e.g. &quot;Always explain risk before suggesting trades&quot;).
                   Leave blank for the default trading-focused prompt.
@@ -943,8 +1042,8 @@ export default function SettingsPage() {
           {/* ─── Trading Defaults ─── */}
           {tab === 'trading' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-white">Default Trading Parameters</h2>
-              <p className="text-sm text-gray-400">These defaults are pre-filled when creating new backtests or strategies.</p>
+              <h2 className="text-lg font-semibold text-foreground">Default Trading Parameters</h2>
+              <p className="text-sm text-muted-foreground">These defaults are pre-filled when creating new backtests or strategies.</p>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Initial Balance ($)">
@@ -973,8 +1072,8 @@ export default function SettingsPage() {
                   placeholder="M10, H1, H4, D1" className={inputCls} />
               </Field>
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Broker Defaults</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Broker Defaults</h3>
               <Field label="Default Broker">
                 <select value={s.default_broker} onChange={e => set('default_broker', e.target.value)} className={selectCls}>
                   <option value="">None selected</option>
@@ -997,9 +1096,9 @@ export default function SettingsPage() {
               </div>
 
               {/* ─── Broker Connections ─── */}
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Broker Connections</h3>
-              <p className="text-sm text-gray-400">Store broker credentials securely. Connect with one click.</p>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Broker Connections</h3>
+              <p className="text-sm text-muted-foreground">Store broker credentials securely. Connect with one click.</p>
 
               <div className="space-y-3">
                 {[
@@ -1030,12 +1129,12 @@ export default function SettingsPage() {
                   const msg = brokerMsg[broker.id];
 
                   return (
-                    <div key={broker.id} className="bg-[#1a1f2e] rounded-lg border border-gray-800 overflow-hidden">
+                    <div key={broker.id} className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
                       {/* Header row */}
                       <button onClick={() => setExpandedBroker(isExpanded ? null : broker.id)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-800/30 transition-colors">
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-card-bg transition-colors">
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-white">{broker.label}</span>
+                          <span className="text-sm font-medium text-foreground">{broker.label}</span>
                           {cred?.connected && (
                             <span className="flex items-center gap-1 text-xs text-green-400">
                               <span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> Connected
@@ -1045,21 +1144,18 @@ export default function SettingsPage() {
                             <span className="text-xs text-yellow-400">Configured</span>
                           )}
                           {!cred?.configured && (
-                            <span className="text-xs text-gray-500">Not configured</span>
+                            <span className="text-xs text-muted-foreground/60">Not configured</span>
                           )}
                         </div>
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </button>
 
                       {/* Expanded form */}
                       {isExpanded && (
-                        <div className="px-4 pb-4 space-y-3 border-t border-gray-800 pt-3">
+                        <div className="px-4 pb-4 space-y-3 border-t border-card-border pt-3">
                           {/* Show which fields are already stored */}
                           {cred?.configured && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-muted-foreground/60">
                               Stored fields: {cred.fields_set.join(', ')}
                               {' '}— fill in fields below to update
                             </p>
@@ -1148,15 +1244,15 @@ export default function SettingsPage() {
           {/* ─── Data Management ─── */}
           {tab === 'data' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-white">Data Management</h2>
+              <h2 className="text-lg font-semibold text-foreground">Data Management</h2>
 
               {storage && (
-                <div className="bg-[#1a1f2e] rounded-lg p-4 border border-gray-800">
-                  <h3 className="text-sm font-medium text-gray-300 mb-3">Storage Overview</h3>
+                <div className="bg-input-bg rounded-lg p-4 border border-card-border">
+                  <h3 className="text-sm font-medium text-foreground/80 mb-3">Storage Overview</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-400">CSV Files:</span> <span className="text-white font-medium">{storage.total_csvs}</span></div>
-                    <div><span className="text-gray-400">Total Size:</span> <span className="text-white font-medium">{storage.total_size_mb} MB</span></div>
-                    <div className="col-span-2"><span className="text-gray-400">Newest:</span> <span className="text-gray-300 text-xs ml-1">{storage.newest_file || 'None'}</span></div>
+                    <div><span className="text-muted-foreground">CSV Files:</span> <span className="text-foreground font-medium">{storage.total_csvs}</span></div>
+                    <div><span className="text-muted-foreground">Total Size:</span> <span className="text-foreground font-medium">{storage.total_size_mb} MB</span></div>
+                    <div className="col-span-2"><span className="text-muted-foreground">Newest:</span> <span className="text-foreground/80 text-xs ml-1">{storage.newest_file || 'None'}</span></div>
                   </div>
                 </div>
               )}
@@ -1185,17 +1281,17 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Database</h3>
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Database</h3>
               <div className="flex gap-3">
                 <a href={`${API}/api/settings/backup`} className={btnSecondary + ' inline-block text-center no-underline'}>
                   Download Backup
                 </a>
               </div>
 
-              <hr className="border-gray-800" />
+              <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-red-400">Danger Zone</h3>
-              <p className="text-sm text-gray-400">Clear all uploaded CSV data and data source records. This cannot be undone.</p>
+              <p className="text-sm text-muted-foreground">Clear all uploaded CSV data and data source records. This cannot be undone.</p>
               <button onClick={async () => {
                 if (!confirm('Delete ALL uploaded CSV data? This cannot be undone.')) return;
                 await fetch(`${API}/api/settings/clear-data`, { method: 'DELETE', headers: authHeaders() });
@@ -1212,8 +1308,8 @@ export default function SettingsPage() {
           {tab === 'brokers' && (
             <div className="space-y-6 max-w-2xl">
               <div>
-                <h2 className="text-lg font-semibold text-white">Broker Connections</h2>
-                <p className="text-sm text-gray-400 mt-1">
+                <h2 className="text-lg font-semibold text-foreground">Broker Connections</h2>
+                <p className="text-sm text-muted-foreground mt-1">
                   Save API credentials for each broker. Credentials are encrypted at rest.
                   Once saved, you can connect and fetch historical data from the Data page.
                 </p>
@@ -1227,21 +1323,21 @@ export default function SettingsPage() {
                 const form = brokerForms['oanda'] || {};
                 const expanded = expandedBroker === 'oanda';
                 return (
-                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-white">Oanda</span>
+                        <span className="font-semibold text-foreground">Oanda</span>
                         {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
                         {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                        {bc?.fields_set?.length ? <span className="text-xs text-gray-500">{bc.fields_set.join(', ')} set</span> : null}
+                        {bc?.fields_set?.length ? <span className="text-xs text-muted-foreground/60">{bc.fields_set.join(', ')} set</span> : null}
                       </div>
                       <button onClick={() => setExpandedBroker(expanded ? null : 'oanda')}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
                         {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
                       </button>
                     </div>
                     {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                      <div className="space-y-3 pt-2 border-t border-card-border">
                         <Field label="API Key (Personal Access Token)">
                           <input type="password" value={form.api_key || ''} onChange={e => setBrokerField('oanda', 'api_key', e.target.value)}
                             placeholder="••••••••" className={inputCls} />
@@ -1286,21 +1382,21 @@ export default function SettingsPage() {
                 const form = brokerForms['coinbase'] || {};
                 const expanded = expandedBroker === 'coinbase';
                 return (
-                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-white">Coinbase Advanced</span>
+                        <span className="font-semibold text-foreground">Coinbase Advanced</span>
                         {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
                         {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
                       </div>
                       <button onClick={() => setExpandedBroker(expanded ? null : 'coinbase')}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
                         {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
                       </button>
                     </div>
                     {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-gray-700">
-                        <p className="text-xs text-gray-400">Use CDP (Cloud Developer Platform) API keys. Format: organizations/…/apiKeys/…</p>
+                      <div className="space-y-3 pt-2 border-t border-card-border">
+                        <p className="text-xs text-muted-foreground">Use CDP (Cloud Developer Platform) API keys. Format: organizations/…/apiKeys/…</p>
                         <Field label="CDP API Key Name">
                           <input type="text" value={form.api_key || ''} onChange={e => setBrokerField('coinbase', 'api_key', e.target.value)}
                             placeholder="organizations/.../apiKeys/..." className={inputCls} />
@@ -1340,20 +1436,20 @@ export default function SettingsPage() {
                 const form = brokerForms['tradovate'] || {};
                 const expanded = expandedBroker === 'tradovate';
                 return (
-                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-white">Tradovate</span>
+                        <span className="font-semibold text-foreground">Tradovate</span>
                         {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
                         {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
                       </div>
                       <button onClick={() => setExpandedBroker(expanded ? null : 'tradovate')}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
                         {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
                       </button>
                     </div>
                     {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                      <div className="space-y-3 pt-2 border-t border-card-border">
                         <Field label="Username">
                           <input type="text" value={form.username || ''} onChange={e => setBrokerField('tradovate', 'username', e.target.value)}
                             placeholder="your@email.com" className={inputCls} />
@@ -1409,21 +1505,21 @@ export default function SettingsPage() {
                 const form = brokerForms['mt5'] || {};
                 const expanded = expandedBroker === 'mt5';
                 return (
-                  <div className="bg-[#1a1f2e] rounded-xl border border-gray-800 p-4 space-y-3">
+                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-white">MetaTrader 5</span>
+                        <span className="font-semibold text-foreground">MetaTrader 5</span>
                         {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
                         {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                        <span className="text-xs text-gray-600">(Windows-only)</span>
+                        <span className="text-xs text-muted-foreground/40">(Windows-only)</span>
                       </div>
                       <button onClick={() => setExpandedBroker(expanded ? null : 'mt5')}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-gray-700 hover:bg-gray-600">
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
                         {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
                       </button>
                     </div>
                     {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-gray-700">
+                      <div className="space-y-3 pt-2 border-t border-card-border">
                         <Field label="Server">
                           <input type="text" value={form.server || ''} onChange={e => setBrokerField('mt5', 'server', e.target.value)}
                             placeholder="ICMarkets-Demo01" className={inputCls} />
@@ -1460,17 +1556,16 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ─── Platform ─── */}
-          {tab === 'platform' && (
+          {/* ─── Notifications ─── */}
+          {tab === 'notifications' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-white">Platform Configuration</h2>
+              <h2 className="text-lg font-semibold text-foreground">Notification Channels</h2>
+              <p className="text-sm text-muted-foreground">
+                Configure email and/or Telegram to receive alerts for trade executions, backtest completions, and optimization results.
+              </p>
 
-              <Field label="Session Timeout (minutes, 0 = no timeout)">
-                <input type="number" min="0" value={s.session_timeout_minutes}
-                  onChange={e => set('session_timeout_minutes', parseInt(e.target.value) || 0)} className={inputCls} />
-              </Field>
-
-              <h3 className="text-md font-semibold text-white pt-2">Notifications</h3>
+              {/* ── In-app toggles ── */}
+              <h3 className="text-md font-semibold text-foreground pt-2">Event Toggles</h3>
               <div className="space-y-3">
                 <Toggle value={s.notifications?.backtest ?? true}
                   onChange={v => set('notifications', { ...s.notifications, backtest: v })}
@@ -1483,18 +1578,170 @@ export default function SettingsPage() {
                   label="Trade executed" />
               </div>
 
+              {/* ── Email / SMTP ── */}
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Email (SMTP)</h3>
+              <div className="space-y-3">
+                <Field label="Recipient Email">
+                  <input type="email" value={s.notification_email ?? ''}
+                    onChange={e => set('notification_email', e.target.value)}
+                    placeholder="you@example.com" className={inputCls} />
+                </Field>
+                <Field label="SMTP Host">
+                  <input value={s.notification_smtp_host ?? ''}
+                    onChange={e => set('notification_smtp_host', e.target.value)}
+                    placeholder="smtp.gmail.com" className={inputCls} />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="SMTP Port">
+                    <input type="number" value={s.notification_smtp_port ?? 587}
+                      onChange={e => set('notification_smtp_port', parseInt(e.target.value) || 587)}
+                      className={inputCls} />
+                  </Field>
+                  <Field label="Use TLS">
+                    <select value={s.notification_smtp_use_tls ? 'yes' : 'no'}
+                      onChange={e => set('notification_smtp_use_tls', e.target.value === 'yes')}
+                      className={selectCls}>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label="SMTP Username">
+                  <input value={s.notification_smtp_user ?? ''}
+                    onChange={e => set('notification_smtp_user', e.target.value)}
+                    placeholder="you@gmail.com" className={inputCls} />
+                </Field>
+                <Field label="SMTP Password">
+                  <input type="password" value={notifSmtpPass}
+                    onChange={e => setNotifSmtpPass(e.target.value)}
+                    placeholder={s.notification_smtp_pass_set ? '••••••••  (saved)' : 'App password'}
+                    className={inputCls} />
+                </Field>
+                <div className="flex gap-2 items-center">
+                  <button disabled={notifTesting === 'email'} onClick={async () => {
+                    setNotifTesting('email');
+                    setNotifTestResult({});
+                    try {
+                      const resp = await fetch(`${API}/api/settings/test-notification`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({
+                          channel: 'email',
+                          email: s.notification_email,
+                          smtp_host: s.notification_smtp_host,
+                          smtp_port: s.notification_smtp_port,
+                          smtp_user: s.notification_smtp_user,
+                          smtp_pass: notifSmtpPass || undefined,
+                          smtp_use_tls: s.notification_smtp_use_tls,
+                        }),
+                      });
+                      const data = await resp.json();
+                      setNotifTestResult({ email: data.email ? 'Test email sent!' : (data.email_error || 'Failed to send') });
+                    } catch { setNotifTestResult({ email: 'Network error' }); }
+                    setNotifTesting(null);
+                  }} className={btnSecondary}>
+                    {notifTesting === 'email' ? 'Sending...' : 'Send Test Email'}
+                  </button>
+                  {notifTestResult.email && (
+                    <span className={`text-xs ${notifTestResult.email.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
+                      {notifTestResult.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Telegram ── */}
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Telegram</h3>
+              <p className="text-xs text-muted-foreground mb-2">
+                1. Message <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@BotFather</a> to create a bot and get a token.
+                2. Start a chat with your bot, then use <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@userinfobot</a> to get your Chat ID.
+              </p>
+              <div className="space-y-3">
+                <Field label="Bot Token">
+                  <input type="password" value={notifTelegramToken}
+                    onChange={e => setNotifTelegramToken(e.target.value)}
+                    placeholder={s.notification_telegram_bot_token_set ? '••••••••  (saved)' : '123456:ABC-DEF...'}
+                    className={inputCls} />
+                </Field>
+                <Field label="Chat ID">
+                  <input value={s.notification_telegram_chat_id ?? ''}
+                    onChange={e => set('notification_telegram_chat_id', e.target.value)}
+                    placeholder="123456789" className={inputCls} />
+                </Field>
+                <div className="flex gap-2 items-center">
+                  <button disabled={notifTesting === 'telegram'} onClick={async () => {
+                    setNotifTesting('telegram');
+                    setNotifTestResult({});
+                    try {
+                      const resp = await fetch(`${API}/api/settings/test-notification`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({
+                          channel: 'telegram',
+                          bot_token: notifTelegramToken || undefined,
+                          chat_id: s.notification_telegram_chat_id,
+                        }),
+                      });
+                      const data = await resp.json();
+                      setNotifTestResult({ telegram: data.telegram ? 'Test message sent!' : (data.telegram_error || 'Failed to send') });
+                    } catch { setNotifTestResult({ telegram: 'Network error' }); }
+                    setNotifTesting(null);
+                  }} className={btnSecondary}>
+                    {notifTesting === 'telegram' ? 'Sending...' : 'Send Test Message'}
+                  </button>
+                  {notifTestResult.telegram && (
+                    <span className={`text-xs ${notifTestResult.telegram.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
+                      {notifTestResult.telegram}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Save ── */}
+              <div className="pt-4">
+                <button onClick={() => {
+                  const payload: Record<string, unknown> = {
+                    notifications: s.notifications,
+                    notification_email: s.notification_email,
+                    notification_smtp_host: s.notification_smtp_host,
+                    notification_smtp_port: s.notification_smtp_port,
+                    notification_smtp_user: s.notification_smtp_user,
+                    notification_smtp_use_tls: s.notification_smtp_use_tls,
+                    notification_telegram_chat_id: s.notification_telegram_chat_id,
+                  };
+                  if (notifSmtpPass) payload.notification_smtp_pass = notifSmtpPass;
+                  if (notifTelegramToken) payload.notification_telegram_bot_token = notifTelegramToken;
+                  save(payload);
+                  setNotifSmtpPass('');
+                  setNotifTelegramToken('');
+                }} disabled={saving} className={btnPrimary}>
+                  {saving ? 'Saving...' : 'Save Notification Settings'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Platform ─── */}
+          {tab === 'platform' && (
+            <div className="space-y-6 max-w-lg">
+              <h2 className="text-lg font-semibold text-foreground">Platform Configuration</h2>
+
+              <Field label="Session Timeout (minutes, 0 = no timeout)">
+                <input type="number" min="0" value={s.session_timeout_minutes}
+                  onChange={e => set('session_timeout_minutes', parseInt(e.target.value) || 0)} className={inputCls} />
+              </Field>
+
               <div className="pt-2">
                 <button onClick={() => save({
                   session_timeout_minutes: s.session_timeout_minutes,
-                  notifications: s.notifications,
                 })} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Platform Settings'}
                 </button>
               </div>
 
-              <hr className="border-gray-800" />
-              <h3 className="text-md font-semibold text-white">Keyboard Shortcuts</h3>
-              <div className="bg-[#1a1f2e] rounded-lg p-4 border border-gray-800 text-sm space-y-2">
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Keyboard Shortcuts</h3>
+              <div className="bg-input-bg rounded-lg p-4 border border-card-border text-sm space-y-2">
                 {[
                   ['Ctrl + K', 'Open AI Assistant'],
                   ['Ctrl + B', 'Toggle Sidebar'],
@@ -1503,8 +1750,8 @@ export default function SettingsPage() {
                   ['Ctrl + /', 'Keyboard Shortcuts'],
                 ].map(([key, desc]) => (
                   <div key={key} className="flex justify-between">
-                    <span className="text-gray-400">{desc}</span>
-                    <kbd className="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-xs font-mono">{key}</kbd>
+                    <span className="text-muted-foreground">{desc}</span>
+                    <kbd className="px-2 py-0.5 rounded bg-input-bg text-foreground/80 text-xs font-mono">{key}</kbd>
                   </div>
                 ))}
               </div>

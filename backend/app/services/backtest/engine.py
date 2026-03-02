@@ -1,9 +1,17 @@
 """
 Bar-by-bar backtesting engine.
 Processes OHLCV data with strategy rules and produces trade results.
+
+.. deprecated:: Phase 1C
+    This V1 engine is superseded by the V2 unified runner
+    (``v2_adapter.run_unified_backtest``).  The API no longer routes
+    through ``BacktestEngine`` — kept only for backward-compat imports
+    (e.g. the ``Bar`` dataclass) and walk-forward / optimiser scripts
+    that haven't been migrated yet.
 """
 import math
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.services.backtest import indicators as ind
@@ -57,8 +65,11 @@ class BacktestResult:
     largest_loss: float = 0.0
     avg_trade: float = 0.0
     sharpe_ratio: float = 0.0
+    sqn: float = 0.0
     expectancy: float = 0.0
     total_bars: int = 0
+    yearly_pnl: dict = field(default_factory=dict)
+    negative_years: int = 0
 
 
 class BacktestEngine:
@@ -661,5 +672,19 @@ class BacktestEngine:
             avg_ret = sum(returns) / len(returns)
             std_ret = math.sqrt(sum((r - avg_ret) ** 2 for r in returns) / (len(returns) - 1))
             result.sharpe_ratio = (avg_ret / std_ret) * math.sqrt(252) if std_ret > 0 else 0
+            # SQN = (mean / std) * sqrt(N) — Van Tharp formula
+            result.sqn = round((avg_ret / std_ret) * math.sqrt(result.total_trades), 4) if std_ret > 0 else 0.0
+
+        # Yearly PnL breakdown
+        yearly: dict[str, float] = {}
+        for t in self.closed_trades:
+            if t.exit_time:
+                try:
+                    year = str(datetime.fromtimestamp(t.exit_time, tz=timezone.utc).year)
+                    yearly[year] = round(yearly.get(year, 0.0) + t.pnl, 2)
+                except Exception:
+                    pass
+        result.yearly_pnl = yearly
+        result.negative_years = sum(1 for v in yearly.values() if v < 0)
 
         return result

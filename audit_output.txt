@@ -1,0 +1,22 @@
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\page.tsx
+Lines=442 shadcn=0 btn=1 table=2 select=0 input=0 empty=0 styleEq=0 color=0
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\data\page.tsx
+Lines=278 shadcn=0 btn=5 table=1 select=2 input=3 empty=1 styleEq=0 color=0
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\optimize\page.tsx
+Lines=1424 shadcn=0 btn=13 table=4 select=6 input=24 empty=0 styleEq=4 color=0
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\ml\page.tsx
+Lines=892 shadcn=0 btn=13 table=1 select=7 input=10 empty=1 styleEq=2 color=0
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\trading\page.tsx
+Lines=1519 shadcn=0 btn=22 table=1 select=1 input=22 empty=0 styleEq=1 color=10
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\app\knowledge\page.tsx
+Lines=512 shadcn=0 btn=13 table=0 select=0 input=0 empty=1 styleEq=0 color=0
+
+FILE: d:\Doc\DATA\tradeforge\frontend\src\components\AgentPanel.tsx
+Lines=1177 shadcn=0 btn=26 table=1 select=1 input=12 empty=0 styleEq=0 color=0
+

@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/summary")
-def dashboard_summary(
+async def dashboard_summary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -51,31 +51,31 @@ def dashboard_summary(
         broker_connected = True
         broker_name = broker_manager.default_broker
         try:
-            info = default_adapter.get_account_info()
+            info = await default_adapter.get_account_info()
             if info:
                 account = {
-                    "balance": info.get("balance", 0),
-                    "equity": info.get("equity", 0),
-                    "unrealized_pnl": info.get("unrealized_pnl", 0),
-                    "currency": info.get("currency", "USD"),
-                    "open_positions": info.get("open_positions", 0),
-                    "open_orders": info.get("open_orders", 0),
-                    "margin_used": info.get("margin_used", 0),
+                    "balance": getattr(info, "balance", 0) if not isinstance(info, dict) else info.get("balance", 0),
+                    "equity": getattr(info, "equity", 0) if not isinstance(info, dict) else info.get("equity", 0),
+                    "unrealized_pnl": getattr(info, "unrealized_pnl", 0) if not isinstance(info, dict) else info.get("unrealized_pnl", 0),
+                    "currency": getattr(info, "currency", "USD") if not isinstance(info, dict) else info.get("currency", "USD"),
+                    "open_positions": getattr(info, "open_positions", 0) if not isinstance(info, dict) else info.get("open_positions", 0),
+                    "open_orders": getattr(info, "open_orders", 0) if not isinstance(info, dict) else info.get("open_orders", 0),
+                    "margin_used": getattr(info, "margin_used", 0) if not isinstance(info, dict) else info.get("margin_used", 0),
                 }
         except Exception:
             pass
 
         try:
-            raw_positions = default_adapter.get_positions()
+            raw_positions = await default_adapter.get_positions()
             positions = [
                 {
-                    "position_id": str(p.get("position_id", "")),
-                    "symbol": p.get("symbol", ""),
-                    "side": p.get("side", ""),
-                    "size": p.get("size", 0),
-                    "entry_price": p.get("entry_price", 0),
-                    "current_price": p.get("current_price", 0),
-                    "unrealized_pnl": p.get("unrealized_pnl", 0),
+                    "position_id": str(getattr(p, "position_id", "") if not isinstance(p, dict) else p.get("position_id", "")),
+                    "symbol": getattr(p, "symbol", "") if not isinstance(p, dict) else p.get("symbol", ""),
+                    "side": str(getattr(p, "side", "")) if not isinstance(p, dict) else p.get("side", ""),
+                    "size": getattr(p, "size", 0) if not isinstance(p, dict) else p.get("size", 0),
+                    "entry_price": getattr(p, "entry_price", 0) if not isinstance(p, dict) else p.get("entry_price", 0),
+                    "current_price": getattr(p, "current_price", 0) if not isinstance(p, dict) else p.get("current_price", 0),
+                    "unrealized_pnl": getattr(p, "unrealized_pnl", 0) if not isinstance(p, dict) else p.get("unrealized_pnl", 0),
                 }
                 for p in (raw_positions or [])
             ]
@@ -83,7 +83,12 @@ def dashboard_summary(
             pass
 
     # ── Strategies ────────────────────────────────────────
-    total_strategies = db.query(func.count(Strategy.id)).scalar() or 0
+    from sqlalchemy import or_
+    total_strategies = (
+        db.query(func.count(Strategy.id))
+        .filter(or_(Strategy.creator_id == user.id, Strategy.is_system == True))  # noqa: E712
+        .scalar() or 0
+    )
     system_strategies = (
         db.query(func.count(Strategy.id))
         .filter(Strategy.is_system == True)  # noqa: E712

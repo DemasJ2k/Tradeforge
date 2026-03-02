@@ -48,6 +48,14 @@ export interface DataSource {
   file_size_mb: number;
   source_type: string;
   broker_name: string;
+  // Instrument profile
+  pip_value: number;
+  is_jpy_pair: boolean;
+  point_value: number;
+  lot_size: number;
+  default_spread: number;
+  commission_model: string;
+  default_commission: number;
 }
 
 export interface DataSourceList {
@@ -88,17 +96,42 @@ export interface ConditionRow {
   direction: string;  // "long" | "short" | "both"
 }
 
+// Phase 3A — Nested condition tree node
+export interface ConditionGroup {
+  node_type: "condition" | "group" | "if_then_else";
+
+  // Leaf fields (node_type === "condition")
+  left?: string;
+  operator?: string;
+  right?: string;
+  direction?: string;
+  logic?: string;
+
+  // Group fields (node_type === "group")
+  group_logic?: "AND" | "OR";
+  children?: ConditionGroup[];
+
+  // If/Then/Else fields (node_type === "if_then_else")
+  if_cond?: ConditionGroup;
+  then_cond?: ConditionGroup;
+  else_cond?: ConditionGroup;
+}
+
 export interface RiskParams {
   position_size_type: string;
   position_size_value: number;
   stop_loss_type: string;
   stop_loss_value: number;
+  stop_loss_buffer_pips: number;
   take_profit_type: string;
   take_profit_value: number;
   take_profit_2_type: string;
   take_profit_2_value: number;
-  lot_split: number[];
+  take_profit_3_type: string;
+  take_profit_3_value: number;
+  lot_split: number[];        // e.g. [0.5, 0.3, 0.2] for 3-way split
   breakeven_on_tp1: boolean;
+  move_sl_to_tp1_on_tp2: boolean;
   trailing_stop: boolean;
   trailing_stop_type: string;
   trailing_stop_value: number;
@@ -114,6 +147,15 @@ export interface FilterConfig {
   max_volatility: number;
   min_adx: number;
   max_adx: number;
+
+  // Phase 3E — expanded filters
+  session_preset: string;
+  kill_zone_preset: string;
+  trend_filter_indicator: string;
+  trend_filter_period: number;
+  max_spread_pips: number;
+  max_trades_per_day: number;
+  consecutive_loss_limit: number;
 }
 
 export interface SettingsSchemaEntry {
@@ -142,6 +184,7 @@ export interface Strategy {
   file_path?: string | null;
   settings_schema: SettingsSchemaEntry[];
   settings_values: Record<string, unknown>;
+  folder?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -160,6 +203,9 @@ export interface BacktestRequest {
   spread_points: number;
   commission_per_lot: number;
   point_value: number;
+  // V2 options
+  engine_version?: string;
+  datasource_ids?: number[];  // Phase 4: multi-symbol portfolio
 }
 
 export interface TradeResult {
@@ -176,6 +222,10 @@ export interface TradeResult {
   exit_reason: string;
   pnl: number;
   pnl_pct: number;
+  // V2 extra fields
+  commission?: number;
+  slippage?: number;
+  duration_bars?: number;
 }
 
 export interface BacktestStats {
@@ -195,8 +245,11 @@ export interface BacktestStats {
   largest_loss: number;
   avg_trade: number;
   sharpe_ratio: number;
+  sqn: number;
   expectancy: number;
   total_bars: number;
+  yearly_pnl: Record<string, number>;
+  negative_years: number;
 }
 
 export interface BacktestResponse {
@@ -207,6 +260,25 @@ export interface BacktestResponse {
   stats: BacktestStats;
   trades: TradeResult[];
   equity_curve: number[];
+  // V2 extensions
+  engine_version?: string;
+  v2_stats?: Record<string, unknown>;
+  tearsheet?: Record<string, unknown>;
+  elapsed_seconds?: number;
+  // Phase 4 — Portfolio analytics
+  portfolio_analytics?: {
+    per_symbol: Record<string, Record<string, number>>;
+    correlation: {
+      symbols: string[];
+      matrix: number[][];
+      avg_correlation: number;
+    };
+    diversification_ratio: number;
+    allocation_over_time: { bar_index: number; allocations: Record<string, number> }[];
+    num_symbols: number;
+    symbols: string[];
+  };
+  symbols?: string[];
 }
 
 export interface BacktestListItem {
@@ -251,6 +323,15 @@ export interface UserSettings {
   max_storage_mb: number;
   session_timeout_minutes: number;
   notifications: Record<string, boolean>;
+  // Notification channels
+  notification_email: string;
+  notification_smtp_host: string;
+  notification_smtp_port: number;
+  notification_smtp_user: string;
+  notification_smtp_pass_set: boolean;
+  notification_smtp_use_tls: boolean;
+  notification_telegram_bot_token_set: boolean;
+  notification_telegram_chat_id: string;
 }
 
 export interface StorageInfo {
@@ -374,13 +455,27 @@ export interface OptimizationRequest {
   secondary_objective?: string;
   secondary_threshold?: number;
   secondary_operator?: '>=' | '<=';
+  min_trades?: number;
+}
+
+export interface TrialStats {
+  total_trades?: number;
+  win_rate?: number;
+  net_profit?: number;
+  sharpe_ratio?: number;
+  profit_factor?: number;
+  max_drawdown_pct?: number;
+  sqn?: number;
+  negative_years?: number;
+  yearly_pnl?: Record<string, number>;
+  [key: string]: number | Record<string, number> | undefined;
 }
 
 export interface TrialResult {
   trial_number: number;
   params: Record<string, number | string>;
   score: number;
-  stats: Record<string, number>;
+  stats: TrialStats;
 }
 
 export interface OptimizationResponse {

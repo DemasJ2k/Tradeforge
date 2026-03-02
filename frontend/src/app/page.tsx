@@ -5,6 +5,11 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import ChatHelpers from "@/components/ChatHelpers";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface DashboardData {
@@ -74,7 +79,7 @@ const fmt = (n: number, decimals = 2) =>
   n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
 const pnlColor = (n: number) =>
-  n > 0 ? "text-success" : n < 0 ? "text-danger" : "text-muted";
+  n > 0 ? "text-success" : n < 0 ? "text-danger" : "text-muted-foreground";
 
 const statusDot = (status: string) => {
   const colors: Record<string, string> = {
@@ -143,15 +148,16 @@ export default function Dashboard() {
       {brokerAccounts.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {brokerAccounts.map((acct) => (
-            <button
+            <Card
               key={acct.broker}
-              onClick={() => setActiveBroker(acct.broker)}
-              className={`rounded-xl border p-4 text-left transition-all hover:border-accent/60 ${
+              className={`cursor-pointer transition-all hover:border-accent/60 ${
                 acct.broker === activeBroker
                   ? "border-accent/60 bg-accent/5"
-                  : "border-card-border bg-card-bg"
+                  : "bg-card-bg border-card-border"
               }`}
+              onClick={() => setActiveBroker(acct.broker)}
             >
+              <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-green-400" />
@@ -160,14 +166,12 @@ export default function Dashboard() {
                   </span>
                 </div>
                 {acct.broker === activeBroker && (
-                  <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
-                    active
-                  </span>
+                  <Badge variant="secondary" className="text-[10px] text-accent bg-accent/20">active</Badge>
                 )}
               </div>
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted">Balance</span>
+                  <span className="text-muted-foreground">Balance</span>
                   <span className="font-medium text-foreground">
                     {acct.currency} {acct.balance >= 1000
                       ? `${(acct.balance / 1000).toFixed(1)}k`
@@ -175,7 +179,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted">Equity</span>
+                  <span className="text-muted-foreground">Equity</span>
                   <span className="font-medium text-foreground">
                     {acct.currency} {acct.equity >= 1000
                       ? `${(acct.equity / 1000).toFixed(1)}k`
@@ -183,14 +187,15 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted">Open P&L</span>
-                  <span className={`font-medium ${acct.unrealizedPnl > 0 ? "text-green-400" : acct.unrealizedPnl < 0 ? "text-red-400" : "text-muted"}`}>
+                  <span className="text-muted-foreground">Open P&L</span>
+                  <span className={`font-medium ${acct.unrealizedPnl > 0 ? "text-green-400" : acct.unrealizedPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}>
                     {acct.unrealizedPnl >= 0 ? "+" : ""}
                     {acct.unrealizedPnl.toFixed(2)}
                   </span>
                 </div>
               </div>
-            </button>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
@@ -198,28 +203,32 @@ export default function Dashboard() {
       {/* ── Stats Cards ────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
+          icon={<Wallet className="h-4 w-4" />}
           label="Account Balance"
           value={a.broker_connected ? `$${fmt(a.balance)}` : "—"}
           sub={a.broker_connected ? `Equity: $${fmt(a.equity)}` : "Connect broker"}
           color="text-accent"
         />
         <StatCard
+          icon={<TrendingUp className="h-4 w-4" />}
           label="Today's PnL"
           value={t.trades > 0 ? `$${fmt(t.pnl)}` : "$0.00"}
           sub={t.trades > 0 ? `${t.trades} trades · ${t.win_rate}% WR` : "No trades today"}
           color={pnlColor(t.pnl)}
         />
         <StatCard
+          icon={<Activity className="h-4 w-4" />}
           label="Open Positions"
           value={String(a.broker_connected ? a.open_positions : pos.length || 0)}
           sub={a.unrealized_pnl !== 0 ? `Unrealized: $${fmt(a.unrealized_pnl)}` : "No open P&L"}
-          color={a.open_positions > 0 ? "text-success" : "text-muted"}
+          color={a.open_positions > 0 ? "text-success" : "text-muted-foreground"}
         />
         <StatCard
+          icon={<Bot className="h-4 w-4" />}
           label="Running Agents"
           value={`${ag.running}`}
           sub={`${ag.total} total · ${ag.paused} paused`}
-          color={ag.running > 0 ? "text-success" : "text-muted"}
+          color={ag.running > 0 ? "text-success" : "text-muted-foreground"}
         />
       </div>
 
@@ -227,58 +236,66 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Positions / Portfolio */}
-        <div className="lg:col-span-2 rounded-xl border border-card-border bg-card-bg p-5">
+        <Card className="lg:col-span-2 bg-card-bg border-card-border">
+          <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted uppercase tracking-wider">Open Positions</h3>
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Open Positions</h3>
             {a.broker_connected && (
-              <Link href="/trading" className="text-xs text-accent hover:underline">Go to Trading →</Link>
+              <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1">
+                <Link href="/trading">Go to Trading <ArrowRight className="h-3 w-3" /></Link>
+              </Button>
             )}
           </div>
           {pos.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-muted border-b border-card-border">
-                    <th className="text-left py-2 pr-3">Symbol</th>
-                    <th className="text-left py-2 pr-3">Side</th>
-                    <th className="text-right py-2 pr-3">Size</th>
-                    <th className="text-right py-2 pr-3">Entry</th>
-                    <th className="text-right py-2 pr-3">Current</th>
-                    <th className="text-right py-2">P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-card-border">
+                    <TableHead className="text-xs">Symbol</TableHead>
+                    <TableHead className="text-xs">Side</TableHead>
+                    <TableHead className="text-xs text-right">Size</TableHead>
+                    <TableHead className="text-xs text-right">Entry</TableHead>
+                    <TableHead className="text-xs text-right">Current</TableHead>
+                    <TableHead className="text-xs text-right">P&L</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {pos.map((p) => (
-                    <tr key={p.position_id} className="border-b border-card-border/40">
-                      <td className="py-2 pr-3 font-medium">{p.symbol}</td>
-                      <td className={`py-2 pr-3 ${p.side === "BUY" ? "text-success" : "text-danger"}`}>
+                    <TableRow key={p.position_id} className="border-card-border/40">
+                      <TableCell className="font-medium text-xs py-2">{p.symbol}</TableCell>
+                      <TableCell className={`text-xs py-2 ${p.side === "BUY" ? "text-success" : "text-danger"}`}>
                         {p.side}
-                      </td>
-                      <td className="py-2 pr-3 text-right">{p.size}</td>
-                      <td className="py-2 pr-3 text-right">{fmt(p.entry_price, 5)}</td>
-                      <td className="py-2 pr-3 text-right">{fmt(p.current_price, 5)}</td>
-                      <td className={`py-2 text-right font-medium ${pnlColor(p.unrealized_pnl)}`}>
+                      </TableCell>
+                      <TableCell className="text-xs py-2 text-right">{p.size}</TableCell>
+                      <TableCell className="text-xs py-2 text-right">{fmt(p.entry_price, 5)}</TableCell>
+                      <TableCell className="text-xs py-2 text-right">{fmt(p.current_price, 5)}</TableCell>
+                      <TableCell className={`text-xs py-2 text-right font-medium ${pnlColor(p.unrealized_pnl)}`}>
                         ${fmt(p.unrealized_pnl)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : (
-            <div className="flex h-32 items-center justify-center text-sm text-muted">
-              {a.broker_connected ? "No open positions" : "Connect a broker to see positions"}
+            <div className="flex flex-col h-32 items-center justify-center text-center">
+              <Activity className="h-6 w-6 text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {a.broker_connected ? "No open positions" : "Connect a broker to see positions"}
+              </p>
             </div>
           )}
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Quick Stats */}
-        <div className="rounded-xl border border-card-border bg-card-bg p-5 space-y-4">
-          <h3 className="text-sm font-medium text-muted uppercase tracking-wider">Platform Stats</h3>
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5 space-y-4">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Platform Stats</h3>
           <div className="space-y-3 text-sm">
-            <StatRow label="Strategies" value={`${s.user} user · ${s.system} system`} />
-            <StatRow label="Data Sources" value={`${data.data_sources} files`} />
-            <StatRow label="Backtests Run" value={`${data.backtests.total}`} />
+            <StatRow icon={<Zap className="h-3.5 w-3.5 text-accent" />} label="Strategies" value={`${s.user} user · ${s.system} system`} />
+            <StatRow icon={<Database className="h-3.5 w-3.5 text-accent" />} label="Data Sources" value={`${data.data_sources} files`} />
+            <StatRow icon={<BarChart3 className="h-3.5 w-3.5 text-accent" />} label="Backtests Run" value={`${data.backtests.total}`} />
             <StatRow
               label="Last Backtest"
               value={data.backtests.last_run
@@ -286,73 +303,86 @@ export default function Dashboard() {
                 : "—"
               }
             />
-            <StatRow label="Agents (Paper)" value={`${ag.paper}`} />
+            <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Agents (Paper)" value={`${ag.paper}`} />
           </div>
-          <div className="pt-2 border-t border-card-border space-y-2">
-            <Link href="/strategies" className="block text-xs text-accent hover:underline">+ New Strategy</Link>
-            <Link href="/backtest" className="block text-xs text-accent hover:underline">+ Run Backtest</Link>
-            <Link href="/trading" className="block text-xs text-accent hover:underline">→ Go to Trading</Link>
+          <div className="pt-2 border-t border-card-border space-y-1.5">
+            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
+              <Link href="/strategies"><Plus className="h-3 w-3" /> New Strategy</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
+              <Link href="/backtest"><BarChart3 className="h-3 w-3" /> Run Backtest</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
+              <Link href="/trading"><ArrowRight className="h-3 w-3" /> Go to Trading</Link>
+            </Button>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Bottom Row: Trades + Agents ────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Recent Trades */}
-        <div className="rounded-xl border border-card-border bg-card-bg p-5">
-          <h3 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">Recent Trades</h3>
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">Recent Trades</h3>
           {trades.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-muted border-b border-card-border">
-                    <th className="text-left py-2 pr-2">Symbol</th>
-                    <th className="text-left py-2 pr-2">Dir</th>
-                    <th className="text-right py-2 pr-2">Size</th>
-                    <th className="text-right py-2 pr-2">P&L</th>
-                    <th className="text-left py-2 pr-2">Source</th>
-                    <th className="text-left py-2">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-card-border">
+                    <TableHead className="text-xs">Symbol</TableHead>
+                    <TableHead className="text-xs">Dir</TableHead>
+                    <TableHead className="text-xs text-right">Size</TableHead>
+                    <TableHead className="text-xs text-right">P&L</TableHead>
+                    <TableHead className="text-xs">Source</TableHead>
+                    <TableHead className="text-xs">Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {trades.map((tr) => (
-                    <tr key={`${tr.source}-${tr.id}`} className="border-b border-card-border/40">
-                      <td className="py-1.5 pr-2 font-medium">{tr.symbol}</td>
-                      <td className={`py-1.5 pr-2 ${tr.direction === "BUY" ? "text-success" : "text-danger"}`}>
+                    <TableRow key={`${tr.source}-${tr.id}`} className="border-card-border/40">
+                      <TableCell className="font-medium text-xs py-1.5">{tr.symbol}</TableCell>
+                      <TableCell className={`text-xs py-1.5 ${tr.direction === "BUY" ? "text-success" : "text-danger"}`}>
                         {tr.direction}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right">{tr.lot_size}</td>
-                      <td className={`py-1.5 pr-2 text-right font-medium ${pnlColor(tr.pnl)}`}>
+                      </TableCell>
+                      <TableCell className="text-xs py-1.5 text-right">{tr.lot_size}</TableCell>
+                      <TableCell className={`text-xs py-1.5 text-right font-medium ${pnlColor(tr.pnl)}`}>
                         ${fmt(tr.pnl)}
-                      </td>
-                      <td className="py-1.5 pr-2">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${
+                      </TableCell>
+                      <TableCell className="text-xs py-1.5">
+                        <Badge variant="secondary" className={`text-[10px] ${
                           tr.source === "agent" ? "bg-accent/20 text-accent" : "bg-success/20 text-success"
                         }`}>
                           {tr.source}
-                        </span>
-                      </td>
-                      <td className="py-1.5 text-muted">
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs py-1.5 text-muted-foreground">
                         {tr.time ? new Date(tr.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : (
-            <div className="flex h-32 items-center justify-center text-sm text-muted">
-              No trades yet
+            <div className="flex flex-col h-32 items-center justify-center text-center">
+              <TrendingUp className="h-6 w-6 text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">No trades yet</p>
             </div>
           )}
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Active Agents */}
-        <div className="rounded-xl border border-card-border bg-card-bg p-5">
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted uppercase tracking-wider">Trading Agents</h3>
-            <Link href="/trading" className="text-xs text-accent hover:underline">Manage →</Link>
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Trading Agents</h3>
+            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1">
+              <Link href="/trading">Manage <ArrowRight className="h-3 w-3" /></Link>
+            </Button>
           </div>
           {ag.items.length > 0 ? (
             <div className="space-y-2">
@@ -365,34 +395,34 @@ export default function Dashboard() {
                     <span className={`inline-block h-2 w-2 rounded-full ${statusDot(agent.status)}`} />
                     <span className="text-sm font-medium">{agent.name}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{agent.symbol}</span>
                     <span>{agent.timeframe}</span>
-                    <span className={`rounded px-1.5 py-0.5 ${
+                    <Badge variant="secondary" className={`text-[10px] ${
                       agent.mode === "paper" ? "bg-yellow-500/20 text-yellow-400" : "bg-accent/20 text-accent"
                     }`}>
                       {agent.mode}
-                    </span>
-                    <span className={`font-medium ${
-                      agent.status === "running" ? "text-success" : agent.status === "error" ? "text-danger" : "text-muted"
+                    </Badge>
+                    <Badge variant="outline" className={`text-[10px] ${
+                      agent.status === "running" ? "text-success border-success/30" : agent.status === "error" ? "text-danger border-danger/30" : "text-muted-foreground"
                     }`}>
                       {agent.status}
-                    </span>
+                    </Badge>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex h-32 items-center justify-center text-sm text-muted">
-              <div className="text-center">
-                <p>No agents created yet</p>
-                <Link href="/trading" className="text-accent hover:underline mt-1 inline-block">
-                  Create your first agent →
-                </Link>
-              </div>
+            <div className="flex flex-col h-32 items-center justify-center text-center">
+              <Bot className="h-6 w-6 text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">No agents created yet</p>
+              <Button variant="ghost" size="sm" asChild className="text-accent mt-1 gap-1">
+                <Link href="/trading"><Plus className="h-3 w-3" /> Create your first agent</Link>
+              </Button>
             </div>
           )}
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       <ChatHelpers />
@@ -401,20 +431,28 @@ export default function Dashboard() {
 }
 
 /* ─── Sub-components ───────────────────────────────────── */
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+function StatCard({ label, value, sub, color, icon }: { label: string; value: string; sub: string; color: string; icon?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-card-border bg-card-bg p-5">
-      <p className="text-xs text-muted mb-1">{label}</p>
-      <p className={`text-2xl font-semibold ${color}`}>{value}</p>
-      <p className="text-xs text-muted mt-1">{sub}</p>
-    </div>
+    <Card className="bg-card-bg border-card-border">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          {icon && <span className="text-muted-foreground/50">{icon}</span>}
+        </div>
+        <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+        <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
+function StatRow({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-muted">{label}</span>
+    <div className="flex items-center justify-between">
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        {icon && <span className="text-muted-foreground/60">{icon}</span>}
+        {label}
+      </span>
       <span className="font-medium">{value}</span>
     </div>
   );
@@ -426,16 +464,22 @@ function DashSkeleton() {
       <div className="h-7 w-32 rounded bg-card-border/30" />
       <div className="grid grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="rounded-xl border border-card-border bg-card-bg p-5 space-y-2">
-            <div className="h-3 w-20 rounded bg-card-border/30" />
-            <div className="h-7 w-24 rounded bg-card-border/30" />
-            <div className="h-3 w-28 rounded bg-card-border/30" />
-          </div>
+          <Card key={i} className="bg-card-bg border-card-border">
+            <CardContent className="p-5 space-y-2">
+              <div className="h-3 w-20 rounded bg-card-border/30" />
+              <div className="h-7 w-24 rounded bg-card-border/30" />
+              <div className="h-3 w-28 rounded bg-card-border/30" />
+            </CardContent>
+          </Card>
         ))}
       </div>
       <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 rounded-xl border border-card-border bg-card-bg p-5 h-48" />
-        <div className="rounded-xl border border-card-border bg-card-bg p-5 h-48" />
+        <Card className="col-span-2 bg-card-bg border-card-border">
+          <CardContent className="p-5 h-48" />
+        </Card>
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5 h-48" />
+        </Card>
       </div>
     </div>
   );

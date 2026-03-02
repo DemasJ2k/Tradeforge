@@ -5,7 +5,15 @@ import { api } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
 import AgentPanel from "@/components/AgentPanel";
 import CandlestickChart, { type ChartHandle, type CandleInput } from "@/components/CandlestickChart";
+import StrategyOverlayPanel from "@/components/StrategyOverlayPanel";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { ChevronDown, Radio, RefreshCw } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useSettings } from "@/hooks/useSettings";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
@@ -17,12 +25,13 @@ import type {
   PlaceOrderRequest,
   BrokerListResponse,
   TradeHistory,
+  DataSource,
 } from "@/types";
 
 /* ── tiny helpers ─────────────────────────────────── */
 
 const pnlColor = (v: number) =>
-  v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-muted";
+  v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-muted-foreground";
 
 const fmt = (n: number, d = 2) => n.toFixed(d);
 const fmtK = (n: number) =>
@@ -141,6 +150,19 @@ export default function TradingPage() {
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
+
+  // ── Strategy Overlay datasource state (Phase 5A) ──
+  const [overlayDatasourceId, setOverlayDatasourceId] = useState<number | null>(null);
+  const [overlayDatasources, setOverlayDatasources] = useState<DataSource[]>([]);
+  useEffect(() => {
+    api.get<DataSource[] | { items: DataSource[] }>("/api/data/sources")
+      .then((data) => {
+        const arr = Array.isArray(data) ? data : (data as { items: DataSource[] }).items ?? [];
+        setOverlayDatasources(arr);
+        if (arr.length > 0) setOverlayDatasourceId(arr[0].id);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Indicator state ──
   const [indMA, setIndMA] = useState(false);
@@ -645,27 +667,26 @@ export default function TradingPage() {
                 <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
                 {brokerName}
               </span>
-              <button
+              <Button
                 onClick={() => { setShowOrder(true); setOrderBroker(activeBroker ?? brokerAccounts.find(b => b.connected)?.broker ?? ""); }}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/80 transition-colors"
               >
                 New Order
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleDisconnect}
-                className="rounded-lg border border-red-500/40 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                className="border-red-500/40 text-red-400 hover:bg-red-500/10"
               >
                 Disconnect
-              </button>
+              </Button>
             </>
           )}
           {!connected && (
-            <button
+            <Button
               onClick={() => setShowConnect(true)}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/80 transition-colors"
             >
               Connect Broker
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -702,23 +723,23 @@ export default function TradingPage() {
                 />
                 <button
                   onMouseDown={(e) => { e.preventDefault(); setSymbolDropdownOpen((o) => !o); symbolInputRef.current?.focus(); }}
-                  className="pr-2 text-muted hover:text-foreground"
+                  className="pr-2 text-muted-foreground hover:text-foreground"
                 >
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  <ChevronDown className="h-3 w-3" />
                 </button>
               </div>
               {symbolDropdownOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-card-border bg-card-bg shadow-xl">
                   {recentSymbols.length > 0 && symbolInput === "" && (
                     <>
-                      <div className="px-3 py-1 text-xs text-muted font-medium border-b border-card-border">Recent</div>
+                      <div className="px-3 py-1 text-xs text-muted-foreground font-medium border-b border-card-border">Recent</div>
                       {recentSymbols.map(s => (
                         <button key={`recent-${s}`} onMouseDown={() => applySymbol(s)}
                           className="w-full text-left px-3 py-1.5 text-sm hover:bg-card-border transition-colors text-accent">
                           🕐 {s}
                         </button>
                       ))}
-                      <div className="px-3 py-1 text-xs text-muted font-medium border-b border-card-border">All Symbols</div>
+                      <div className="px-3 py-1 text-xs text-muted-foreground font-medium border-b border-card-border">All Symbols</div>
                     </>
                   )}
                   {filteredSymbols.map((s) => (
@@ -751,7 +772,7 @@ export default function TradingPage() {
                   className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
                     chartTimeframe === tf
                       ? "bg-accent text-black"
-                      : "text-muted hover:text-foreground hover:bg-card-border/50"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card-border/50"
                   }`}
                 >
                   {tf}
@@ -763,7 +784,7 @@ export default function TradingPage() {
             <select
               value={chartBroker}
               onChange={e => setChartBroker(e.target.value)}
-              className="ml-2 rounded px-2 py-1 text-xs font-medium bg-[#1a1f2e] border border-gray-700 text-gray-200 focus:outline-none focus:border-blue-500"
+              className="ml-2 rounded px-2 py-1 text-xs font-medium bg-input-bg border border-card-border text-foreground/90 focus:outline-none focus:border-blue-500"
             >
               <option value="mt5">MT5 Live</option>
               <option value="oanda">Oanda</option>
@@ -778,14 +799,14 @@ export default function TradingPage() {
             {currentTick && chartMode === "live" && (
               <div className="flex items-center gap-2 text-xs font-mono">
                 {/* Symbol badge */}
-                <span className="text-muted font-sans mr-0.5">{currentTick.symbol}</span>
+                <span className="text-muted-foreground font-sans mr-0.5">{currentTick.symbol}</span>
 
                 {/* Bid */}
-                <span className="text-muted font-sans">B</span>
+                <span className="text-muted-foreground font-sans">B</span>
                 <span className="text-green-400">{fmtTick(currentTick.bid, currentTick.spread)}</span>
 
                 {/* Ask */}
-                <span className="text-muted font-sans">A</span>
+                <span className="text-muted-foreground font-sans">A</span>
                 <span className="text-red-400">{fmtTick(currentTick.ask, currentTick.spread)}</span>
 
                 {/* Spread */}
@@ -837,12 +858,12 @@ export default function TradingPage() {
 
         {/* Indicator toggle bar */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-card-border bg-background/50">
-          <span className="text-xs text-muted mr-1">Indicators:</span>
+          <span className="text-xs text-muted-foreground mr-1">Indicators:</span>
           {/* MA toggle */}
           <button
             onClick={() => setIndMA(v => !v)}
             className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indMA ? "bg-amber-500/15 border-amber-500/40 text-amber-400" : "border-card-border text-muted hover:text-foreground"
+              indMA ? "bg-amber-500/15 border-amber-500/40 text-amber-400" : "border-card-border text-muted-foreground hover:text-foreground"
             }`}
           >
             MA
@@ -859,7 +880,7 @@ export default function TradingPage() {
           <button
             onClick={() => setIndEMA(v => !v)}
             className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indEMA ? "bg-purple-500/15 border-purple-500/40 text-purple-400" : "border-card-border text-muted hover:text-foreground"
+              indEMA ? "bg-purple-500/15 border-purple-500/40 text-purple-400" : "border-card-border text-muted-foreground hover:text-foreground"
             }`}
           >
             EMA
@@ -876,7 +897,7 @@ export default function TradingPage() {
           <button
             onClick={() => setIndMACD(v => !v)}
             className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indMACD ? "bg-blue-500/15 border-blue-500/40 text-blue-400" : "border-card-border text-muted hover:text-foreground"
+              indMACD ? "bg-blue-500/15 border-blue-500/40 text-fa-accent" : "border-card-border text-muted-foreground hover:text-foreground"
             }`}
           >
             MACD
@@ -884,12 +905,13 @@ export default function TradingPage() {
         </div>
 
         {/* Chart */}
+        <div className="relative">
         {chartLoading ? (
-          <div className="flex h-[400px] items-center justify-center text-sm text-muted">
+          <div className="flex h-[400px] items-center justify-center text-sm text-muted-foreground">
             Loading chart data...
           </div>
         ) : chartBars.length === 0 ? (
-          <div className="flex h-[400px] flex-col items-center justify-center text-sm text-muted gap-2">
+          <div className="flex h-[400px] flex-col items-center justify-center text-sm text-muted-foreground gap-2">
             <span>
               {chartBroker === "mt5" && !connected
                 ? "Connect MT5 broker to view live chart data"
@@ -900,12 +922,12 @@ export default function TradingPage() {
                     : "No chart data available — try switching to a different symbol or data source"}
             </span>
             {chartBroker === "mt5" && !connected && (
-              <button
+              <Button variant="outline" size="sm"
                 onClick={() => setShowConnect(true)}
-                className="rounded-lg bg-accent/20 border border-accent/30 px-4 py-1.5 text-xs text-accent hover:bg-accent/30 transition-colors"
+                className="border-accent/30 bg-accent/20 text-accent hover:bg-accent/30"
               >
                 Connect Broker
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -920,12 +942,18 @@ export default function TradingPage() {
             indicators={{ ma: indMA, maLen: indMALen, ema: indEMA, emaLen: indEMALen }}
           />
         )}
+        {/* Strategy Overlay Panel (Phase 5A) */}
+        <StrategyOverlayPanel
+          chart={chartRef.current?.getChart() ?? null}
+          datasourceId={overlayDatasourceId}
+        />
+        </div>
 
         {/* MACD pane */}
         {indMACD && chartBars.length >= 26 && (
           <div className="border-t border-card-border">
-            <div className="px-3 py-1 text-xs text-muted flex items-center gap-2">
-              <span className="text-blue-400 font-medium">MACD</span>
+            <div className="px-3 py-1 text-xs text-muted-foreground flex items-center gap-2">
+              <span className="text-fa-accent font-medium">MACD</span>
               <span className="text-zinc-600">(12, 26, 9)</span>
               <span className="inline-block h-2 w-2 rounded-sm bg-blue-500/60" /> MACD
               <span className="inline-block h-2 w-2 rounded-sm bg-amber-500/60" /> Signal
@@ -937,13 +965,15 @@ export default function TradingPage() {
       </div>
 
       {/* ── Connect Modal ──────────────────────── */}
-      {showConnect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-xl border border-card-border bg-[#1a1a2e] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold">Connect Broker</h3>
+      <Dialog open={showConnect} onOpenChange={setShowConnect}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Connect Broker</DialogTitle>
+            <DialogDescription>Enter your broker credentials to connect.</DialogDescription>
+          </DialogHeader>
 
             <div>
-              <label className="block text-xs text-muted mb-1">Broker</label>
+              <Label className="text-xs text-muted-foreground mb-1">Broker</Label>
               <select
                 value={cBroker}
                 onChange={(e) => { setCBroker(e.target.value); setCApiKey(""); setCAccountId(""); setCExtra({}); }}
@@ -960,12 +990,12 @@ export default function TradingPage() {
             {cBroker === "oanda" && (
               <>
                 <div>
-                  <label className="block text-xs text-muted mb-1">API Key (Token)</label>
+                  <Label className="text-xs text-muted-foreground mb-1">API Key (Token)</Label>
                   <input type="password" value={cApiKey} onChange={(e) => setCApiKey(e.target.value)}
                     placeholder="Your Oanda API token" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Account ID</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Account ID</Label>
                   <input value={cAccountId} onChange={(e) => setCAccountId(e.target.value)}
                     placeholder="e.g. 101-011-12345678-001" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
@@ -980,16 +1010,16 @@ export default function TradingPage() {
             {cBroker === "coinbase" && (
               <>
                 <div>
-                  <label className="block text-xs text-muted mb-1">API Key</label>
+                  <Label className="text-xs text-muted-foreground mb-1">API Key</Label>
                   <input type="password" value={cApiKey} onChange={(e) => setCApiKey(e.target.value)}
                     placeholder="Coinbase API key" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">API Secret</label>
+                  <Label className="text-xs text-muted-foreground mb-1">API Secret</Label>
                   <input type="password" value={cExtra.api_secret || ""} onChange={(e) => setCExtra({ ...cExtra, api_secret: e.target.value })}
                     placeholder="Coinbase API secret" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
-                <p className="text-xs text-muted">Create API keys in Coinbase → Settings → API</p>
+                <p className="text-xs text-muted-foreground">Create API keys in Coinbase → Settings → API</p>
               </>
             )}
 
@@ -997,21 +1027,21 @@ export default function TradingPage() {
             {cBroker === "mt5" && (
               <>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Server</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Server</Label>
                   <input value={cExtra.server || ""} onChange={(e) => setCExtra({ ...cExtra, server: e.target.value })}
                     placeholder="e.g. MetaQuotes-Demo" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Login (Account Number)</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Login (Account Number)</Label>
                   <input value={cExtra.login || ""} onChange={(e) => setCExtra({ ...cExtra, login: e.target.value })}
                     placeholder="e.g. 12345678" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Password</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Password</Label>
                   <input type="password" value={cApiKey} onChange={(e) => setCApiKey(e.target.value)}
                     placeholder="MT5 account password" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
-                <p className="text-xs text-muted">MetaTrader 5 terminal must be installed and running on this machine.</p>
+                <p className="text-xs text-muted-foreground">MetaTrader 5 terminal must be installed and running on this machine.</p>
               </>
             )}
 
@@ -1019,29 +1049,29 @@ export default function TradingPage() {
             {cBroker === "tradovate" && (
               <>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Username</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Username</Label>
                   <input value={cExtra.username || ""} onChange={(e) => setCExtra({ ...cExtra, username: e.target.value })}
                     placeholder="Tradovate username" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Password</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Password</Label>
                   <input type="password" value={cApiKey} onChange={(e) => setCApiKey(e.target.value)}
                     placeholder="Tradovate password" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-muted mb-1">App ID</label>
+                    <Label className="text-xs text-muted-foreground mb-1">App ID</Label>
                     <input value={cExtra.app_id || ""} onChange={(e) => setCExtra({ ...cExtra, app_id: e.target.value })}
                       placeholder="App ID" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-muted mb-1">Client ID</label>
+                    <Label className="text-xs text-muted-foreground mb-1">Client ID</Label>
                     <input value={cExtra.cid || ""} onChange={(e) => setCExtra({ ...cExtra, cid: e.target.value })}
                       placeholder="Client ID" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-muted mb-1">Client Secret</label>
+                  <Label className="text-xs text-muted-foreground mb-1">Client Secret</Label>
                   <input type="password" value={cAccountId} onChange={(e) => setCAccountId(e.target.value)}
                     placeholder="Client secret" className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" />
                 </div>
@@ -1053,32 +1083,31 @@ export default function TradingPage() {
             )}
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
+              <Button variant="outline"
                 onClick={() => setShowConnect(false)}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm text-muted hover:text-foreground"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleConnect}
                 disabled={connecting || !cApiKey}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/80 disabled:opacity-40"
               >
                 {connecting ? "Connecting..." : "Connect"}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Order Modal ────────────────────────── */}
-      {showOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-xl border border-card-border bg-[#1a1a2e] p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Place Order</h3>
+      <Dialog open={showOrder} onOpenChange={setShowOrder}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Place Order</DialogTitle>
+            <DialogDescription>Configure and submit a new order.</DialogDescription>
+          </DialogHeader>
 
             <div>
-              <label className="block text-xs text-muted mb-1.5">Broker</label>
+              <Label className="text-xs text-muted-foreground mb-1">Broker</Label>
               <select value={orderBroker} onChange={e => setOrderBroker(e.target.value)}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
                 {brokerAccounts.filter(b => b.connected).map(b => (
@@ -1088,7 +1117,7 @@ export default function TradingPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-muted mb-1">Symbol</label>
+              <Label className="text-xs text-muted-foreground mb-1">Symbol</Label>
               <input
                 value={oSymbol}
                 onChange={(e) => setOSymbol(e.target.value)}
@@ -1099,14 +1128,14 @@ export default function TradingPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-muted mb-1">Side</label>
+                <Label className="text-xs text-muted-foreground mb-1">Side</Label>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setOSide("BUY")}
                     className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
                       oSide === "BUY"
                         ? "bg-green-500/20 text-green-400 border border-green-500/40"
-                        : "border border-card-border text-muted hover:text-foreground"
+                        : "border border-card-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     BUY
@@ -1116,7 +1145,7 @@ export default function TradingPage() {
                     className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
                       oSide === "SELL"
                         ? "bg-red-500/20 text-red-400 border border-red-500/40"
-                        : "border border-card-border text-muted hover:text-foreground"
+                        : "border border-card-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     SELL
@@ -1124,7 +1153,7 @@ export default function TradingPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-muted mb-1">Size (units)</label>
+                <Label className="text-xs text-muted-foreground mb-1">Size (units)</Label>
                 <input
                   type="number"
                   value={oSize}
@@ -1135,7 +1164,7 @@ export default function TradingPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-muted mb-1">Order Type</label>
+              <Label className="text-xs text-muted-foreground mb-1">Order Type</Label>
               <select
                 value={oType}
                 onChange={(e) => setOType(e.target.value)}
@@ -1149,7 +1178,7 @@ export default function TradingPage() {
 
             {oType !== "MARKET" && (
               <div>
-                <label className="block text-xs text-muted mb-1">Price</label>
+                <Label className="text-xs text-muted-foreground mb-1">Price</Label>
                 <input
                   type="number"
                   step="any"
@@ -1162,7 +1191,7 @@ export default function TradingPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-muted mb-1">Stop Loss</label>
+                <Label className="text-xs text-muted-foreground mb-1">Stop Loss</Label>
                 <input
                   type="number"
                   step="any"
@@ -1173,7 +1202,7 @@ export default function TradingPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-muted mb-1">Take Profit</label>
+                <Label className="text-xs text-muted-foreground mb-1">Take Profit</Label>
                 <input
                   type="number"
                   step="any"
@@ -1186,47 +1215,46 @@ export default function TradingPage() {
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
+              <Button variant="outline"
                 onClick={() => setShowOrder(false)}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm text-muted hover:text-foreground"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={placeOrder}
                 disabled={placing || !oSymbol || !oSize}
-                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-40 transition-colors ${
+                className={`${
                   oSide === "BUY"
                     ? "bg-green-600 hover:bg-green-700"
                     : "bg-red-600 hover:bg-red-700"
                 }`}
               >
                 {placing ? "Placing..." : `${oSide} ${oSymbol}`}
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Algo Agents Panel ────────────────── */}
       <AgentPanel />
 
       {/* ── Not Connected State ────────────────── */}
       {!connected && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-card-border bg-card-bg p-16 text-center">
-          <div className="text-4xl mb-4">📡</div>
+        <Card className="border-card-border bg-card-bg p-16 text-center">
+          <CardContent className="flex flex-col items-center justify-center p-0">
+          <Radio className="w-10 h-10 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium mb-2">No Broker Connected</h3>
-          <p className="text-sm text-muted mb-6 max-w-md">
+          <p className="text-sm text-muted-foreground mb-6 max-w-md">
             Connect to a broker to see live positions, place orders, and monitor your
             account in real time.
           </p>
-          <button
+          <Button
             onClick={() => setShowConnect(true)}
-            className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white hover:bg-accent/80 transition-colors"
           >
             Connect Broker
-          </button>
-        </div>
+          </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Connected Dashboard ────────────────── */}
@@ -1234,54 +1262,61 @@ export default function TradingPage() {
         <>
           {/* Account Summary Cards */}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div className="rounded-xl border border-card-border bg-card-bg p-4">
-              <div className="text-xs text-muted mb-1">Balance</div>
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">Balance</div>
               <div className="text-lg font-semibold">
                 {account.currency} {fmtK(account.balance)}
               </div>
-            </div>
-            <div className="rounded-xl border border-card-border bg-card-bg p-4">
-              <div className="text-xs text-muted mb-1">Equity</div>
+              </CardContent>
+            </Card>
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">Equity</div>
               <div className="text-lg font-semibold">
                 {account.currency} {fmtK(account.equity)}
               </div>
-            </div>
-            <div className="rounded-xl border border-card-border bg-card-bg p-4">
-              <div className="text-xs text-muted mb-1">Unrealized P&L</div>
+              </CardContent>
+            </Card>
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">Unrealized P&L</div>
               <div className={`text-lg font-semibold ${pnlColor(account.unrealized_pnl)}`}>
                 {account.unrealized_pnl >= 0 ? "+" : ""}
                 {fmt(account.unrealized_pnl)}
               </div>
-            </div>
-            <div className="rounded-xl border border-card-border bg-card-bg p-4">
-              <div className="text-xs text-muted mb-1">Margin Used / Free</div>
+              </CardContent>
+            </Card>
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground mb-1">Margin Used / Free</div>
               <div className="text-lg font-semibold">
                 {fmtK(account.margin_used)}{" "}
-                <span className="text-xs text-muted font-normal">
+                <span className="text-xs text-muted-foreground font-normal">
                   / {fmtK(account.margin_available)}
                 </span>
               </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Positions & Orders */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Open Positions */}
-            <div className="rounded-xl border border-card-border bg-card-bg p-5">
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-muted">
+                <h3 className="text-sm font-medium text-muted-foreground">
                   Open Positions ({positions.length})
                 </h3>
-                <button
-                  onClick={refreshData}
-                  className="text-xs text-muted hover:text-accent transition-colors"
-                >
-                  Refresh
-                </button>
+                <Button variant="ghost" size="sm" onClick={refreshData}
+                  className="text-xs text-muted-foreground hover:text-accent h-auto py-1">
+                  <RefreshCw className="w-3 h-3 mr-1" />Refresh
+                </Button>
               </div>
 
               {positions.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-sm text-muted">
+                <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
                   No open positions
                 </div>
               ) : (
@@ -1292,18 +1327,14 @@ export default function TradingPage() {
                       className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3"
                     >
                       <div className="flex items-center gap-3">
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs font-medium ${
-                            p.side === "LONG"
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-red-500/20 text-red-400"
-                          }`}
+                        <Badge variant="secondary"
+                          className={`${p.side === "LONG" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
                         >
                           {p.side}
-                        </span>
+                        </Badge>
                         <div>
                           <div className="text-sm font-medium">{p.symbol}</div>
-                          <div className="text-xs text-muted">
+                          <div className="text-xs text-muted-foreground">
                             {p.size} units @ {fmt(p.entry_price, 5)}
                           </div>
                         </div>
@@ -1314,32 +1345,34 @@ export default function TradingPage() {
                             {p.unrealized_pnl >= 0 ? "+" : ""}
                             {fmt(p.unrealized_pnl)}
                           </div>
-                          <div className="text-xs text-muted">
+                          <div className="text-xs text-muted-foreground">
                             {fmt(p.current_price, 5)}
                           </div>
                         </div>
-                        <button
+                        <Button variant="outline" size="sm"
                           onClick={() => closePosition(p.position_id)}
-                          className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
                           title="Close position"
                         >
                           Close
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Pending Orders */}
-            <div className="rounded-xl border border-card-border bg-card-bg p-5">
-              <h3 className="text-sm font-medium text-muted mb-4">
+            <Card className="border-card-border bg-card-bg">
+              <CardContent className="p-5">
+              <h3 className="text-sm font-medium text-muted-foreground mb-4">
                 Pending Orders ({orders.length})
               </h3>
 
               {orders.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-sm text-muted">
+                <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
                   No pending orders
                 </div>
               ) : (
@@ -1350,58 +1383,56 @@ export default function TradingPage() {
                       className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3"
                     >
                       <div className="flex items-center gap-3">
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs font-medium ${
-                            o.side === "BUY"
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-red-500/20 text-red-400"
-                          }`}
+                        <Badge variant="secondary"
+                          className={`${o.side === "BUY" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
                         >
                           {o.side}
-                        </span>
+                        </Badge>
                         <div>
                           <div className="text-sm font-medium">{o.symbol}</div>
-                          <div className="text-xs text-muted">
+                          <div className="text-xs text-muted-foreground">
                             {o.order_type} — {o.size} units
                             {o.price ? ` @ ${fmt(o.price, 5)}` : ""}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="text-right text-xs text-muted">
+                        <div className="text-right text-xs text-muted-foreground">
                           {o.stop_loss && <div>SL: {fmt(o.stop_loss, 5)}</div>}
                           {o.take_profit && <div>TP: {fmt(o.take_profit, 5)}</div>}
                         </div>
-                        <button
+                        <Button variant="outline" size="sm"
                           onClick={() => cancelOrder(o.order_id)}
-                          className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Risk Monitor */}
-          <div className="rounded-xl border border-card-border bg-card-bg p-5">
-            <h3 className="text-sm font-medium text-muted mb-4">Risk Monitor</h3>
+          <Card className="border-card-border bg-card-bg">
+            <CardContent className="p-5">
+            <h3 className="text-sm font-medium text-muted-foreground mb-4">Risk Monitor</h3>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
               <div>
-                <div className="text-xs text-muted mb-1">Total Exposure</div>
+                <div className="text-xs text-muted-foreground mb-1">Total Exposure</div>
                 <div className="text-sm font-medium">
                   {positions.reduce((s, p) => s + p.size * p.current_price, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted mb-1">Positions</div>
+                <div className="text-xs text-muted-foreground mb-1">Positions</div>
                 <div className="text-sm font-medium">{positions.length}</div>
               </div>
               <div>
-                <div className="text-xs text-muted mb-1">Margin Level</div>
+                <div className="text-xs text-muted-foreground mb-1">Margin Level</div>
                 <div className="text-sm font-medium">
                   {account.margin_used > 0
                     ? `${((account.equity / account.margin_used) * 100).toFixed(0)}%`
@@ -1409,7 +1440,7 @@ export default function TradingPage() {
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted mb-1">Unrealized P&L %</div>
+                <div className="text-xs text-muted-foreground mb-1">Unrealized P&L %</div>
                 <div className={`text-sm font-medium ${pnlColor(account.unrealized_pnl)}`}>
                   {account.balance > 0
                     ? `${((account.unrealized_pnl / account.balance) * 100).toFixed(2)}%`
@@ -1417,7 +1448,7 @@ export default function TradingPage() {
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted mb-1">Free Margin %</div>
+                <div className="text-xs text-muted-foreground mb-1">Free Margin %</div>
                 <div className="text-sm font-medium">
                   {account.equity > 0
                     ? `${((account.margin_available / account.equity) * 100).toFixed(0)}%`
@@ -1425,23 +1456,25 @@ export default function TradingPage() {
                 </div>
               </div>
             </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Trade History */}
-          <div className="rounded-xl border border-card-border bg-card-bg p-5">
-            <h3 className="text-sm font-medium text-muted mb-4">
+          <Card className="border-card-border bg-card-bg">
+            <CardContent className="p-5">
+            <h3 className="text-sm font-medium text-muted-foreground mb-4">
               Recent Trade History
             </h3>
 
             {trades.length === 0 ? (
-              <div className="flex h-24 items-center justify-center text-sm text-muted">
+              <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
                 No trades recorded yet
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-card-border text-xs text-muted">
+                    <tr className="border-b border-card-border text-xs text-muted-foreground">
                       <th className="pb-2 text-left font-medium">Symbol</th>
                       <th className="pb-2 text-left font-medium">Broker</th>
                       <th className="pb-2 text-left font-medium">Side</th>
@@ -1462,7 +1495,7 @@ export default function TradingPage() {
                         className="border-b border-card-border/50 last:border-0"
                       >
                         <td className="py-2">{t.symbol}</td>
-                        <td className="py-2 text-xs text-muted">{(t as any).broker ?? "—"}</td>
+                        <td className="py-2 text-xs text-muted-foreground">{(t as any).broker ?? "—"}</td>
                         <td className="py-2">
                           <span
                             className={
@@ -1475,8 +1508,8 @@ export default function TradingPage() {
                           </span>
                         </td>
                         <td className="py-2 text-right">{t.lot_size}</td>
-                        <td className="py-2 text-right text-xs text-muted">{(t as any).stop_loss ?? "—"}</td>
-                        <td className="py-2 text-right text-xs text-muted">{(t as any).take_profit ?? "—"}</td>
+                        <td className="py-2 text-right text-xs text-muted-foreground">{(t as any).stop_loss ?? "—"}</td>
+                        <td className="py-2 text-right text-xs text-muted-foreground">{(t as any).take_profit ?? "—"}</td>
                         <td className="py-2 text-right">
                           {t.entry_price ? fmt(t.entry_price, 5) : "—"}
                         </td>
@@ -1487,17 +1520,17 @@ export default function TradingPage() {
                           {t.pnl != null ? fmt(t.pnl) : "—"}
                         </td>
                         <td className="py-2">
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-xs ${
+                          <Badge variant="secondary"
+                            className={`${
                               t.status === "open"
-                                ? "bg-blue-500/20 text-blue-400"
+                                ? "bg-blue-500/20 text-fa-accent"
                                 : "bg-zinc-500/20 text-zinc-400"
                             }`}
                           >
                             {t.status}
-                          </span>
+                          </Badge>
                         </td>
-                        <td className="py-2 text-xs text-muted">
+                        <td className="py-2 text-xs text-muted-foreground">
                           {t.entry_time
                             ? new Date(t.entry_time).toLocaleString()
                             : "—"}
@@ -1508,7 +1541,8 @@ export default function TradingPage() {
                 </table>
               </div>
             )}
-          </div>
+            </CardContent>
+          </Card>
         </>
       )}
 

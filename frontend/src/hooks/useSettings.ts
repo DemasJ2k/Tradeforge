@@ -30,9 +30,16 @@ function applySettingsToDOM(s: UserSettings) {
     }
   }
 
-  // Accent color
-  if (s.accent_color) {
-    root.setAttribute("data-accent", s.accent_color);
+  // Theme preset (data-theme attribute for CSS overrides)
+  if (s.accent_color && s.accent_color.startsWith("preset:")) {
+    const preset = s.accent_color.replace("preset:", "");
+    root.setAttribute("data-theme", preset);
+  } else {
+    root.removeAttribute("data-theme");
+    // Custom accent — apply CSS variable overrides directly
+    if (s.accent_color && s.accent_color.startsWith("#")) {
+      root.style.setProperty("--fa-accent", s.accent_color);
+    }
   }
 
   // Font size

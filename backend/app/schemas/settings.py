@@ -50,6 +50,16 @@ class SettingsUpdate(BaseModel):
     session_timeout_minutes: Optional[int] = None
     notifications: Optional[dict] = None
 
+    # Notification channels
+    notification_email: Optional[str] = None
+    notification_smtp_host: Optional[str] = None
+    notification_smtp_port: Optional[int] = None
+    notification_smtp_user: Optional[str] = None
+    notification_smtp_pass: Optional[str] = None  # plain text in request, encrypted in DB
+    notification_smtp_use_tls: Optional[bool] = None
+    notification_telegram_bot_token: Optional[str] = None  # plain text in request, encrypted in DB
+    notification_telegram_chat_id: Optional[str] = None
+
 
 class SettingsResponse(BaseModel):
     # Profile
@@ -96,6 +106,16 @@ class SettingsResponse(BaseModel):
     # Platform
     session_timeout_minutes: int = 0
     notifications: dict = {}
+
+    # Notification channels
+    notification_email: str = ""
+    notification_smtp_host: str = ""
+    notification_smtp_port: int = 587
+    notification_smtp_user: str = ""
+    notification_smtp_pass_set: bool = False
+    notification_smtp_use_tls: bool = True
+    notification_telegram_bot_token_set: bool = False
+    notification_telegram_chat_id: str = ""
 
 
 class LLMTestRequest(BaseModel):

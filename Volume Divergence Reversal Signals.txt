@@ -1,0 +1,120 @@
+Volume Divergence Reversal Signals
+
+//@version=6
+indicator("Volume Divergence Reversal Signals [AlgoAlpha]", "AlgoAlpha - Volume Divergence", overlay = false, max_labels_count = 500)
+import TradingView/ta/12
+
+// INPUTS
+groupVolume = "Volume Settings"
+normLength = input.int(1000, "Normalization Length", minval = 10, group = groupVolume, tooltip = "Lookback used to normalize volume into a 0-100 scale.")
+calculateDivergence = input.bool(true, title = "Calculate Divergence", group = groupVolume, tooltip = "Detects regular bullish/bearish divergences between price and normalized volume.")
+deltaLowerTimeframe = input.timeframe("1", "Volume Delta Lower Timeframe", group = groupVolume, tooltip = "Lower timeframe used by ta.requestVolumeDelta(). Leave empty to let TradingView choose.")
+deltaCumulativePeriod = input.timeframe("", "Volume Delta Cumulative Period", group = groupVolume, tooltip = "Optional CVD period. Leave empty for per-bar volume delta.")
+
+groupDiv = "Divergence Settings"
+lookbackLeft = input.int(21, "Pivot Lookback Left", minval = 1, group = groupDiv, tooltip = "Bars to the left required to confirm a volume pivot high.")
+lookbackRight = input.int(5, "Pivot Lookback Right", minval = 1, group = groupDiv, tooltip = "Bars to the right required to confirm a volume pivot high.")
+rangeUpper = input.int(60, "Max Bars Between Pivots", minval = 1, group = groupDiv, tooltip = "Maximum spacing between consecutive pivot points used in divergence checks.")
+rangeLower = input.int(5, "Min Bars Between Pivots", minval = 1, group = groupDiv, tooltip = "Minimum spacing between consecutive pivot points used in divergence checks.")
+
+groupAppearance = "Appearance"
+green = input.color(#00ffbb, title = "Bullish Colour", group = groupAppearance, tooltip = "Color used for bullish visuals and positive net-volume profile segments.")
+red   = input.color(#ff1100, title = "Bearish Colour", group = groupAppearance, tooltip = "Color used for bearish visuals and negative net-volume profile segments.")
+
+bearColor = red
+bullColor = green
+textColor = color.white
+textColor2 = color.black
+noneColor = color.new(color.white, 100)
+
+// CALCULATIONS
+volNorm = volume / ta.highest(volume, normLength) * 100.0
+[_, _, _, deltaClose] = ta.requestVolumeDelta(deltaLowerTimeframe, deltaCumulativePeriod)
+volColor = color.from_gradient(volNorm, 0, 100, color.rgb(106, 0, 125), color.yellow)
+plot(volNorm, "Normalized Volume", style = plot.style_columns, color = volColor)
+
+_inRange(bool cond) =>
+    bars = ta.barssince(cond)
+    rangeLower <= bars and bars <= rangeUpper
+
+pivotFound = false
+bullCond = false
+bearCond = false
+
+volLBR = volNorm[lookbackRight]
+
+// DIVERGENCE
+if calculateDivergence
+    pivotFound := not na(ta.pivothigh(volNorm, lookbackLeft, lookbackRight))
+    volHL = volLBR > ta.valuewhen(pivotFound, volLBR, 1) and _inRange(pivotFound[1])
+    lowLBR = low[lookbackRight]
+    priceLL = lowLBR < ta.valuewhen(pivotFound, lowLBR, 1)
+    bullCond := priceLL and volHL and pivotFound
+    volLH = volLBR < ta.valuewhen(pivotFound, volLBR, 1) and _inRange(pivotFound[1])
+    highLBR = high[lookbackRight]
+    priceHH = highLBR > ta.valuewhen(pivotFound, highLBR, 1)
+    bearCond := priceHH and volLH and pivotFound
+
+// PLOTS
+plot(
+     pivotFound ? volLBR : na,
+     offset = -lookbackRight,
+     title = "Regular Bullish",
+     linewidth = 2,
+     color = bullCond ? bullColor : noneColor,
+     display = display.pane,
+     editable = calculateDivergence)
+
+bullVolText = str.tostring(volume[lookbackRight], format.volume)
+bullDeltaVal = deltaClose[lookbackRight]
+bullDeltaText = (bullDeltaVal >= 0 ? "+" : "") + str.tostring(bullDeltaVal, format.volume)
+bullLabelText = "▲\nVol: " + bullVolText + "\nDelta: " + bullDeltaText
+
+if bullCond
+    label.new(bar_index[lookbackRight], volLBR, bullLabelText, style = label.style_label_down, color = bullColor, textcolor = textColor2, size = size.tiny)
+
+plot(
+     pivotFound ? volLBR : na,
+     offset = -lookbackRight,
+     title = "Regular Bearish",
+     linewidth = 2,
+     color = bearCond ? bearColor : noneColor,
+     display = display.pane,
+     editable = calculateDivergence)
+
+bearVolText = str.tostring(volume[lookbackRight], format.volume)
+bearDeltaVal = deltaClose[lookbackRight]
+bearDeltaText = (bearDeltaVal >= 0 ? "+" : "") + str.tostring(bearDeltaVal, format.volume)
+bearLabelText = "▼\nVol: " + bearVolText + "\nDelta: " + bearDeltaText
+
+if bearCond
+    label.new(bar_index[lookbackRight], volLBR, bearLabelText, style = label.style_label_down, color = bearColor, textcolor = textColor, size = size.tiny)
+
+plotshape(
+     bullCond,
+     offset = -lookbackRight,
+     title = "Regular Bullish Price Label",
+     text = "▲",
+     style = shape.labelup,
+     location = location.belowbar,
+     force_overlay = true,
+     color = bullColor,
+     textcolor = textColor,
+     editable = calculateDivergence)
+
+plotshape(
+     bearCond,
+     offset = -lookbackRight,
+     title = "Regular Bearish Price Label",
+     text = "▼",
+     style = shape.labeldown,
+     location = location.abovebar,
+     force_overlay = true,
+     color = bearColor,
+     textcolor = textColor,
+     editable = calculateDivergence)
+
+// ALERTS
+alertcondition(bullCond, title = "Regular Bullish Divergence", message = "Found a new regular bullish divergence, `Pivot Lookback Right` bars to the left of the current bar.")
+alertcondition(bearCond, title = "Regular Bearish Divergence", message = "Found a new regular bearish divergence, `Pivot Lookback Right` bars to the left of the current bar.")
+alertcondition(bullCond or bearCond, title = "Any Volume Divergence", message = "Found a new volume divergence, `Pivot Lookback Right` bars to the left of the current bar.")

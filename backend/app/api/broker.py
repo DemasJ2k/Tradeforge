@@ -202,6 +202,7 @@ async def close_position(
 
     # Log trade to DB
     trade = Trade(
+        user_id=user.id,
         broker=adapter.broker_name,
         symbol=order.symbol,
         direction=order.side.value,
@@ -256,6 +257,7 @@ async def place_order(
     # Log trade to DB if filled
     if order.status.value == "FILLED":
         trade = Trade(
+            user_id=user.id,
             broker=adapter.broker_name,
             symbol=order.symbol,
             direction=order.side.value,
@@ -454,7 +456,10 @@ async def get_trade_history(
     db: Session = Depends(get_db),
 ):
     """Get trade history from DB."""
-    q = db.query(Trade)
+    from sqlalchemy import or_
+    q = db.query(Trade).filter(
+        or_(Trade.user_id == user.id, Trade.user_id == None)  # noqa: E711
+    )
     if status:
         q = q.filter(Trade.status == status)
     trades = q.order_by(Trade.created_at.desc()).limit(limit).all()

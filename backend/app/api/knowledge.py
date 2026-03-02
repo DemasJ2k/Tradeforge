@@ -139,6 +139,8 @@ def update_article(
     article = db.query(KnowledgeArticle).filter(KnowledgeArticle.id == article_id).first()
     if not article:
         raise HTTPException(404, "Article not found")
+    if article.author_id and article.author_id != user.id and not getattr(user, "is_admin", False):
+        raise HTTPException(403, "Only the author or an admin can edit this article")
 
     if payload.title is not None:
         article.title = payload.title
@@ -172,6 +174,8 @@ def delete_article(
     article = db.query(KnowledgeArticle).filter(KnowledgeArticle.id == article_id).first()
     if not article:
         raise HTTPException(404, "Article not found")
+    if article.author_id and article.author_id != user.id and not getattr(user, "is_admin", False):
+        raise HTTPException(403, "Only the author or an admin can delete this article")
 
     # Delete quiz attempts for this article
     db.query(QuizAttempt).filter(QuizAttempt.article_id == article_id).delete()
@@ -672,12 +676,12 @@ Focus on executing your plan correctly rather than individual trade outcomes. A 
             ],
         },
         {
-            "title": "TradeForge Platform Guide",
+            "title": "FlowrexAlgo Platform Guide",
             "category": "platform",
             "difficulty": "beginner",
-            "content": """# TradeForge Platform Guide
+            "content": """# FlowrexAlgo Platform Guide
 
-Welcome to TradeForge! This guide will walk you through the platform features.
+Welcome to FlowrexAlgo! This guide will walk you through the platform features.
 
 ## Navigation
 

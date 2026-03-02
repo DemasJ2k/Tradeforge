@@ -3,8 +3,10 @@ import os
 import io
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel as _BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -100,6 +102,54 @@ def _guess_symbol_timeframe(filename: str) -> tuple[str, str]:
     return symbol, timeframe
 
 
+# Known JPY pairs — price is quoted in JPY so pip scale is 100x
+_JPY_KEYWORDS = {"JPY", "USDJPY", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "NZDJPY", "CHFJPY"}
+
+# Instrument profile presets keyed by symbol substring
+_INSTRUMENT_PROFILES: dict[str, dict] = {
+    # Precious metals
+    "XAUUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100.0,   "default_spread": 0.3, "default_commission": 7.0},
+    "XAGUSD": {"pip_value": 50.0, "point_value": 5.0, "lot_size": 5000.0,  "default_spread": 0.3, "default_commission": 7.0},
+    "XPTUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100.0,   "default_spread": 0.5, "default_commission": 7.0},
+    # Stock indices
+    "US30":   {"pip_value": 1.0,  "point_value": 1.0, "lot_size": 1.0,     "default_spread": 0.5, "default_commission": 0.0},
+    "US500":  {"pip_value": 1.0,  "point_value": 1.0, "lot_size": 1.0,     "default_spread": 0.3, "default_commission": 0.0},
+    "NAS100": {"pip_value": 1.0,  "point_value": 1.0, "lot_size": 1.0,     "default_spread": 0.5, "default_commission": 0.0},
+    "GER40":  {"pip_value": 1.0,  "point_value": 1.0, "lot_size": 1.0,     "default_spread": 0.5, "default_commission": 0.0},
+    # Forex majors (default)
+    "EURUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100000.0, "default_spread": 0.2, "default_commission": 7.0},
+    "GBPUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100000.0, "default_spread": 0.3, "default_commission": 7.0},
+    "USDJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.2, "default_commission": 7.0, "is_jpy_pair": True},
+    "EURJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.5, "default_commission": 7.0, "is_jpy_pair": True},
+}
+
+
+def _build_instrument_profile(symbol: str) -> dict:
+    """Return instrument profile defaults for a given symbol."""
+    sym = symbol.upper()
+    # Exact match first
+    if sym in _INSTRUMENT_PROFILES:
+        return dict(_INSTRUMENT_PROFILES[sym])
+    # Substring match
+    for key, profile in _INSTRUMENT_PROFILES.items():
+        if key in sym:
+            p = dict(profile)
+            # Auto-detect JPY
+            if any(j in sym for j in _JPY_KEYWORDS):
+                p["is_jpy_pair"] = True
+            return p
+    # Forex default
+    is_jpy = any(j in sym for j in _JPY_KEYWORDS)
+    return {
+        "pip_value": 9.1 if is_jpy else 10.0,
+        "point_value": 0.091 if is_jpy else 1.0,
+        "lot_size": 100000.0,
+        "default_spread": 0.3,
+        "default_commission": 7.0,
+        "is_jpy_pair": is_jpy,
+    }
+
+
 @router.post("/upload", response_model=DataSourceResponse)
 async def upload_csv(
     file: UploadFile = File(...),
@@ -152,6 +202,9 @@ async def upload_csv(
     final_symbol = symbol or auto_symbol
     final_timeframe = timeframe or auto_tf
 
+    # Build instrument profile from symbol
+    profile = _build_instrument_profile(final_symbol)
+
     # Save file to disk
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -171,6 +224,14 @@ async def upload_csv(
         date_to=dt_last.strftime("%Y-%m-%d %H:%M"),
         columns=",".join(headers),
         file_size_mb=size_mb,
+        pip_value=profile.get("pip_value", 10.0),
+        is_jpy_pair=profile.get("is_jpy_pair", False),
+        point_value=profile.get("point_value", 1.0),
+        lot_size=profile.get("lot_size", 100000.0),
+        default_spread=profile.get("default_spread", 0.3),
+        commission_model="per_lot",
+        default_commission=profile.get("default_commission", 7.0),
+        creator_id=user.id,
     )
     db.add(ds)
     db.commit()
@@ -183,7 +244,13 @@ def list_sources(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sources = db.query(DataSource).order_by(DataSource.created_at.desc()).all()
+    from sqlalchemy import or_
+    sources = (
+        db.query(DataSource)
+        .filter(or_(DataSource.creator_id == user.id, DataSource.is_public == True))  # noqa: E712
+        .order_by(DataSource.created_at.desc())
+        .all()
+    )
     return DataSourceList(items=sources, total=len(sources))
 
 
@@ -250,6 +317,8 @@ def delete_source(
     ds = db.query(DataSource).filter(DataSource.id == source_id).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
+    if ds.creator_id and ds.creator_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your data source")
 
     # Delete file from disk
     try:
@@ -261,6 +330,48 @@ def delete_source(
     db.delete(ds)
     db.commit()
     return {"status": "deleted", "id": source_id}
+
+
+class InstrumentProfileUpdate(_BaseModel):
+    pip_value: Optional[float] = None
+    is_jpy_pair: Optional[bool] = None
+    point_value: Optional[float] = None
+    lot_size: Optional[float] = None
+    default_spread: Optional[float] = None
+    commission_model: Optional[str] = None
+    default_commission: Optional[float] = None
+
+
+@router.patch("/sources/{source_id}/profile", response_model=DataSourceResponse)
+def update_instrument_profile(
+    source_id: int,
+    payload: InstrumentProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update instrument profile fields for a data source."""
+    ds = db.query(DataSource).filter(DataSource.id == source_id).first()
+    if not ds:
+        raise HTTPException(status_code=404, detail="Data source not found")
+
+    if payload.pip_value is not None:
+        ds.pip_value = payload.pip_value
+    if payload.is_jpy_pair is not None:
+        ds.is_jpy_pair = payload.is_jpy_pair
+    if payload.point_value is not None:
+        ds.point_value = payload.point_value
+    if payload.lot_size is not None:
+        ds.lot_size = payload.lot_size
+    if payload.default_spread is not None:
+        ds.default_spread = payload.default_spread
+    if payload.commission_model is not None:
+        ds.commission_model = payload.commission_model
+    if payload.default_commission is not None:
+        ds.default_commission = payload.default_commission
+
+    db.commit()
+    db.refresh(ds)
+    return ds
 
 
 @router.post("/fetch-broker", response_model=DataSourceResponse)

@@ -10,6 +10,20 @@ import type {
 } from '@/types';
 import ChatHelpers from '@/components/ChatHelpers';
 import { useBrokerAccounts } from '@/hooks/useBrokerAccounts';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Play, RefreshCw, Plus, Loader2, ChevronLeft, ChevronRight,
+  ArrowUpDown, TrendingUp, TrendingDown, Rocket, BarChart3, Settings, Trash2, Eye,
+} from 'lucide-react';
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable';
+import BacktestTradeChart from '@/components/BacktestTradeChart';
+import StrategySettingsModal from '@/components/StrategySettingsModal';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -26,11 +40,13 @@ function authHeaders(): Record<string, string> {
 // ─── Stat Card ───
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="bg-[#1a1f2e] rounded-lg p-4 border border-gray-800">
-      <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-xl font-bold ${color || 'text-white'}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
-    </div>
+    <Card className="bg-card-bg border-card-border">
+      <CardContent className="p-4">
+        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+        <div className={`text-xl font-bold font-mono ${color || 'text-foreground'}`}>{value}</div>
+        {sub && <div className="text-xs text-muted-foreground/60 mt-1">{sub}</div>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -43,6 +59,14 @@ function EquityCurve({ data, height = 300 }: { data: number[]; height?: number }
     if (!canvas || data.length < 2) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Read theme colors from CSS custom properties
+    const style = getComputedStyle(document.documentElement);
+    const bgColor = style.getPropertyValue('--fa-card-bg').trim() || '#0f1219';
+    const gridColor = style.getPropertyValue('--fa-card-border').trim() || '#1e293b';
+    const labelColor = style.getPropertyValue('--color-muted-foreground')?.trim() || '#6b7280';
+    const successColor = '#22c55e';
+    const dangerColor = '#ef4444';
 
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth;
@@ -57,11 +81,11 @@ function EquityCurve({ data, height = 300 }: { data: number[]; height?: number }
     const pad = 60;
 
     // Background
-    ctx.fillStyle = '#0f1219';
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, w, h);
 
     // Grid lines
-    ctx.strokeStyle = '#1a1f2e';
+    ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       const y = pad / 2 + ((h - pad) * i) / 4;
@@ -72,15 +96,15 @@ function EquityCurve({ data, height = 300 }: { data: number[]; height?: number }
 
       // Y-axis labels
       const val = max - (range * i) / 4;
-      ctx.fillStyle = '#6b7280';
-      ctx.font = '11px monospace';
+      ctx.fillStyle = labelColor;
+      ctx.font = '11px "JetBrains Mono", monospace';
       ctx.textAlign = 'right';
       ctx.fillText(`$${val.toFixed(0)}`, pad - 5, y + 4);
     }
 
     // Initial balance line
     const initialY = pad / 2 + ((max - data[0]) / range) * (h - pad);
-    ctx.strokeStyle = '#374151';
+    ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -92,7 +116,7 @@ function EquityCurve({ data, height = 300 }: { data: number[]; height?: number }
     // Equity line
     const finalVal = data[data.length - 1];
     const isProfit = finalVal >= data[0];
-    ctx.strokeStyle = isProfit ? '#22c55e' : '#ef4444';
+    ctx.strokeStyle = isProfit ? successColor : dangerColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
 
@@ -156,7 +180,7 @@ function TradeLog({ trades }: { trades: TradeResult[] }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-gray-400 border-b border-gray-800">
+            <tr className="text-muted-foreground border-b border-card-border">
               <th className="text-left p-2">#</th>
               <th className="text-left p-2 cursor-pointer hover:text-white" onClick={() => toggleSort('entry_time')}>
                 Entry Time {sortBy === 'entry_time' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
@@ -174,20 +198,20 @@ function TradeLog({ trades }: { trades: TradeResult[] }) {
           </thead>
           <tbody>
             {paged.map((t, idx) => (
-              <tr key={idx} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                <td className="p-2 text-gray-500">{page * perPage + idx + 1}</td>
-                <td className="p-2 text-gray-300 font-mono text-xs">{fmtTime(t.entry_time)}</td>
+              <tr key={idx} className="border-b border-card-border/50 hover:bg-muted/30">
+                <td className="p-2 text-muted-foreground/60">{page * perPage + idx + 1}</td>
+                <td className="p-2 text-foreground/80 font-mono text-xs">{fmtTime(t.entry_time)}</td>
                 <td className="p-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-bold ${t.direction === 'long' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
                     {t.direction.toUpperCase()}
                   </span>
                 </td>
-                <td className="p-2 text-right font-mono text-gray-300">{t.entry_price.toFixed(2)}</td>
-                <td className="p-2 text-right font-mono text-gray-500">{t.stop_loss.toFixed(2)}</td>
-                <td className="p-2 text-right font-mono text-gray-500">{t.take_profit.toFixed(2)}</td>
-                <td className="p-2 text-right font-mono text-gray-300">{t.exit_price?.toFixed(2) || '-'}</td>
+                <td className="p-2 text-right font-mono text-foreground/80">{t.entry_price.toFixed(2)}</td>
+                <td className="p-2 text-right font-mono text-muted-foreground/60">{t.stop_loss.toFixed(2)}</td>
+                <td className="p-2 text-right font-mono text-muted-foreground/60">{t.take_profit.toFixed(2)}</td>
+                <td className="p-2 text-right font-mono text-foreground/80">{t.exit_price?.toFixed(2) || '-'}</td>
                 <td className="p-2">
-                  <span className={`text-xs ${t.exit_reason === 'take_profit' ? 'text-green-400' : t.exit_reason === 'stop_loss' ? 'text-red-400' : 'text-gray-400'}`}>
+                  <span className={`text-xs ${t.exit_reason === 'take_profit' ? 'text-green-400' : t.exit_reason === 'stop_loss' ? 'text-red-400' : 'text-muted-foreground'}`}>
                     {t.exit_reason.replace('_', ' ')}
                   </span>
                 </td>
@@ -201,16 +225,16 @@ function TradeLog({ trades }: { trades: TradeResult[] }) {
       </div>
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-3 px-2">
-          <span className="text-sm text-gray-400">
+          <span className="text-sm text-muted-foreground">
             Showing {page * perPage + 1}-{Math.min((page + 1) * perPage, trades.length)} of {trades.length}
           </span>
           <div className="flex gap-2">
             <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-              className="px-3 py-1 rounded bg-gray-800 text-gray-300 disabled:opacity-30 hover:bg-gray-700 text-sm">
+              className="px-3 py-1 rounded bg-muted text-foreground/80 disabled:opacity-30 hover:bg-muted text-sm">
               Prev
             </button>
             <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-              className="px-3 py-1 rounded bg-gray-800 text-gray-300 disabled:opacity-30 hover:bg-gray-700 text-sm">
+              className="px-3 py-1 rounded bg-muted text-foreground/80 disabled:opacity-30 hover:bg-muted text-sm">
               Next
             </button>
           </div>
@@ -242,9 +266,9 @@ function MonthlyReturns({ trades }: { trades: TradeResult[] }) {
       <table className="text-xs">
         <thead>
           <tr>
-            <th className="p-1 text-gray-400"></th>
-            {months.map(m => <th key={m} className="p-1 text-gray-400 min-w-[50px]">{m}</th>)}
-            <th className="p-1 text-gray-400 min-w-[60px]">Total</th>
+            <th className="p-1 text-muted-foreground"></th>
+            {months.map(m => <th key={m} className="p-1 text-muted-foreground min-w-[50px]">{m}</th>)}
+            <th className="p-1 text-muted-foreground min-w-[60px]">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -252,12 +276,12 @@ function MonthlyReturns({ trades }: { trades: TradeResult[] }) {
             let yearTotal = 0;
             return (
               <tr key={yr}>
-                <td className="p-1 text-gray-400 font-bold">{yr}</td>
+                <td className="p-1 text-muted-foreground font-bold">{yr}</td>
                 {months.map((_, mi) => {
                   const key = `${yr}-${String(mi + 1).padStart(2, '0')}`;
                   const val = monthly[key];
                   if (val !== undefined) yearTotal += val;
-                  if (val === undefined) return <td key={mi} className="p-1 text-center text-gray-700">-</td>;
+                  if (val === undefined) return <td key={mi} className="p-1 text-center text-muted-foreground/30">-</td>;
                   const intensity = Math.min(Math.abs(val) / maxAbs, 1);
                   const bg = val >= 0
                     ? `rgba(34,197,94,${0.15 + intensity * 0.6})`
@@ -290,17 +314,28 @@ export default function BacktestPage() {
 
   const [strategyId, setStrategyId] = useState<number | ''>('');
   const [datasourceId, setDatasourceId] = useState<number | ''>('');
+  const [datasourceIds, setDatasourceIds] = useState<number[]>([]);
+  const [settingsStrategy, setSettingsStrategy] = useState<Strategy | null>(null);
   const [initialBalance, setInitialBalance] = useState(10000);
   const [spreadPoints, setSpreadPoints] = useState(0.3);
   const [commission, setCommission] = useState(7.0);
   const [pointValue, setPointValue] = useState(1.0);
+  const engineVersion = 'v2' as const;
+  // V2 engine options
+  const [slippagePct, setSlippagePct] = useState(0.0);
+  const [commissionPct, setCommissionPct] = useState(0.0);
+  const [marginRate, setMarginRate] = useState(0.01);
+  const [useFastCore, setUseFastCore] = useState(false);
+  const [barsPerDay, setBarsPerDay] = useState(1.0);
 
   const [running, setRunning] = useState(false);
   const [runningWF, setRunningWF] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<BacktestResponse | null>(null);
+  const [chartBars, setChartBars] = useState<{time:number;open:number;high:number;low:number;close:number;volume?:number}[]>([]);
+  const [chartIndicators, setChartIndicators] = useState<Record<string, {time:number;value:number|null}[]>>({});
   const [wfResult, setWfResult] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'equity' | 'trades' | 'monthly'>('equity');
+  const [activeTab, setActiveTab] = useState<'equity' | 'trades' | 'monthly' | 'tearsheet' | 'portfolio' | 'chart'>('equity');
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const { accounts, activeBroker } = useBrokerAccounts();
 
@@ -331,6 +366,8 @@ export default function BacktestPage() {
     setError('');
     setResult(null);
 
+    const isPortfolio = datasourceIds.length > 1;
+
     try {
       const r = await fetch(`${API}/api/backtest/run`, {
         method: 'POST',
@@ -342,6 +379,13 @@ export default function BacktestPage() {
           spread_points: spreadPoints,
           commission_per_lot: commission,
           point_value: pointValue,
+          engine_version: 'v2',
+          ...(isPortfolio ? { datasource_ids: datasourceIds } : {}),
+          slippage_pct: slippagePct,
+          commission_pct: commissionPct,
+          margin_rate: marginRate,
+          use_fast_core: useFastCore,
+          bars_per_day: barsPerDay,
         }),
       });
 
@@ -353,6 +397,29 @@ export default function BacktestPage() {
       const data: BacktestResponse = await r.json();
       setResult(data);
 
+      // Fetch chart data for trade chart overlay (Phase 5B)
+      if (data.id) {
+        fetch(`${API}/api/backtest/${data.id}/chart-data`, { headers: authHeaders() })
+          .then(r2 => r2.ok ? r2.json() : null)
+          .then(cd => {
+            if (cd && cd.bars) {
+              setChartBars(cd.bars);
+              // Convert indicator arrays to {time,value}[] format
+              if (cd.indicators && cd.timestamps) {
+                const overlays: Record<string, {time:number;value:number|null}[]> = {};
+                for (const [key, vals] of Object.entries(cd.indicators)) {
+                  overlays[key] = (cd.timestamps as number[]).map((t: number, i: number) => ({
+                    time: t,
+                    value: (vals as (number|null)[])[i] ?? null,
+                  }));
+                }
+                setChartIndicators(overlays);
+              }
+            }
+          })
+          .catch(() => {});
+      }
+
       fetch(`${API}/api/backtest`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => setHistory(Array.isArray(d) ? d : []))
@@ -362,7 +429,7 @@ export default function BacktestPage() {
     } finally {
       setRunning(false);
     }
-  }, [strategyId, datasourceId, initialBalance, spreadPoints, commission, pointValue]);
+  }, [strategyId, datasourceId, datasourceIds, initialBalance, spreadPoints, commission, pointValue, slippagePct, commissionPct, marginRate, useFastCore, barsPerDay]);
 
   const runWalkForward = useCallback(async () => {
     if (!strategyId || !datasourceId) {
@@ -447,127 +514,283 @@ export default function BacktestPage() {
 
   const stats = result?.stats;
 
+  const handleViewPastResult = async (btId: number) => {
+    try {
+      const r = await fetch(`${API}/api/backtest/${btId}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!r.ok) throw new Error('fetch failed');
+      const data = await r.json();
+      if (data.results && data.results.stats) {
+        setResult(data.results as unknown as BacktestResponse);
+        setError('');
+      } else {
+        setError('No results stored for this backtest');
+      }
+    } catch {
+      setError('Failed to load past backtest');
+    }
+  };
+
+  const handleDeleteBacktest = async (btId: number) => {
+    if (!confirm('Delete this backtest run?')) return;
+    try {
+      const r = await fetch(`${API}/api/backtest/${btId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!r.ok) throw new Error('delete failed');
+      setHistory((prev) => prev.filter((h) => h.id !== btId));
+    } catch {
+      setError('Failed to delete backtest');
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 h-full">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Backtesting</h1>
-          <p className="text-gray-400 text-sm mt-1">Test strategies against historical data</p>
+          <h1 className="text-2xl font-bold text-foreground">Backtesting</h1>
+          <p className="text-muted-foreground text-sm mt-1">Test strategies against historical data</p>
         </div>
       </div>
 
-      {/* Config Form */}
-      <div className="bg-[#151923] rounded-xl border border-gray-800 p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Configuration</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="col-span-2 lg:col-span-2">
-            <label className="block text-xs text-gray-400 mb-1">Strategy</label>
-            <select
-              value={strategyId}
-              onChange={e => setStrategyId(e.target.value ? Number(e.target.value) : '')}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Select strategy...</option>
-              {strategies.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-span-2 lg:col-span-2">
-            <label className="block text-xs text-gray-400 mb-1">Data Source</label>
-            <select
-              value={datasourceId}
-              onChange={e => setDatasourceId(e.target.value ? Number(e.target.value) : '')}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Select data source...</option>
-              {datasources.map(d => (
-                <option key={d.id} value={d.id}>
-                  {d.symbol} {d.timeframe} ({d.row_count?.toLocaleString()} bars)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Balance ($)</label>
-            <input type="number" value={initialBalance}
-              onChange={e => setInitialBalance(Number(e.target.value))}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Spread (pts)</label>
-            <input type="number" step="0.1" value={spreadPoints}
-              onChange={e => setSpreadPoints(Number(e.target.value))}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Commission ($)</label>
-            <input type="number" step="0.5" value={commission}
-              onChange={e => setCommission(Number(e.target.value))}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Point Value</label>
-            <input type="number" step="0.01" value={pointValue}
-              onChange={e => setPointValue(Number(e.target.value))}
-              className="w-full bg-[#1a1f2e] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-          <div className="flex items-end col-span-2 lg:col-span-2 gap-2">
-            <button
-              onClick={runBacktest}
-              disabled={running || runningWF || !strategyId || !datasourceId}
-              className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold text-sm transition-colors"
+      <ResizablePanelGroup orientation="horizontal" className="min-h-[calc(100vh-200px)] rounded-xl border border-card-border">
+        {/* ─── LEFT: Config Panel ─── */}
+        <ResizablePanel defaultSize={35} minSize={5}>
+          <div className="h-full overflow-y-auto p-5 bg-card-bg">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">Configuration</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Strategy</label>
+                <div className="flex items-center gap-1.5">
+                <select
+                  value={strategyId}
+                  onChange={e => setStrategyId(e.target.value ? Number(e.target.value) : '')}
+                  className="flex-1 bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                >
+                  <option value="">Select strategy...</option>
+                  {strategies.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {strategyId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const s = strategies.find(x => x.id === strategyId);
+                      if (s) setSettingsStrategy(s);
+                    }}
+                    className="h-9 w-9 p-0 text-muted-foreground hover:text-accent shrink-0"
+                    title="Strategy settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Data Source</label>
+                <select
+                  value={datasourceId}
+                  onChange={e => {
+                    const id = e.target.value ? Number(e.target.value) : '';
+                    setDatasourceId(id);
+                    if (id && !datasourceIds.includes(id as number)) {
+                      setDatasourceIds(prev => [...prev, id as number]);
+                    }
+                  }}
+                  className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                >
+                  <option value="">Select data source...</option>
+                  {datasources.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.symbol} {d.timeframe} ({d.row_count?.toLocaleString()} bars)
+                    </option>
+                  ))}
+                </select>
+                {/* Multi-symbol portfolio chips */}
+                {datasourceIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {datasourceIds.map(id => {
+                      const ds = datasources.find(d => d.id === id);
+                      return (
+                        <Badge key={id} variant="outline" className="gap-1 border-fa-accent/30 text-fa-accent/80">
+                          {ds?.symbol || `#${id}`}
+                          <button
+                            onClick={() => {
+                              setDatasourceIds(prev => prev.filter(x => x !== id));
+                              if (id === datasourceId) {
+                                const remaining = datasourceIds.filter(x => x !== id);
+                                setDatasourceId(remaining[0] || '');
+                              }
+                            }}
+                            className="hover:text-red-400 ml-0.5"
+                          >&times;</button>
+                        </Badge>
+                      );
+                    })}
+                    {datasourceIds.length > 1 && (
+                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">Portfolio Mode</Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Balance ($)</label>
+                  <input type="number" value={initialBalance}
+                    onChange={e => setInitialBalance(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Spread (pts)</label>
+                  <input type="number" step="0.1" value={spreadPoints}
+                    onChange={e => setSpreadPoints(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Commission ($)</label>
+                  <input type="number" step="0.5" value={commission}
+                    onChange={e => setCommission(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Point Value</label>
+                  <input type="number" step="0.01" value={pointValue}
+                    onChange={e => setPointValue(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-foreground text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={runBacktest}
+                  disabled={running || runningWF || !strategyId || !datasourceId}
+                  className="flex-1 bg-fa-accent hover:bg-fa-accent/80 text-white font-semibold"
             >
               {running ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Running...
-                </span>
-              ) : '▶ Backtest'}
-            </button>
-            <button
+                <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+              ) : (
+                <><Play className="h-4 w-4" /> Backtest</>
+              )}
+            </Button>
+            <Button
               onClick={runWalkForward}
               disabled={running || runningWF || !strategyId || !datasourceId}
-              className="flex-1 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold text-sm transition-colors"
+              variant="outline"
+              className="flex-1 border-purple-600 text-purple-400 hover:bg-purple-600/20"
             >
               {runningWF ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Validating...
-                </span>
-              ) : '⟳ Walk-Forward'}
-            </button>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Validating...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4" /> Walk-Forward</>
+              )}
+            </Button>
           </div>
-        </div>
-        {error && <div className="mt-3 text-red-400 text-sm bg-red-900/20 rounded-lg px-4 py-2">{error}</div>}
-      </div>
 
+          {/* Advanced Engine Options */}
+            <div className="border-t border-card-border pt-4">
+              <h3 className="text-xs font-semibold text-fa-accent uppercase tracking-wider mb-3">Advanced Options</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Slippage (%)</label>
+                  <input type="number" step="0.001" value={slippagePct}
+                    onChange={e => setSlippagePct(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Comm. (%)</label>
+                  <input type="number" step="0.001" value={commissionPct}
+                    onChange={e => setCommissionPct(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Margin Rate</label>
+                  <input type="number" step="0.001" value={marginRate}
+                    onChange={e => setMarginRate(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Bars/Day</label>
+                  <input type="number" step="1" value={barsPerDay}
+                    onChange={e => setBarsPerDay(Number(e.target.value))}
+                    className="w-full bg-input-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm focus:border-fa-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer mt-3">
+                <input type="checkbox" checked={useFastCore}
+                  onChange={e => setUseFastCore(e.target.checked)}
+                  className="w-4 h-4 rounded border-input-border bg-input-bg text-fa-accent focus:ring-fa-accent focus:ring-offset-0"
+                />
+                <span className="text-sm text-foreground/80">Fast Core</span>
+              </label>
+            </div>
+
+          {error && <div className="text-red-400 text-sm bg-red-900/20 rounded-lg px-3 py-2">{error}</div>}
+
+          {/* History */}
+          {history.length > 0 && (
+            <div className="border-t border-card-border pt-4">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent Runs</h3>
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                {history.slice(0, 15).map(bt => (
+                  <div key={bt.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-muted/30 group">
+                    <button onClick={() => handleViewPastResult(bt.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <Eye className="h-3 w-3 text-muted-foreground/40 group-hover:text-accent shrink-0" />
+                      <span className="font-semibold text-foreground">{bt.symbol}</span>
+                      <span className="text-muted-foreground">{bt.timeframe}</span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono font-bold ${(bt.stats.net_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ${(bt.stats.net_profit || 0).toFixed(0)}
+                      </span>
+                      <span className="text-muted-foreground/60">{bt.stats.total_trades || 0}t</span>
+                      <button onClick={() => handleDeleteBacktest(bt.id)} className="text-muted-foreground/30 hover:text-danger transition-colors" title="Delete">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* ─── RIGHT: Results Panel ─── */}
+        <ResizablePanel defaultSize={65} minSize={5}>
+          <div className="h-full overflow-y-auto p-5 bg-background">
       {/* Results */}
-      {stats && result && (
-        <>
+      {stats && result ? (
+        <div className="space-y-5">
           {/* Action bar */}
           {stats.profit_factor > 1.2 && stats.total_trades >= 10 && (
             <div className="flex items-center justify-between bg-green-900/20 border border-green-800/40 rounded-lg px-4 py-2">
               <span className="text-sm text-green-300">
-                Profitable strategy detected (PF {stats.profit_factor.toFixed(1)}, {stats.win_rate.toFixed(0)}% WR). Run Walk-Forward validation for realistic OOS estimates, then deploy.
+                Profitable strategy detected (PF {stats.profit_factor.toFixed(1)}, {stats.win_rate.toFixed(0)}% WR).
               </span>
-              <button
+              <Button
                 onClick={() => setShowCreateAgent(true)}
-                className="px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-semibold transition-colors whitespace-nowrap ml-3"
+                size="sm"
+                className="bg-green-600 hover:bg-green-500 text-white"
               >
-                + Deploy as Agent
-              </button>
+                <Rocket className="h-3.5 w-3.5" /> Deploy as Agent
+              </Button>
             </div>
           )}
 
@@ -612,16 +835,34 @@ export default function BacktestPage() {
             />
           </div>
 
+          {/* V2 Engine Badge & Elapsed Time */}
+          {result.engine_version === 'v2' && (
+            <div className="flex items-center gap-3 text-sm">
+              <Badge variant="outline" className="border-fa-accent/30 text-fa-accent font-mono">V2 Engine</Badge>
+              {result.symbols && result.symbols.length > 1 && (
+                <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 font-mono">
+                  Portfolio ({result.symbols.length} symbols: {result.symbols.join(', ')})
+                </Badge>
+              )}
+              {result.elapsed_seconds != null && (
+                <span className="text-muted-foreground/60 font-mono text-xs">{result.elapsed_seconds.toFixed(3)}s</span>
+              )}
+            </div>
+          )}
+
           {/* Tabs */}
-          <div className="bg-[#151923] rounded-xl border border-gray-800">
-            <div className="flex border-b border-gray-800">
-              {(['equity', 'trades', 'monthly'] as const).map(tab => (
+          <div className="bg-card-bg rounded-xl border border-card-border">
+            <div className="flex border-b border-card-border">
+              {(['equity', 'chart', 'trades', 'monthly',
+                ...(result.engine_version === 'v2' ? ['tearsheet'] : []),
+                ...(result.portfolio_analytics ? ['portfolio'] : []),
+              ] as const).map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
+                  onClick={() => setActiveTab(tab as typeof activeTab)}
+                  className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-fa-accent border-b-2 border-fa-accent' : 'text-muted-foreground hover:text-foreground/90'}`}
                 >
-                  {tab === 'equity' ? 'Equity Curve' : tab === 'trades' ? 'Trade Log' : 'Monthly Returns'}
+                  {tab === 'equity' ? 'Equity Curve' : tab === 'chart' ? 'Trade Chart' : tab === 'trades' ? 'Trade Log' : tab === 'monthly' ? 'Monthly Returns' : tab === 'tearsheet' ? 'Tearsheet' : 'Portfolio'}
                 </button>
               ))}
             </div>
@@ -630,24 +871,175 @@ export default function BacktestPage() {
               {activeTab === 'equity' && result.equity_curve.length > 0 && (
                 <EquityCurve data={result.equity_curve} height={350} />
               )}
+              {activeTab === 'chart' && chartBars.length > 0 && (
+                <BacktestTradeChart
+                  bars={chartBars}
+                  trades={result.trades}
+                  equityCurve={result.equity_curve}
+                  indicatorOverlays={Object.keys(chartIndicators).length > 0 ? chartIndicators : undefined}
+                  height={450}
+                />
+              )}
+              {activeTab === 'chart' && chartBars.length === 0 && (
+                <div className="flex h-[350px] items-center justify-center text-sm text-muted-foreground">
+                  No chart data available for this backtest
+                </div>
+              )}
               {activeTab === 'trades' && (
                 <TradeLog trades={result.trades} />
               )}
               {activeTab === 'monthly' && (
                 <MonthlyReturns trades={result.trades} />
               )}
+              {activeTab === 'tearsheet' && result.v2_stats && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground/80">Full V2 Metrics (55+)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {Object.entries(result.v2_stats)
+                      .filter(([, v]) => typeof v === 'number')
+                      .map(([key, val]) => (
+                        <div key={key} className="bg-input-bg rounded px-3 py-2 border border-card-border">
+                          <div className="text-[10px] text-muted-foreground/60 uppercase tracking-wider truncate" title={key}>
+                            {key.replace(/_/g, ' ')}
+                          </div>
+                          <div className="text-sm font-mono text-white">
+                            {typeof val === 'number' ? (Number.isInteger(val) ? val : (val as number).toFixed(4)) : String(val)}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  {!!result.tearsheet?.monte_carlo && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground/80 mt-4 mb-2">Monte Carlo Simulation</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {Object.entries(result.tearsheet.monte_carlo as Record<string, unknown>)
+                          .filter(([, v]) => typeof v === 'number')
+                          .slice(0, 8)
+                          .map(([key, val]) => (
+                            <div key={key} className="bg-input-bg rounded px-3 py-2 border border-card-border">
+                              <div className="text-[10px] text-muted-foreground/60 uppercase tracking-wider truncate" title={key}>{key.replace(/_/g, ' ')}</div>
+                              <div className="text-sm font-mono text-white">{(val as number).toFixed(2)}</div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Portfolio Analytics Tab (Phase 4) */}
+              {activeTab === 'portfolio' && result.portfolio_analytics && (() => {
+                const pa = result.portfolio_analytics;
+                return (
+                  <div className="space-y-6">
+                    {/* Portfolio Summary */}
+                    <div className="flex items-center gap-4">
+                      <span className="px-3 py-1 rounded-full bg-emerald-900/40 text-emerald-400 text-xs font-bold">
+                        {pa.num_symbols} Symbols
+                      </span>
+                      <span className="text-sm text-foreground/80">
+                        Diversification Ratio: <span className="font-mono font-bold text-white">{pa.diversification_ratio.toFixed(2)}</span>
+                        {pa.diversification_ratio > 1 && <span className="text-emerald-400 ml-1">(risk reduction active)</span>}
+                      </span>
+                      <span className="text-sm text-foreground/80">
+                        Avg Correlation: <span className="font-mono font-bold text-white">{pa.correlation.avg_correlation.toFixed(3)}</span>
+                      </span>
+                    </div>
+
+                    {/* Per-Symbol Breakdown */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground/80 mb-2">Per-Symbol Breakdown</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-muted-foreground border-b border-card-border">
+                              <th className="text-left p-2">Symbol</th>
+                              <th className="text-right p-2">Trades</th>
+                              <th className="text-right p-2">Win %</th>
+                              <th className="text-right p-2">Net P&L</th>
+                              <th className="text-right p-2">PF</th>
+                              <th className="text-right p-2">Avg Win</th>
+                              <th className="text-right p-2">Avg Loss</th>
+                              <th className="text-right p-2">Sharpe</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(pa.per_symbol).map(([sym, st]) => (
+                              <tr key={sym} className="border-b border-card-border/50 hover:bg-muted/30">
+                                <td className="p-2 text-white font-semibold">{sym}</td>
+                                <td className="p-2 text-right text-foreground/80">{st.total_trades}</td>
+                                <td className="p-2 text-right text-foreground/80">{st.win_rate}%</td>
+                                <td className={`p-2 text-right font-mono font-bold ${st.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  ${st.net_profit.toFixed(2)}
+                                </td>
+                                <td className="p-2 text-right text-foreground/80">{st.profit_factor}</td>
+                                <td className="p-2 text-right text-green-400 font-mono">${st.avg_win.toFixed(2)}</td>
+                                <td className="p-2 text-right text-red-400 font-mono">${st.avg_loss.toFixed(2)}</td>
+                                <td className="p-2 text-right text-foreground/80 font-mono">{st.sharpe_per_trade.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Correlation Matrix */}
+                    {pa.correlation.symbols.length > 1 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground/80 mb-2">Correlation Matrix</h3>
+                        <div className="overflow-x-auto">
+                          <table className="text-xs">
+                            <thead>
+                              <tr>
+                                <th className="p-2 text-muted-foreground"></th>
+                                {pa.correlation.symbols.map(s => (
+                                  <th key={s} className="p-2 text-muted-foreground min-w-[70px]">{s}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pa.correlation.symbols.map((sym, i) => (
+                                <tr key={sym}>
+                                  <td className="p-2 text-muted-foreground font-bold">{sym}</td>
+                                  {pa.correlation.matrix[i].map((val, j) => {
+                                    const isOnDiag = i === j;
+                                    const absVal = Math.abs(val);
+                                    const color = isOnDiag
+                                      ? 'rgba(59,130,246,0.3)'
+                                      : val >= 0
+                                        ? `rgba(239,68,68,${0.1 + absVal * 0.6})`
+                                        : `rgba(34,197,94,${0.1 + absVal * 0.6})`;
+                                    return (
+                                      <td key={j} className="p-2 text-center font-mono rounded" style={{ backgroundColor: color }}>
+                                        <span className={isOnDiag ? 'text-fa-accent/80' : val >= 0.5 ? 'text-red-300' : val <= -0.3 ? 'text-green-300' : 'text-foreground/80'}>
+                                          {val.toFixed(2)}
+                                        </span>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <p className="text-[10px] text-muted-foreground/40 mt-1">
+                            Red = positive correlation (less diversification) | Green = negative correlation (more diversification)
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
-        </>
-      )}
 
       {/* Walk-Forward Results */}
       {wfResult && (
-        <div className="bg-[#151923] rounded-xl border border-purple-800/50 p-6 space-y-4">
+        <div className="bg-card-bg rounded-xl border border-purple-800/50 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-purple-300">Walk-Forward Validation (Out-of-Sample)</h2>
-              <p className="text-xs text-gray-400 mt-1">{wfResult.n_folds} folds, {wfResult.mode} window</p>
+              <p className="text-xs text-muted-foreground mt-1">{wfResult.n_folds} folds, {wfResult.mode} window</p>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-sm font-bold px-3 py-1 rounded-full ${wfResult.consistency_score === 100 ? 'bg-green-900/40 text-green-400' : wfResult.consistency_score >= 60 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>
@@ -685,17 +1077,17 @@ export default function BacktestPage() {
 
           {/* Per-Fold Breakdown */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-300 mb-2">Per-Fold OOS Performance</h3>
+            <h3 className="text-sm font-semibold text-foreground/80 mb-2">Per-Fold OOS Performance</h3>
             <div className="grid grid-cols-5 gap-2">
               {wfResult.windows?.map((w: any) => (
                 <div key={w.fold} className={`rounded-lg p-3 border text-center ${w.test_stats.net_profit >= 0 ? 'border-green-800/50 bg-green-900/10' : 'border-red-800/50 bg-red-900/10'}`}>
-                  <div className="text-xs text-gray-400">Fold {w.fold}</div>
+                  <div className="text-xs text-muted-foreground">Fold {w.fold}</div>
                   <div className="text-sm font-bold text-white mt-1">{w.test_stats.win_rate}% WR</div>
                   <div className={`text-xs font-mono ${w.test_stats.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     ${w.test_stats.net_profit?.toFixed(0)}
                   </div>
-                  <div className="text-xs text-gray-500">PF {w.test_stats.profit_factor?.toFixed(1)}</div>
-                  <div className="text-xs text-gray-600">{w.test_stats.total_trades} trades</div>
+                  <div className="text-xs text-muted-foreground/60">PF {w.test_stats.profit_factor?.toFixed(1)}</div>
+                  <div className="text-xs text-muted-foreground/40">{w.test_stats.total_trades} trades</div>
                 </div>
               ))}
             </div>
@@ -704,12 +1096,23 @@ export default function BacktestPage() {
           {/* OOS Equity Curve */}
           {wfResult.oos_equity_curve?.length > 2 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-2">OOS Equity Curve (all folds concatenated)</h3>
+              <h3 className="text-sm font-semibold text-foreground/80 mb-2">OOS Equity Curve (all folds concatenated)</h3>
               <EquityCurve data={wfResult.oos_equity_curve} height={250} />
             </div>
           )}
         </div>
       )}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-8">
+          <BarChart3 className="h-16 w-16 mb-4 opacity-20" />
+          <p className="text-lg font-medium text-foreground/60">No Results Yet</p>
+          <p className="text-sm mt-1">Configure and run a backtest to see results here</p>
+        </div>
+      )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* Deploy as Agent Modal */}
       {showCreateAgent && (() => {
@@ -718,7 +1121,7 @@ export default function BacktestPage() {
         const connectedBrokers = accounts.filter(a => a.connected);
         return (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowCreateAgent(false)}>
-            <div className="bg-[#1a1f2e] rounded-xl border border-gray-700 p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="bg-input-bg rounded-xl border border-input-border p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-white mb-4">Deploy Strategy as Agent</h3>
               <form onSubmit={e => {
                 e.preventDefault();
@@ -735,20 +1138,20 @@ export default function BacktestPage() {
               }} className="space-y-3">
                 {/* Symbol (read-only from datasource) */}
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Symbol</label>
-                  <div className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-accent text-sm font-mono">
+                  <label className="block text-xs text-muted-foreground mb-1">Symbol</label>
+                  <div className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-accent text-sm font-mono">
                     {deploySymbol}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Agent Name</label>
+                  <label className="block text-xs text-muted-foreground mb-1">Agent Name</label>
                   <input name="name" required defaultValue={`WF-Agent-${Date.now().toString(36)}`}
-                    className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                    className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Broker</label>
-                    <select name="broker_name" defaultValue={activeBroker || ''} className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                    <label className="block text-xs text-muted-foreground mb-1">Broker</label>
+                    <select name="broker_name" defaultValue={activeBroker || ''} className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm">
                       {connectedBrokers.length > 0
                         ? connectedBrokers.map(a => (
                           <option key={a.broker} value={a.broker}>{a.broker}</option>
@@ -758,22 +1161,22 @@ export default function BacktestPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Lot Size</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Lot Size</label>
                     <input name="lot_size" type="number" step="0.01" min="0.01" defaultValue="0.01" required
-                      className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                      className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Mode</label>
-                  <select name="mode" defaultValue="paper" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <label className="block text-xs text-muted-foreground mb-1">Mode</label>
+                  <select name="mode" defaultValue="paper" className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm">
                     <option value="paper">Paper Trading (simulated, no real trades)</option>
                     <option value="confirmation">Confirm Trade (approve each trade before execution)</option>
                     <option value="auto">Fully Autonomous (executes trades automatically)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Timeframe</label>
-                  <select name="timeframe" defaultValue="M10" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <label className="block text-xs text-muted-foreground mb-1">Timeframe</label>
+                  <select name="timeframe" defaultValue="M10" className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm">
                     <option value="M1">M1</option>
                     <option value="M5">M5</option>
                     <option value="M10">M10</option>
@@ -784,8 +1187,8 @@ export default function BacktestPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">ML Model (optional)</label>
-                  <select name="ml_model_id" defaultValue="" className="w-full bg-[#0f1219] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <label className="block text-xs text-muted-foreground mb-1">ML Model (optional)</label>
+                  <select name="ml_model_id" defaultValue="" className="w-full bg-card-bg border border-input-border rounded-lg px-3 py-2 text-white text-sm">
                     <option value="">None — pure strategy signals</option>
                     {mlModels.map(m => (
                       <option key={m.id} value={m.id}>
@@ -796,7 +1199,7 @@ export default function BacktestPage() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button type="button" onClick={() => setShowCreateAgent(false)}
-                    className="flex-1 px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm">
+                    className="flex-1 px-4 py-2 rounded-lg border border-input-border text-foreground/80 hover:bg-muted text-sm">
                     Cancel
                   </button>
                   <button type="submit"
@@ -810,43 +1213,15 @@ export default function BacktestPage() {
         );
       })()}
 
-      {/* History */}
-      {history.length > 0 && (
-        <div className="bg-[#151923] rounded-xl border border-gray-800 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Previous Backtests</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-gray-400 border-b border-gray-800">
-                  <th className="text-left p-2">ID</th>
-                  <th className="text-left p-2">Symbol</th>
-                  <th className="text-left p-2">TF</th>
-                  <th className="text-right p-2">Trades</th>
-                  <th className="text-right p-2">Win %</th>
-                  <th className="text-right p-2">Net P&L</th>
-                  <th className="text-right p-2">PF</th>
-                  <th className="text-left p-2">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map(bt => (
-                  <tr key={bt.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="p-2 text-gray-500">#{bt.id}</td>
-                    <td className="p-2 text-white font-semibold">{bt.symbol}</td>
-                    <td className="p-2 text-gray-300">{bt.timeframe}</td>
-                    <td className="p-2 text-right text-gray-300">{bt.stats.total_trades || 0}</td>
-                    <td className="p-2 text-right text-gray-300">{(bt.stats.win_rate || 0).toFixed(1)}%</td>
-                    <td className={`p-2 text-right font-mono font-bold ${(bt.stats.net_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      ${(bt.stats.net_profit || 0).toFixed(2)}
-                    </td>
-                    <td className="p-2 text-right text-gray-300">{(bt.stats.profit_factor || 0).toFixed(2)}</td>
-                    <td className="p-2 text-gray-500 text-xs">{bt.created_at?.slice(0, 19).replace('T', ' ')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {settingsStrategy && (
+        <StrategySettingsModal
+          strategy={settingsStrategy}
+          onClose={() => setSettingsStrategy(null)}
+          onSaved={(updated) => {
+            setStrategies(prev => prev.map(s => s.id === updated.id ? updated : s));
+            setSettingsStrategy(null);
+          }}
+        />
       )}
 
       <ChatHelpers />

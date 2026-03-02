@@ -1,19 +1,31 @@
 "use client";
 
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { api } from "@/lib/api";
 import type { Strategy, StrategyList } from "@/types";
 import StrategyEditor from "@/components/StrategyEditor";
 import StrategySettingsModal from "@/components/StrategySettingsModal";
 import ChatHelpers from "@/components/ChatHelpers";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/* Strategies to auto-delete on first load */
+const STALE_STRATEGY_NAMES = [
+  "200-EMA + VWAP Trend Scalper",
+  "Pivot Point Breakout/Reversal",
+  "RSI + Bollinger Band Reversal",
+  "VWAP + MACD Breakout Scalper",
+];
 
 export default function StrategiesPage() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [editing, setEditing] = useState<Strategy | null>(null);
   const [creating, setCreating] = useState(false);
-  const [loaded, setLoaded] = useState(false);
 
   // AI Import state
   const [showAiModal, setShowAiModal] = useState(false);
@@ -35,6 +47,51 @@ export default function StrategiesPage() {
   // Settings modal state
   const [settingsStrategy, setSettingsStrategy] = useState<Strategy | null>(null);
 
+  // Search filter
+  const [search, setSearch] = useState("");
+
+  // Folder state
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [movingStrategy, setMovingStrategy] = useState<Strategy | null>(null);
+
+  const filtered = useMemo(
+    () =>
+      strategies.filter(
+        (s) =>
+          !search ||
+          s.name.toLowerCase().includes(search.toLowerCase()) ||
+          (s.description || "").toLowerCase().includes(search.toLowerCase()) ||
+          (s.strategy_type || "").toLowerCase().includes(search.toLowerCase())
+      ),
+    [strategies, search]
+  );
+
+  // Group strategies by folder
+  const grouped = useMemo(() => {
+    const systemStrats = filtered.filter((s) => s.is_system);
+    const userStrats = filtered.filter((s) => !s.is_system);
+
+    const folders = new Map<string, Strategy[]>();
+    const root: Strategy[] = [];
+
+    for (const s of userStrats) {
+      const f = s.folder;
+      if (f) {
+        if (!folders.has(f)) folders.set(f, []);
+        folders.get(f)!.push(s);
+      } else {
+        root.push(s);
+      }
+    }
+
+    // All unique folder names (including empty ones from collapsed)
+    const allFolders = Array.from(folders.keys()).sort();
+
+    return { systemStrats, root, folders, allFolders };
+  }, [filtered]);
+
   const load = useCallback(async () => {
     try {
       const data = await api.get<StrategyList>("/api/strategies");
@@ -44,10 +101,21 @@ export default function StrategiesPage() {
     }
   }, []);
 
-  if (!loaded) {
-    setLoaded(true);
+  useEffect(() => {
     load();
-  }
+  }, [load]);
+
+  // Auto-delete stale strategies on first load
+  const staleCleanedRef = useRef(false);
+  useEffect(() => {
+    if (staleCleanedRef.current || strategies.length === 0) return;
+    staleCleanedRef.current = true;
+    const toDelete = strategies.filter((s) => STALE_STRATEGY_NAMES.includes(s.name) && !s.is_system);
+    if (toDelete.length === 0) return;
+    Promise.all(toDelete.map((s) => api.delete(`/api/strategies/${s.id}`).catch(() => {}))).then(() => {
+      setStrategies((prev) => prev.filter((s) => !STALE_STRATEGY_NAMES.includes(s.name) || s.is_system));
+    });
+  }, [strategies]);
 
   const [deleteError, setDeleteError] = useState("");
 
@@ -79,6 +147,34 @@ export default function StrategiesPage() {
     setCreating(false);
     setAiResult(null);
     load();
+  };
+
+  const toggleFolder = (name: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const createFolder = () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    // Just toggle it open; folders are implicit from strategies
+    setCollapsedFolders((prev) => { const n = new Set(prev); n.delete(name); return n; });
+    setShowNewFolder(false);
+    setNewFolderName("");
+  };
+
+  const moveToFolder = async (strat: Strategy, folder: string | null) => {
+    try {
+      await api.put(`/api/strategies/${strat.id}`, { folder: folder || null });
+      setStrategies((prev) =>
+        prev.map((s) => (s.id === strat.id ? { ...s, folder: folder || undefined } : s))
+      );
+    } catch { /* ignore */ }
+    setMovingStrategy(null);
   };
 
   /* ── AI Import ──────────────────────────────────────── */
@@ -163,6 +259,85 @@ export default function StrategiesPage() {
     setSettingsStrategy(null);
   };
 
+  // Get all existing folder names for move-to menu
+  const allFolderNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const s of strategies) {
+      if (s.folder) names.add(s.folder);
+    }
+    return Array.from(names).sort();
+  }, [strategies]);
+
+  // ── Strategy Card ──
+  const StrategyCard = ({ s }: { s: Strategy }) => (
+    <Card
+      key={s.id}
+      className="bg-card-bg border-card-border hover:border-accent/30 transition-colors"
+    >
+      <CardContent className="p-4">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-foreground truncate flex items-center gap-2 text-sm">
+            {s.is_system && <Lock className="h-3.5 w-3.5 text-accent shrink-0" />}
+            {s.strategy_type === "python" && <span title="Python strategy" className="shrink-0">🐍</span>}
+            {s.strategy_type === "json" && <span title="JSON strategy" className="shrink-0">📋</span>}
+            {s.strategy_type === "pinescript" && <span title="Pine Script strategy" className="shrink-0">🌲</span>}
+            {s.name}
+            {s.is_system && (
+              <Badge variant="outline" className="text-accent border-accent/30 text-[10px]">System</Badge>
+            )}
+          </h3>
+          {s.description && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{s.description}</p>
+          )}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {s.strategy_type && s.strategy_type !== "builder" && (
+              <Badge className="bg-purple-500/10 text-purple-400 border-0 text-[10px]">
+                {s.strategy_type === "python" ? "🐍 Python" : s.strategy_type === "json" ? "📋 JSON" : s.strategy_type === "pinescript" ? "🌲 Pine Script" : s.strategy_type}
+              </Badge>
+            )}
+            {(!s.strategy_type || s.strategy_type === "builder") && (
+              <>
+                <Badge className="bg-accent/10 text-accent border-0 text-[10px]">{s.indicators?.length || 0} ind</Badge>
+                <Badge className="bg-success/10 text-success border-0 text-[10px]">{s.entry_rules?.length || 0} entry</Badge>
+                <Badge className="bg-danger/10 text-danger border-0 text-[10px]">{s.exit_rules?.length || 0} exit</Badge>
+              </>
+            )}
+            {s.settings_schema?.length > 0 && (
+              <Badge className="bg-fa-accent/10 text-fa-accent border-0 text-[10px]">{s.settings_schema.length} settings</Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 ml-3 shrink-0">
+          {s.strategy_type && s.strategy_type !== "builder" && s.settings_schema?.length > 0 && (
+            <Button variant="ghost" size="icon" onClick={() => setSettingsStrategy(s)} title="Strategy Settings" className="h-7 w-7 text-muted-foreground hover:text-accent">
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {(!s.strategy_type || s.strategy_type === "builder") && (
+            <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title={s.is_system ? "View" : "Edit"} className="h-7 w-7 text-muted-foreground hover:text-accent">
+              {s.is_system ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" onClick={() => handleDuplicate(s.id)} title="Duplicate" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          {!s.is_system && (
+            <>
+              <Button variant="ghost" size="icon" onClick={() => setMovingStrategy(s)} title="Move to folder" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                <FolderOpen className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} title="Delete" className="h-7 w-7 text-muted-foreground hover:text-danger">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      </CardContent>
+    </Card>
+  );
+
   // If AI result is ready, open StrategyEditor with pre-filled data
   if (aiResult) {
     return (
@@ -185,36 +360,60 @@ export default function StrategiesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Strategies</h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground hover:border-accent/50 transition-colors flex items-center gap-1.5"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            Upload File
-          </button>
-          <button
-            onClick={() => setShowAiModal(true)}
-            className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/20 transition-colors flex items-center gap-1.5"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-            </svg>
+          <Button variant="outline" size="sm" onClick={() => setShowNewFolder(true)} className="gap-1.5 text-xs">
+            <FolderPlus className="h-3.5 w-3.5" />
+            New Folder
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowUploadModal(true)} className="gap-1.5 text-xs">
+            <Upload className="h-3.5 w-3.5" />
+            Upload
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowAiModal(true)} className="gap-1.5 text-xs border-accent/40 text-accent hover:bg-accent/10">
+            <Sparkles className="h-3.5 w-3.5" />
             AI Import
-          </button>
-          <button
-            onClick={() => setCreating(true)}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent/90 transition-colors"
-          >
-            + New Strategy
-          </button>
+          </Button>
+          <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5 text-xs bg-accent text-black hover:bg-accent/90">
+            <Plus className="h-3.5 w-3.5" />
+            New Strategy
+          </Button>
         </div>
       </div>
+
+      {/* Search / filter */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search strategies by name, description, or type..."
+          className="pl-9 bg-card-bg border-card-border"
+        />
+      </div>
+
+      {/* New Folder inline form */}
+      {showNewFolder && (
+        <div className="flex items-center gap-2">
+          <FolderIcon className="h-4 w-4 text-accent" />
+          <Input
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            placeholder="Folder name..."
+            className="bg-card-bg border-card-border max-w-xs h-8 text-sm"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") createFolder(); if (e.key === "Escape") setShowNewFolder(false); }}
+          />
+          <Button size="sm" onClick={createFolder} disabled={!newFolderName.trim()} className="h-8 text-xs bg-accent text-black hover:bg-accent/90">
+            Create
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="h-8 text-xs">
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {deleteError && (
         <div className="rounded-lg bg-danger/10 border border-danger/30 px-4 py-3 text-sm text-danger flex items-center justify-between">
@@ -223,129 +422,144 @@ export default function StrategiesPage() {
         </div>
       )}
 
-      {strategies.length === 0 ? (
-        <div className="rounded-xl border border-card-border bg-card-bg p-12 text-center">
-          <div className="text-4xl mb-3">📊</div>
-          <p className="text-sm text-muted mb-4">
-            No strategies yet. Create your first trading strategy or import one with AI.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => setShowAiModal(true)}
-              className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/20"
-            >
-              AI Import
-            </button>
-            <button
-              onClick={() => setCreating(true)}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent/90"
-            >
-              Create Strategy
-            </button>
-          </div>
-        </div>
+      {filtered.length === 0 ? (
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-12 text-center">
+            <BarChart3 className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground mb-4">
+              No strategies yet. Create your first trading strategy or import one with AI.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button variant="outline" onClick={() => setShowAiModal(true)} className="border-accent/40 text-accent hover:bg-accent/10">
+                AI Import
+              </Button>
+              <Button onClick={() => setCreating(true)} className="bg-accent text-black hover:bg-accent/90">
+                Create Strategy
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-4">
-          {strategies.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-xl border border-card-border bg-card-bg p-5 hover:border-accent/30 transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate flex items-center gap-2">
-                    {s.is_system && (
-                      <svg className="h-4 w-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0110 0v4" />
-                      </svg>
-                    )}
-                    {s.name}
-                    {s.is_system && (
-                      <span className="inline-flex items-center rounded-full bg-accent/15 text-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                        System
-                      </span>
-                    )}
-                  </h3>
-                  {s.description && (
-                    <p className="text-sm text-muted mt-1 line-clamp-2">{s.description}</p>
-                  )}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {s.strategy_type && s.strategy_type !== "builder" && (
-                      <span className="inline-flex items-center rounded-md bg-purple-500/10 text-purple-400 px-2 py-0.5 text-xs font-medium uppercase">
-                        {s.strategy_type}
-                      </span>
-                    )}
-                    {(!s.strategy_type || s.strategy_type === "builder") && (
-                      <>
-                        <span className="inline-flex items-center rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
-                          {s.indicators?.length || 0} indicators
-                        </span>
-                        <span className="inline-flex items-center rounded-md bg-success/10 text-success px-2 py-0.5 text-xs font-medium">
-                          {s.entry_rules?.length || 0} entry rules
-                        </span>
-                        <span className="inline-flex items-center rounded-md bg-danger/10 text-danger px-2 py-0.5 text-xs font-medium">
-                          {s.exit_rules?.length || 0} exit rules
-                        </span>
-                      </>
-                    )}
-                    {s.settings_schema?.length > 0 && (
-                      <span className="inline-flex items-center rounded-md bg-blue-500/10 text-blue-400 px-2 py-0.5 text-xs font-medium">
-                        {s.settings_schema.length} settings
-                      </span>
-                    )}
-                    {s.risk_params?.stop_loss_type && (
-                      <span className="inline-flex items-center rounded-md bg-blue-500/10 text-blue-400 px-2 py-0.5 text-xs font-medium">
-                        SL: {s.risk_params.stop_loss_value} {s.risk_params.stop_loss_type}
-                      </span>
-                    )}
+        <div className="space-y-4">
+          {/* ── System strategies (collapsible) ── */}
+          {grouped.systemStrats.length > 0 && (
+            <div>
+              <button
+                onClick={() => toggleFolder("__system__")}
+                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors w-full text-left"
+              >
+                {collapsedFolders.has("__system__") ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                <Lock className="h-3 w-3" />
+                System Strategies
+                <span className="text-muted-foreground/50 font-normal normal-case">({grouped.systemStrats.length})</span>
+              </button>
+              {!collapsedFolders.has("__system__") && (
+                <div className="grid gap-2 ml-5">
+                  {grouped.systemStrats.map((s) => <StrategyCard key={s.id} s={s} />)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── User folders ── */}
+          {grouped.allFolders.map((folderName) => {
+            const folderStrats = grouped.folders.get(folderName) || [];
+            if (folderStrats.length === 0) return null;
+            const isCollapsed = collapsedFolders.has(folderName);
+            return (
+              <div key={folderName}>
+                <button
+                  onClick={() => toggleFolder(folderName)}
+                  className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors w-full text-left"
+                >
+                  {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  <FolderOpen className="h-3 w-3 text-accent" />
+                  {folderName}
+                  <span className="text-muted-foreground/50 font-normal normal-case">({folderStrats.length})</span>
+                </button>
+                {!isCollapsed && (
+                  <div className="grid gap-2 ml-5">
+                    {folderStrats.map((s) => <StrategyCard key={s.id} s={s} />)}
                   </div>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  {s.strategy_type && s.strategy_type !== "builder" && s.settings_schema?.length > 0 && (
-                    <button
-                      onClick={() => setSettingsStrategy(s)}
-                      className="rounded-lg border border-card-border p-1.5 text-muted hover:text-accent hover:border-accent/50 transition-colors"
-                      title="Strategy Settings"
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-                      </svg>
-                    </button>
-                  )}
-                  {(!s.strategy_type || s.strategy_type === "builder") && (
-                    <button
-                      onClick={() => setEditing(s)}
-                      className="rounded-lg border border-card-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:border-accent/50 transition-colors"
-                    >
-                      {s.is_system ? "View" : "Edit"}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDuplicate(s.id)}
-                    className="rounded-lg border border-card-border px-3 py-1.5 text-xs text-muted hover:text-foreground hover:border-accent/50 transition-colors"
-                  >
-                    Duplicate
-                  </button>
-                  {!s.is_system && (
-                    <button
-                      onClick={() => handleDelete(s.id)}
-                      className="rounded-lg border border-card-border px-3 py-1.5 text-xs text-muted hover:text-danger hover:border-danger/50 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-              <div className="mt-3 text-xs text-muted">
-                Updated {new Date(s.updated_at).toLocaleDateString()}
+            );
+          })}
+
+          {/* ── Root strategies (no folder) ── */}
+          {grouped.root.length > 0 && (
+            <div>
+              {(grouped.allFolders.length > 0 || grouped.systemStrats.length > 0) && (
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Layers className="h-3 w-3" />
+                  My Strategies
+                  <span className="text-muted-foreground/50 font-normal normal-case">({grouped.root.length})</span>
+                </div>
+              )}
+              <div className="grid gap-2">
+                {grouped.root.map((s) => <StrategyCard key={s.id} s={s} />)}
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 
       <ChatHelpers />
+
+      {/* ── Move to Folder Modal ── */}
+      {movingStrategy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-card-border bg-card-bg p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-accent" />
+                Move &quot;{movingStrategy.name}&quot;
+              </h3>
+              <button onClick={() => setMovingStrategy(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              <button
+                onClick={() => moveToFolder(movingStrategy, null)}
+                className={`w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors flex items-center gap-2 ${
+                  !movingStrategy.folder ? "bg-accent/10 text-accent" : "text-foreground"
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                No Folder (root)
+              </button>
+              {allFolderNames.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => moveToFolder(movingStrategy, f)}
+                  className={`w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors flex items-center gap-2 ${
+                    movingStrategy.folder === f ? "bg-accent/10 text-accent" : "text-foreground"
+                  }`}
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  {f}
+                </button>
+              ))}
+            </div>
+            {/* Create new folder inline */}
+            <div className="mt-3 pt-3 border-t border-card-border">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="New folder..."
+                  className="bg-card-bg border-card-border h-8 text-sm flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
+                      moveToFolder(movingStrategy, (e.target as HTMLInputElement).value.trim());
+                    }
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">Enter to move</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Settings Modal ─────────────────────────────── */}
       {settingsStrategy && (
@@ -359,22 +573,18 @@ export default function StrategiesPage() {
       {/* ── File Upload Modal ──────────────────────────── */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-card-border bg-[#0e0e10] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-card-border bg-card-bg p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                <svg className="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
+                <Upload className="h-5 w-5 text-accent" />
                 Upload Strategy File
               </h3>
-              <button onClick={closeUploadModal} className="text-muted hover:text-foreground">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+              <button onClick={closeUploadModal} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-sm text-muted mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Upload a strategy file (.py, .json, .pine). Parameters will be auto-detected
               and exposed as editable settings.
             </p>
@@ -408,21 +618,21 @@ export default function StrategiesPage() {
                 <div>
                   <div className="text-2xl mb-2">📄</div>
                   <p className="text-sm font-medium">{uploadFile.name}</p>
-                  <p className="text-xs text-muted mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {(uploadFile.size / 1024).toFixed(1)} KB — Click to change
                   </p>
                 </div>
               ) : (
                 <div>
                   <div className="text-2xl mb-2">📁</div>
-                  <p className="text-sm text-muted">Drag & drop a file here, or click to browse</p>
-                  <p className="text-xs text-muted mt-1">.py, .json, .pine — max 5 MB</p>
+                  <p className="text-sm text-muted-foreground">Drag & drop a file here, or click to browse</p>
+                  <p className="text-xs text-muted-foreground mt-1">.py, .json, .pine — max 5 MB</p>
                 </div>
               )}
             </div>
 
             <div className="mt-4">
-              <label className="block text-xs text-muted mb-1">Strategy Name (optional)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Strategy Name (optional)</label>
               <input
                 type="text"
                 value={uploadName}
@@ -439,27 +649,14 @@ export default function StrategiesPage() {
             )}
 
             <div className="mt-5 flex items-center justify-end gap-3">
-              <button onClick={closeUploadModal}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm text-muted hover:text-foreground transition-colors">
-                Cancel
-              </button>
-              <button
+              <Button variant="outline" onClick={closeUploadModal}>Cancel</Button>
+              <Button
                 onClick={handleFileUpload}
                 disabled={!uploadFile || uploadLoading}
-                className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-black hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-accent text-black hover:bg-accent/90 gap-2"
               >
-                {uploadLoading ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Uploading...
-                  </>
-                ) : (
-                  "Upload Strategy"
-                )}
-              </button>
+                {uploadLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : "Upload Strategy"}
+              </Button>
             </div>
           </div>
         </div>
@@ -468,24 +665,20 @@ export default function StrategiesPage() {
       {/* ── AI Import Modal ─────────────────────────────── */}
       {showAiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-card-border bg-[#0e0e10] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-card-border bg-card-bg p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                <svg className="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-                </svg>
+                <Sparkles className="h-5 w-5 text-accent" />
                 AI Strategy Import
               </h3>
-              <button onClick={closeAiModal} className="text-muted hover:text-foreground">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+              <button onClick={closeAiModal} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-sm text-muted mb-4">
+            <p className="text-sm text-muted-foreground mb-4">
               Upload a strategy document (.txt, .pine, .md, .pdf) and the AI will
-              convert it into a TradeForge strategy you can review and edit.
+              convert it into a FlowrexAlgo strategy you can review and edit.
             </p>
 
             {/* File Drop Zone */}
@@ -518,17 +711,17 @@ export default function StrategiesPage() {
                 <div>
                   <div className="text-2xl mb-2">📄</div>
                   <p className="text-sm font-medium">{aiFile.name}</p>
-                  <p className="text-xs text-muted mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {(aiFile.size / 1024).toFixed(1)} KB — Click to change
                   </p>
                 </div>
               ) : (
                 <div>
                   <div className="text-2xl mb-2">📁</div>
-                  <p className="text-sm text-muted">
+                  <p className="text-sm text-muted-foreground">
                     Drag & drop a file here, or click to browse
                   </p>
-                  <p className="text-xs text-muted mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     .txt, .pine, .md, .pdf — max 2 MB
                   </p>
                 </div>
@@ -537,7 +730,7 @@ export default function StrategiesPage() {
 
             {/* Optional prompt */}
             <div className="mt-4">
-              <label className="block text-xs text-muted mb-1">
+              <label className="block text-xs text-muted-foreground mb-1">
                 Additional instructions (optional)
               </label>
               <textarea
@@ -556,29 +749,14 @@ export default function StrategiesPage() {
             )}
 
             <div className="mt-5 flex items-center justify-end gap-3">
-              <button
-                onClick={closeAiModal}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
+              <Button variant="outline" onClick={closeAiModal}>Cancel</Button>
+              <Button
                 onClick={handleAiGenerate}
                 disabled={!aiFile || aiLoading}
-                className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-black hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-accent text-black hover:bg-accent/90 gap-2"
               >
-                {aiLoading ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Generating...
-                  </>
-                ) : (
-                  "Generate Strategy"
-                )}
-              </button>
+                {aiLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</> : "Generate Strategy"}
+              </Button>
             </div>
           </div>
         </div>

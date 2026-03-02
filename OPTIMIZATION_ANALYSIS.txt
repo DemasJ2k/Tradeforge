@@ -1,0 +1,355 @@
+================================================================================
+ OPTIMIZATION ENGINE COMPARISON
+ Tradeforge  vs  trading-strategy-optimizer-main (OGLE/KOI system)
+ Date: March 1, 2026
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 1 – WHAT TRADEFORGE HAS THAT THE EXTERNAL PROJECT DOES NOT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Intelligent search – Bayesian (Optuna TPE) + Genetic + Hybrid
+   External project uses cerebro.optstrategy() — pure brute-force grid search.
+   Tradeforge's sampler actually learns from prior trials and focuses on
+   promising regions. For large parameter spaces this is a big advantage.
+
+2. Parameter importance score
+   After every optimization run Tradeforge computes a Pearson correlation between
+   each parameter and the score across all trials, and normalizes it to a 0–1
+   importance map. The external project has no equivalent.
+
+3. Walk-forward validation (built-in)
+   Tradeforge splits the data into in-sample / out-of-sample, evaluates on both,
+   and blends (40% IS + 60% OOS) as the final score. The external project does
+   this only as a separate manual step (robustness file, not integrated).
+
+4. Generic strategy support
+   Tradeforge optimizes any strategy type (builder, MSS, Gold, file-based Python)
+   through one unified API. The external project has a dedicated optimizer file
+   per instrument (koi_eurusd_pro, sunrise_ogle_usdcad_pro, etc.).
+
+5. Real-time progress streaming (WebSocket)
+   Progress_callback feeds a live UI with %, current best score, and best params
+   while the optimization is running.
+
+6. Secondary objective filter
+   A secondary metric (e.g. "profit_factor >= 1.3") can be applied as a hard
+   constraint that penalizes any trial that doesn't meet it. The external project
+   has no equivalent — selection is all done post-hoc in spreadsheets.
+
+7. Full database persistence
+   Every optimization, its full trial history, best params, and param importance
+   are stored in the DB and retrievable via API.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 2 – WHAT THE EXTERNAL PROJECT HAS THAT TRADEFORGE DOES NOT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. PHASE-BASED SEQUENTIAL OPTIMIZATION
+   The external project's core methodology is explicit sequential phases:
+     Phase 1: SL/TP (Risk:Reward) — 25 combos
+     Phase 2: Entry Window + Pullback — 18 combos
+     Phase 3: EMAs — 144 combos (the most important phase)
+     Phase 4: ATR Volatility Filter — 16 combos
+     Phase 5: Final combo validation with trade logs
+     Phase 6-8: Refinements based on log analysis findings
+   Each phase locks in the best result as a fixed baseline for the next phase.
+   This prevents the explosion of combinations that a single global search hits,
+   and it maps directly to how a trader intuitively thinks about a strategy.
+
+   Tradeforge treats all parameters as a flat list in one pass. There is no
+   concept of "group these params, find the best, then optimize the next group."
+
+2. YEARLY BREAKDOWN IN EVERY RESULT
+   run_single_backtest() returns a yearly_pnl dict AND a negative_years counter
+   for every single trial. Selection criteria explicitly include "max 1 negative
+   year out of 5." The guide uses negative_years as a primary filter alongside PF.
+
+   Tradeforge's BacktestResult has no per-year breakdown. The optimizer only
+   records net_profit, win_rate, profit_factor, sharpe, max_drawdown, expectancy.
+   You cannot see which years were losing from the optimization result view.
+
+3. COMPOSITE SCORING FORMULAS
+   The external project's OPTIMIZATION_GUIDE.md explicitly recommends:
+     Score A: sharpe_ratio × √(num_trades)   — balances quality with frequency
+     Score B: profit_factor × sharpe_ratio   — weights both dimensions
+   These composite scores are the documented best practice and avoid the problem
+   of optimizing a single metric at the expense of others.
+
+   Tradeforge's objectives are single-metric only:
+   sharpe_ratio | net_profit | profit_factor | win_rate
+   No composite formula exists.
+
+4. MINIMUM TRADE THRESHOLD IS TOO LOW
+   Tradeforge penalizes results with < 5 trades (in _extract_score()).
+   The external project's performance target table says:
+     Minimum: > 120 trades (5 years) | Ideal: > 200 trades
+   The guide also explicitly documents a per-instrument minimum of 30+ trades.
+   With 5 as the threshold, Tradeforge's optimizer can select a 6-trade result
+   with a huge Sharpe ratio that is statistically meaningless.
+
+5. INSTRUMENT PROFILE SYSTEM (CRITICAL)
+   The external project has two layered configs per datasource:
+
+   INSTRUMENT_DATA (per ticker):
+     pip_value, pip_decimal_places, spread, time_start, time_end
+     is_etf, commission_per_contract (for ETFs), margin_percent
+
+   INSTRUMENT_CONFIGS (per ticker):
+     lot_size, atr_scale
+
+   These are used to:
+   a) Auto-select the right commission model (ForexCommission $2.50/lot vs
+      DIACommission $0.02/contract)
+   b) Scale ATR grids correctly — JPY pairs use values 100× larger than standard
+      pairs, DIA uses USD values ($0.5–$10) vs pip values (0.0001–0.001)
+   c) Position sizing uses correct pip value per instrument
+
+   Tradeforge passes a flat spread_points and commission_per_lot per run.
+   There is no memory of "this datasource is USDJPY, use these defaults."
+   A user optimizing USDJPY with default spreads/commission gets wrong results.
+
+6. ROBUSTNESS TEST (POST-OPTIMIZATION PASS/FAIL GRID)
+   koi_eurusd_robustness.py runs 10 labeled time windows:
+     Single years: 2020, 2021, 2022, 2023, 2024 (one window per year)
+     Multi-year  : 2020-2021, 2022-2023, 2024-2025.07
+     Rolling     : 2020.07-2023.06 (alt 3-year), 2025 H1
+   Output is a grid: Period | Trades | WR% | PF | PnL | DD% | ✅/⚠️/❌
+
+   Then a criteria check block:
+     ✅/❌  PF > 1.2 in 70%+ tests
+     ✅/❌  WR > 25% in ALL tests
+     ✅/❌  Max DD < 25% in ALL tests
+     ✅/❌  Positive PnL in 60%+ tests
+   And a final PASS/FAIL verdict: EXCELLENT / GOOD / ACCEPTABLE / POOR
+
+   Tradeforge has walk-forward (one split) but no multi-window robustness grid.
+   There is no automatic pass/fail criteria check after optimization completes.
+
+7. LOG ANALYSIS / TRADE EXPORT WORKFLOW
+   The external project's 2-step methodology explicitly separates:
+     Step 1 (backtesting): Optimize what CAN'T be found from logs alone
+                           (EMAs, SL/TP multipliers, structural params)
+     Step 2 (log analysis): Generate detailed per-trade logs for the top
+                            3-5 configs, then manually analyze:
+                              • Entry hour distribution (which hours are profitable)
+                              • ATR value at entry (min/max thresholds)
+                              • EMA angle at entry (slope ranges)
+                              • Candle patterns
+                            Use this to propose filter candidates, then validate
+                            with a real backtest (NOT log analysis alone)
+
+   The guide documents a specific discovered bug: log analysis showed PF 1.56,
+   real backtest showed PF 1.25 due to double commission (entry + exit) not being
+   counted in log analysis. This lesson drives the strict "always validate with
+   real backtest" rule.
+
+   Tradeforge has no trade log export from an optimization run. There is no way
+   to extract "what hour were the winning trades for the best parameters?"
+
+8. MANDATORY COMMISSION VALIDATION IN METHODOLOGY
+   Every backtest function in the external project includes ForexCommission()
+   as a mandatory, documented step with explicit warnings. The optimization guide
+   has a ⚠️ CRITICAL LESSONS LEARNED section about this.
+   The commission class applies $2.50/lot on BOTH open and close, meaning the
+   true round-trip cost is $5.00 per 1-lot trade.
+
+   Tradeforge's commission_per_lot defaults to 0.0 in the schema. Nothing
+   enforces that a user passes a realistic commission value. Optimization results
+   without commission look better than live results will be.
+
+9. TIME FILTER ANTI-OVERFITTING RULE
+   The guide explicitly flags time-range filtering as an overfitting risk:
+   "DEPRECATED - Time Filter by backtesting (generates overfitting).
+    Hours are determined by LOG ANALYSIS, not grid search."
+   Phase 5's time-filter grid is marked DEPRECATED. Time filters are added only
+   after discovering the best hours through trade export analysis.
+
+   Tradeforge has no such warning. A user can freely add time-range parameters
+   to the optimization space, including hours, which will almost always overfit.
+
+10. BestPnL BASELINE CONCEPT
+    After the full phase chain, the external project stores named baselines:
+      BestPF  – highest profit factor but fewer trades
+      BestPnL – most total profit, slightly lower PF, fewer negative years
+      BestDD  – lowest drawdown
+    New optimization phases start FROM a named baseline, not from scratch.
+    The user picks which baseline to continue refining.
+
+    Tradeforge has no concept of named baselines or continuing from a saved state.
+    Every optimization starts cold from the current strategy settings.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 3 – MAPPING YOUR PLANNED IMPROVEMENTS TO THE FINDINGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your improvement list — cross-referenced with what we confirmed above:
+
+A. Phase-based optimization UI
+   CONFIRMED CRITICAL. The external project proves this works in practice across
+   8+ instruments and dozens of currencies. The implementation approach: the UI
+   lets the user define named "phases", each with its own parameter subset. When
+   a phase completes the best params are locked and pre-filled into the next phase
+   as frozen values. Phase results are stored separately in the DB so a user can
+   go back and replay a phase.
+
+B. Robustness test step
+   CONFIRMED CRITICAL. The external project's robustness file is a standalone
+   script that runs 10 windows and outputs a pass/fail grid. For Tradeforge this
+   should be an API endpoint POST /api/optimize/{id}/robustness that takes N
+   window definitions and reruns the best_params across each. Results shown as
+   a color-coded grid table in the UI with the four criteria checkboxes.
+
+C. Combined scoring formula
+   CONFIRMED. The external guide specifically documents sharpe×√trades as the
+   primary recommendation, and PF×sharpe as an alternative. Both should be added
+   as objective options. Current Tradeforge objectives only cover single metrics.
+
+D. Yearly breakdown in results
+   CONFIRMED CRITICAL. The external project uses negative_years as a first-class
+   selection criterion (target: ≤1 negative year in 5). This needs to be added to
+   BacktestResult, propagated through stats in every trial, and shown in the
+   optimization results table as a column.
+
+E. Minimum trades threshold
+   CONFIRMED. Current threshold of 5 is dangerously low. The external guide's
+   minimum is 120 for 5-year data. Suggested approach for Tradeforge: make the
+   minimum configurable in the OptimizationRequest schema, default to 30, and
+   clearly expose it in the UI. The penalty for < min_trades should remain -1e6.
+
+F. Instrument profile system
+   CONFIRMED CRITICAL. This is the most structurally significant gap. Without
+   instrument profiles, ATR-based parameters optimized on XAUUSD are meaningless
+   on USDJPY. The DB model for DataSource needs to store: pip_value, is_jpy_pair,
+   lot_size, default_spread, default_commission_model, default_commission_value.
+   The optimizer reads these from the datasource instead of using the flat values
+   passed in the request. This also prevents the commission=0 problem.
+
+G. SQN metric
+   Not present in the external project either but is a well-known metric
+   (SQN = expectancy / std_dev_of_R × √trades). Should be added to BacktestResult
+   and as a selectable objective alongside the existing metrics.
+
+H. Trade log export + analysis
+   CONFIRMED. The external project proves how valuable this is — they found an
+   hour bias (e.g. hours 12-13 PF 0.0-0.5 vs hour 0-3 PF 1.3-4.3) that was only
+   discoverable by exporting and reading the trade logs. For Tradeforge: add a
+   GET /api/optimize/{id}/trade-log endpoint that returns the full trade list for
+   the top-N results, and add a breakdown view in the UI that groups by hour, day
+   of week, and ATR bucket.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 4 – ADDITIONAL IMPROVEMENTS NOT ON YOUR LIST (DISCOVERED FROM REVIEW)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+I. ANTI-OVERFITTING WARNINGS FOR TIME FILTERS
+   Add a UI warning when a user includes time-range parameters (entry_hour,
+   exit_hour) in the parameter space: "Warning: Time filter optimization is
+   high-risk for overfitting. Recommend discovering hour biases via trade log
+   analysis first."
+
+J. MANDATORY COMMISSION PROMPT
+   When commission_per_lot is 0.0, show a warning in the optimization setup UI:
+   "You have not entered a commission. Results will be overstated vs live trading."
+   The instrument profile system (F above) would fix this automatically.
+
+K. MULTI-CPU PARALLELISM
+   The external project supports maxcpus=N. Tradeforge runs optimization in a
+   single background thread. For Bayesian this is hard to parallelize (trials are
+   sequential by design), but for grid/genetic phases it is straightforward to
+   parallelize across a ProcessPoolExecutor.
+
+L. NAMED RESULT SNAPSHOTS / BASELINES
+   Let users "pin" an optimization result as a named baseline (e.g. "Phase 3 EMA
+   Best"). From any pinned baseline they can start a new optimization run that
+   freezes the baseline params and only optimizes the new parameter subset. This
+   mirrors how the external project works in practice.
+
+M. TRIAL SCORE DISTRIBUTION CHART
+   The external project has a custom_plotter.py and web_plotter.py that generate
+   HTML reports. Tradeforge currently shows a trial history table. A scatter plot
+   of trial number vs score with color = method (bayesian/genetic) and a histogram
+   of score distribution would make it much easier to see if the search converged.
+
+N. PARAMETER SENSITIVITY SURFACE
+   For 2-parameter combinations, add an optional heatmap showing score across the
+   grid. This lets users visually see if there is a smooth peak (robust) or a
+   sharp spike (overfit). Only practical for small grids but very useful.
+
+O. OVERFITTING DETECTION: IS vs OOS SCORE DIVERGENCE
+   Walk-forward already computes IS and OOS scores. Add a flag in the trial record
+   when IS score >> OOS score by a threshold (e.g. >50% difference), and surface
+   that in the UI as a warning on the best result: "High IS/OOS divergence — may
+   be overfit."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 5 – SUGGESTED PRIORITY ORDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Priority 1 – Fix correctness problems (results are currently misleading)
+  E  Raise min trades to 30 (configurable), expose in UI
+  F  Instrument profile system on DataSource — auto-fill commission & spread
+  J  Mandatory commission warning when commission = 0
+
+Priority 2 – Improve quality of results (results become more reliable)
+  C  Add sharpe×√trades and PF×sharpe as objective options
+  D  Add yearly PnL breakdown + negative_years to BacktestResult and UI
+  G  Add SQN as a selectable objective
+  O  IS vs OOS divergence flag in walk-forward results
+
+Priority 3 – Add the robustness workflow (prevent shipping overfit strategies)
+  B  Robustness test endpoint — N windows, pass/fail grid UI
+  I  Anti-overfitting warning for time filter params
+
+Priority 4 – Add the analytical workflow (surface actionable filter candidates)
+  H  Trade log export for top N results + hour/ATR breakdown view
+  L  Named result snapshots / baselines
+
+Priority 5 – Structural UX improvements (power-user features)
+  A  Phase-based optimization UI
+  K  Multi-CPU parallelism for grid/genetic modes
+  M  Trial score distribution chart
+  N  Parameter sensitivity heatmap for 2-param grids
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SECTION 6 – KEY ARCHITECTURAL NOTES (for implementation reference)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE LOCATIONS IN TRADEFORGE TO MODIFY:
+
+  backend/app/models/optimization.py  — add method, secondary_* columns (done),
+                                         add yearly_breakdown, neg_years columns
+                                         to trial stats JSON
+
+  backend/app/models/datasource.py    — add pip_value, is_jpy, lot_size,
+                                         default_spread, default_commission fields
+
+  backend/app/services/optimize/engine.py
+    _extract_score()       — raise min trades threshold (line ~530, currently 5)
+    _get_metric()          — add sqn, sharpe_sqrt_trades, pf_times_sharpe
+    _evaluate() → stats{}  — add yearly_pnl, negative_years to trial stats
+
+  backend/app/services/backtest/engine.py
+    BacktestResult         — add yearly_pnl dict, negative_years int
+    final stats computation — slice trade_log by year, sum by year
+
+  backend/app/schemas/optimization.py
+    OptimizationRequest    — add min_trades field (default 30)
+    TrialResult.stats      — yearly_pnl, negative_years visible in response
+
+  New endpoint to add to backend/app/api/optimization.py:
+    GET  /api/optimize/{id}/trades      — returns trade log for best params
+    POST /api/optimize/{id}/robustness  — runs best params across N windows
+
+  frontend/src/app/optimize/page.tsx
+    — Add yearly breakdown table in results panel
+    — Add composite score options in objective dropdown
+    — Add min_trades input
+    — Commission = 0 warning block
+
+================================================================================

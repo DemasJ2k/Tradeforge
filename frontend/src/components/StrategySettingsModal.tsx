@@ -61,19 +61,19 @@ export default function StrategySettingsModal({ strategy, onClose, onSaved }: Pr
         <div className="flex items-center justify-between border-b border-card-border px-5 py-3">
           <div>
             <h2 className="text-sm font-semibold">{strategy.name}</h2>
-            <span className="text-xs text-muted">
-              {strategy.strategy_type === "python" ? "Python" :
-               strategy.strategy_type === "json" ? "JSON" :
-               strategy.strategy_type === "pinescript" ? "Pine Script" : "Strategy"} Settings
+            <span className="text-xs text-muted-foreground">
+              {strategy.strategy_type === "python" ? "🐍 Python" :
+               strategy.strategy_type === "json" ? "📋 JSON" :
+               strategy.strategy_type === "pinescript" ? "🌲 Pine Script" : "Strategy"} Settings
             </span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-lg leading-none">&times;</button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none">&times;</button>
         </div>
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {schema.length === 0 ? (
-            <p className="text-sm text-muted">No configurable settings detected for this strategy.</p>
+            <p className="text-sm text-muted-foreground">No configurable settings detected for this strategy.</p>
           ) : (
             schema.map((entry) => (
               <SettingsField
@@ -90,7 +90,7 @@ export default function StrategySettingsModal({ strategy, onClose, onSaved }: Pr
         <div className="border-t border-card-border px-5 py-3 flex items-center justify-between">
           <button
             onClick={handleReset}
-            className="text-xs text-muted hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Reset to Defaults
           </button>
@@ -98,7 +98,7 @@ export default function StrategySettingsModal({ strategy, onClose, onSaved }: Pr
             {error && <span className="text-xs text-danger mr-2">{error}</span>}
             <button
               onClick={onClose}
-              className="rounded-lg border border-card-border px-4 py-1.5 text-sm text-muted hover:text-foreground transition-colors"
+              className="rounded-lg border border-card-border px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Cancel
             </button>
@@ -134,7 +134,7 @@ function SettingsField({
       <label className="flex items-center justify-between cursor-pointer group">
         <div>
           <span className="text-sm">{entry.label}</span>
-          {entry.key && <span className="text-xs text-muted ml-2 opacity-0 group-hover:opacity-100 transition-opacity">{entry.key}</span>}
+          {entry.key && <span className="text-xs text-muted-foreground ml-2 opacity-0 group-hover:opacity-100 transition-opacity">{entry.key}</span>}
         </div>
         <div
           className={`relative w-10 h-5 rounded-full transition-colors ${value ? "bg-accent" : "bg-card-border"}`}
@@ -151,7 +151,7 @@ function SettingsField({
   if (entry.type === "select" && entry.options) {
     return (
       <div>
-        <label className="block text-xs text-muted mb-1">{entry.label}</label>
+        <label className="block text-xs text-muted-foreground mb-1">{entry.label}</label>
         <select
           value={String(value ?? "")}
           onChange={(e) => onChange(e.target.value)}
@@ -172,14 +172,14 @@ function SettingsField({
     return (
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-muted">{entry.label}</label>
+          <label className="text-xs text-muted-foreground">{entry.label}</label>
           <span className="text-xs font-mono text-accent">
             {entry.type === "int" ? Math.round(numValue) : numValue.toFixed(2)}
           </span>
         </div>
         {hasRange ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted w-8 text-right">{entry.min}</span>
+            <span className="text-xs text-muted-foreground w-8 text-right">{entry.min}</span>
             <input
               type="range"
               min={entry.min}
@@ -192,7 +192,7 @@ function SettingsField({
               }}
               className="flex-1 accent-accent h-1.5"
             />
-            <span className="text-xs text-muted w-8">{entry.max}</span>
+            <span className="text-xs text-muted-foreground w-8">{entry.max}</span>
           </div>
         ) : (
           <input
@@ -213,7 +213,7 @@ function SettingsField({
   // String fallback
   return (
     <div>
-      <label className="block text-xs text-muted mb-1">{entry.label}</label>
+      <label className="block text-xs text-muted-foreground mb-1">{entry.label}</label>
       <input
         type="text"
         value={String(value ?? "")}

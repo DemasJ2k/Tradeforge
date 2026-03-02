@@ -8,8 +8,8 @@ Two modes:
   1. Anchored: train window always starts at bar 0, expanding forward
   2. Rolling:  train window slides forward with fixed size
 
-This provides the most realistic estimate of live performance because
-no bar is ever tested on data it was optimized on.
+Phase 6D: Generalised to ALL strategy types via V2 unified runner.
+Previously only supported MSS and Gold BT.
 """
 
 import math
@@ -18,11 +18,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.services.backtest.engine import Bar, Trade, BacktestResult
-from app.services.backtest.strategy_backtester import (
-    backtest_mss,
-    backtest_gold_bt,
-    _build_result,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -81,19 +76,24 @@ def walk_forward_backtest(
     spread_points: float = 0.0,
     commission_per_lot: float = 0.0,
     point_value: float = 1.0,
+    symbol: str = "UNKNOWN",
 ) -> WFResult:
     """
     Run walk-forward validation.
 
+    Phase 6D: Generalised — supports ALL strategy types (builder, MSS,
+    Gold BT, file-based) via V2 unified runner.
+
     Args:
         bars: Full bar dataset
-        strategy_type: "mss" or "gold_bt"
-        strategy_config: Strategy-specific config (mss_config or gold_bt_config)
+        strategy_type: "mss", "gold_bt", or "builder" (any type)
+        strategy_config: Full strategy config dict (with indicators, rules, filters, etc.)
         n_folds: Number of walk-forward folds (default 5)
         train_pct: % of each fold used for training/in-sample (default 70)
         mode: "anchored" (expanding window) or "rolling" (fixed window)
         initial_balance: Starting balance
         spread_points, commission_per_lot, point_value: Cost parameters
+        symbol: Trading symbol (for V2 instrument spec)
 
     Returns:
         WFResult with per-fold and aggregated OOS statistics
@@ -128,6 +128,7 @@ def walk_forward_backtest(
         train_result = _run_backtest(
             train_bars, strategy_type, strategy_config,
             initial_balance, spread_points, commission_per_lot, point_value,
+            symbol=symbol,
         )
         w.train_stats = _result_to_stats(train_result)
 
@@ -135,6 +136,7 @@ def walk_forward_backtest(
         test_result = _run_backtest(
             test_bars, strategy_type, strategy_config,
             running_balance, spread_points, commission_per_lot, point_value,
+            symbol=symbol,
         )
         w.test_stats = _result_to_stats(test_result)
         w.test_trades = test_result.trades
@@ -274,29 +276,45 @@ def _run_backtest(
     spread_points: float,
     commission_per_lot: float,
     point_value: float,
+    symbol: str = "UNKNOWN",
 ) -> BacktestResult:
-    """Run a single backtest segment."""
-    if strategy_type == "mss":
-        return backtest_mss(
-            bars_raw=bars,
-            mss_config=config,
-            initial_balance=initial_balance,
-            spread_points=spread_points,
-            commission_per_lot=commission_per_lot,
-            point_value=point_value,
-        )
-    elif strategy_type == "gold_bt":
-        return backtest_gold_bt(
-            bars_raw=bars,
-            gold_config=config,
-            initial_balance=initial_balance,
-            spread_points=spread_points,
-            commission_per_lot=commission_per_lot,
-            point_value=point_value,
-        )
-    else:
-        # Fallback: empty result
-        return BacktestResult(total_bars=len(bars))
+    """Run a single backtest segment via V2 unified runner (Phase 6D).
+
+    All strategy types are routed through run_unified_backtest which
+    detects MSS/Gold BT/builder from the config dict.
+    """
+    from app.services.backtest.v2_adapter import run_unified_backtest, v2_result_to_v1
+
+    # Build a full strategy config wrapper if only sub-config was passed
+    strategy_config = dict(config)
+    if strategy_type == "mss" and "filters" not in strategy_config:
+        # Legacy caller passed mss_config directly — wrap it
+        strategy_config = {
+            "indicators": [],
+            "entry_rules": [],
+            "exit_rules": [],
+            "risk_params": config.get("risk_params", {}),
+            "filters": {"mss_config": config},
+        }
+    elif strategy_type == "gold_bt" and "filters" not in strategy_config:
+        strategy_config = {
+            "indicators": [],
+            "entry_rules": [],
+            "exit_rules": [],
+            "risk_params": config.get("risk_params", {}),
+            "filters": {"gold_bt_config": config},
+        }
+
+    v2_result = run_unified_backtest(
+        bars=bars,
+        strategy_config=strategy_config,
+        symbol=symbol,
+        initial_balance=initial_balance,
+        spread_points=spread_points,
+        commission_per_lot=commission_per_lot,
+        point_value=point_value,
+    )
+    return v2_result_to_v1(v2_result, initial_balance, len(bars))
 
 
 def _result_to_stats(result: BacktestResult) -> dict:

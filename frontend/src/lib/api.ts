@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function request<T>(
   path: string,
@@ -23,7 +23,9 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `HTTP ${res.status}`);
+    const detail = body.detail;
+    const msg = typeof detail === "string" ? detail : Array.isArray(detail) ? detail.map((d: Record<string, unknown>) => d.msg ?? JSON.stringify(d)).join("; ") : `HTTP ${res.status}`;
+    throw new Error(msg || `HTTP ${res.status}`);
   }
 
   return res.json();

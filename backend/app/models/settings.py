@@ -58,6 +58,16 @@ class UserSettings(Base):
     session_timeout_minutes = Column(Integer, default=0)  # 0=no timeout
     notifications = Column(JSON, default=dict)  # {backtest: true, optimize: true, trade: true}
 
+    # --- Notification Channels ---
+    notification_email = Column(String(200), default="")       # recipient email address
+    notification_smtp_host = Column(String(200), default="")   # e.g. smtp.gmail.com
+    notification_smtp_port = Column(Integer, default=587)
+    notification_smtp_user = Column(String(200), default="")
+    notification_smtp_pass_encrypted = Column(Text, default="")  # encrypted password
+    notification_smtp_use_tls = Column(Integer, default=1)       # 1=STARTTLS, 0=none
+    notification_telegram_bot_token_encrypted = Column(Text, default="")
+    notification_telegram_chat_id = Column(String(100), default="")
+
     # --- Timestamps ---
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),

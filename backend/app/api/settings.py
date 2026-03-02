@@ -72,6 +72,14 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         max_storage_mb=s.max_storage_mb or 0,
         session_timeout_minutes=s.session_timeout_minutes or 0,
         notifications=s.notifications or {},
+        notification_email=s.notification_email or "",
+        notification_smtp_host=s.notification_smtp_host or "",
+        notification_smtp_port=s.notification_smtp_port or 587,
+        notification_smtp_user=s.notification_smtp_user or "",
+        notification_smtp_pass_set=bool(s.notification_smtp_pass_encrypted),
+        notification_smtp_use_tls=bool(s.notification_smtp_use_tls),
+        notification_telegram_bot_token_set=bool(s.notification_telegram_bot_token_encrypted),
+        notification_telegram_chat_id=s.notification_telegram_chat_id or "",
     )
 
 
@@ -103,8 +111,17 @@ def update_settings(
         else:
             s.llm_api_key_encrypted = ""
 
+    # Handle notification secrets (encrypt before storing)
+    if "notification_smtp_pass" in data:
+        raw = data.pop("notification_smtp_pass")
+        s.notification_smtp_pass_encrypted = encrypt_value(raw) if raw else ""
+
+    if "notification_telegram_bot_token" in data:
+        raw = data.pop("notification_telegram_bot_token")
+        s.notification_telegram_bot_token_encrypted = encrypt_value(raw) if raw else ""
+
     # Map boolean fields to int for SQLite
-    bool_to_int = {"compact_mode", "chart_grid", "chart_crosshair"}
+    bool_to_int = {"compact_mode", "chart_grid", "chart_crosshair", "notification_smtp_use_tls"}
     for key, val in data.items():
         if key in bool_to_int:
             setattr(s, key, int(val))
@@ -478,3 +495,67 @@ async def auto_connect_brokers(
             results[broker_name] = f"error: {e}"
 
     return {"results": results}
+
+
+# ─── Test notification channels ───
+@router.post("/test-notification")
+async def test_notification(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Send a test notification via email and/or Telegram.
+    Accepts raw credentials (for testing before saving) or uses stored ones.
+    payload: { channel: "email"|"telegram"|"both", ...overrides }
+    """
+    s = _get_or_create_settings(db, current_user)
+    channel = payload.get("channel", "both")
+    results: dict = {}
+
+    if channel in ("email", "both"):
+        from app.services.notification import test_email_settings
+
+        smtp_host = payload.get("smtp_host") or s.notification_smtp_host or ""
+        smtp_port = payload.get("smtp_port") or s.notification_smtp_port or 587
+        smtp_user = payload.get("smtp_user") or s.notification_smtp_user or ""
+        to_email = payload.get("email") or s.notification_email or ""
+        use_tls = payload.get("smtp_use_tls")
+        if use_tls is None:
+            use_tls = bool(s.notification_smtp_use_tls)
+
+        # Use provided password or decrypt stored
+        smtp_pass = payload.get("smtp_pass")
+        if not smtp_pass and s.notification_smtp_pass_encrypted:
+            smtp_pass = decrypt_value(s.notification_smtp_pass_encrypted)
+
+        if all([to_email, smtp_host, smtp_user, smtp_pass]):
+            results["email"] = test_email_settings(
+                to_email=to_email,
+                smtp_host=smtp_host,
+                smtp_port=int(smtp_port),
+                smtp_user=smtp_user,
+                smtp_pass=smtp_pass,
+                use_tls=use_tls,
+            )
+        else:
+            results["email"] = False
+            results["email_error"] = "Incomplete email settings"
+
+    if channel in ("telegram", "both"):
+        from app.services.notification import test_telegram_settings
+
+        chat_id = payload.get("chat_id") or s.notification_telegram_chat_id or ""
+        bot_token = payload.get("bot_token")
+        if not bot_token and s.notification_telegram_bot_token_encrypted:
+            bot_token = decrypt_value(s.notification_telegram_bot_token_encrypted)
+
+        if bot_token and chat_id:
+            results["telegram"] = await test_telegram_settings(
+                bot_token=bot_token, chat_id=chat_id,
+            )
+        else:
+            results["telegram"] = False
+            results["telegram_error"] = "Incomplete Telegram settings"
+
+    return results

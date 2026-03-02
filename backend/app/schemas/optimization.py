@@ -30,6 +30,12 @@ class OptimizationRequest(BaseModel):
     secondary_objective: Optional[str] = None   # sharpe_ratio, net_profit, profit_factor, win_rate
     secondary_threshold: Optional[float] = None  # threshold value the secondary metric must meet
     secondary_operator: Optional[str] = None     # ">=" or "<="
+    min_trades: int = 30                          # minimum trades required (default 30)
+    # Phase 6 params
+    max_workers: int = 0                          # 0 = auto (CPU count - 1)
+    early_stop_patience: int = 0                  # 0 = disabled; stop after N trials with no improvement
+    time_budget_seconds: float = 0                # 0 = unlimited; max runtime in seconds
+    max_dd_abort: float = 0                       # 0 = disabled; max drawdown % to abort trial
 
 
 class TrialResult(BaseModel):
@@ -71,3 +77,69 @@ class OptimizationListItem(BaseModel):
     status: str
     best_score: float
     created_at: str
+
+
+# ─── Robustness Test ────────────────────────────────────────
+
+class RobustnessRequest(BaseModel):
+    n_windows: int = 10           # Number of sliding windows
+    window_pct: float = 30.0      # Each window = this % of total bars
+    initial_balance: float = 10000.0
+    spread_points: float = 0.0
+    commission_per_lot: float = 0.0
+    point_value: float = 1.0
+    min_trades: int = 10          # Min trades per window to be valid
+    min_profit_factor: float = 1.0
+    min_sharpe: float = 0.0
+
+
+class RobustnessWindowResult(BaseModel):
+    window_index: int
+    date_from: str
+    date_to: str
+    n_bars: int
+    total_trades: int
+    net_profit: float
+    sharpe_ratio: float
+    profit_factor: float
+    win_rate: float
+    max_drawdown_pct: float
+    sqn: float
+    passed: bool       # True if meets all criteria
+
+
+class RobustnessResponse(BaseModel):
+    opt_id: int
+    n_windows: int
+    windows_passed: int
+    pass_rate: float          # 0-100 %
+    windows: list[RobustnessWindowResult]
+    criteria: dict            # criteria used
+
+
+# ─── Trade Log Export ───────────────────────────────────────
+
+class TradeLogEntry(BaseModel):
+    entry_time: float
+    exit_time: Optional[float] = None
+    direction: str
+    entry_price: float
+    exit_price: Optional[float] = None
+    pnl: float
+    exit_reason: str
+
+
+class TradeAnalysis(BaseModel):
+    by_hour: dict
+    by_day: dict
+    by_direction: dict
+
+
+class TradeLogResponse(BaseModel):
+    opt_id: int
+    trial_number: int
+    params: dict
+    score: float
+    total_trades: int
+    trades: list[TradeLogEntry]
+    analysis: TradeAnalysis

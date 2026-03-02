@@ -28,6 +28,7 @@ from app.api import market as market_api
 from app.api import websocket as ws_api
 from app.api import agent as agent_api
 from app.api import dashboard as dashboard_api
+from app.api import optimization_phase as optimization_phase_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -42,6 +43,7 @@ from app.models import ml as ml_model  # noqa: F401
 from app.models import invitation  # noqa: F401
 from app.models import agent as agent_model  # noqa: F401
 from app.models import password_reset as password_reset_model  # noqa: F401
+from app.models import optimization_phase as optimization_phase_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -64,6 +66,26 @@ def _run_schema_migrations():
         ("strategies", "file_path",       "VARCHAR(500)"),
         ("strategies", "settings_schema", "TEXT         DEFAULT '[]'"),
         ("strategies", "settings_values", "TEXT         DEFAULT '{}'"),
+        # Notification channel columns on user_settings
+        ("user_settings", "notification_email",                   "VARCHAR(255)"),
+        ("user_settings", "notification_smtp_host",               "VARCHAR(255)"),
+        ("user_settings", "notification_smtp_port",               "INTEGER DEFAULT 587"),
+        ("user_settings", "notification_smtp_user",               "VARCHAR(255)"),
+        ("user_settings", "notification_smtp_pass_encrypted",     "TEXT"),
+        ("user_settings", "notification_smtp_use_tls",            "INTEGER DEFAULT 1"),
+        ("user_settings", "notification_telegram_bot_token_encrypted", "TEXT"),
+        ("user_settings", "notification_telegram_chat_id",        "VARCHAR(100)"),
+        # DataSource ownership columns
+        ("datasources", "creator_id",  "INTEGER DEFAULT 1"),
+        ("datasources", "is_public",   "INTEGER DEFAULT 1"),
+        # Optimization datasource tracking
+        ("optimizations", "datasource_id", "INTEGER"),
+        # ML model ownership
+        ("ml_models", "creator_id", "INTEGER"),
+        # Trade ownership
+        ("trades", "user_id", "INTEGER"),
+        # Strategy folder grouping
+        ("strategies", "folder", "VARCHAR(100)"),
     ]
 
     insp = inspect(engine)
@@ -126,6 +148,7 @@ app.include_router(backtest_api.router)
 app.include_router(settings_api.router)
 app.include_router(llm_api.router)
 app.include_router(optimization_api.router)
+app.include_router(optimization_phase_api.router)
 app.include_router(broker_api.router)
 app.include_router(knowledge_api.router)
 app.include_router(ml_api.router)
@@ -162,358 +185,380 @@ def _seed_admin_user():
         db.close()
 
 
-def _seed_mss_strategy():
-    """Seed the MSS system strategy into the database if it doesn't exist."""
+def _seed_all_strategies():
+    """Seed all system Python strategies into the database."""
+    import json as _json
     from app.core.database import SessionLocal
     from app.models.strategy import Strategy
     from app.models.user import User
-    from app.services.strategy.mss_engine import DEFAULT_MSS_CONFIG
+    from app.services.strategy.file_parser import parse_python_strategy
 
-    db = SessionLocal()
-    try:
-        existing = db.query(Strategy).filter(Strategy.is_system == True, Strategy.name == "MSS – Market Structure Shift").first()
-        if existing:
-            return
-
-        # Use the first admin as the owner (system strategies still need a creator_id for FK)
-        admin = db.query(User).filter(User.is_admin == True).first()
-        if not admin:
-            admin = db.query(User).first()
-        if not admin:
-            import logging
-            logging.getLogger(__name__).warning("Cannot seed MSS strategy: no users in DB")
-            return
-
-        mss = Strategy(
-            name="MSS – Market Structure Shift",
-            description=(
-                "Market Structure Shift strategy. Detects Break of Structure (BOS) and "
-                "Change of Character (CHoCH) patterns using pivot high/low analysis with "
-                "a 42-bar lookback. Entries use pullback-adjusted limit orders with ADR10-based "
-                "TP1 (15%), TP2 (25%), and SL (25%). 60/40 lot split with breakeven management."
-            ),
-            indicators=[
-                {"id": "pivot_high", "type": "PivotHigh", "params": {"lookback": 42}, "overlay": True},
-                {"id": "pivot_low", "type": "PivotLow", "params": {"lookback": 42}, "overlay": True},
-                {"id": "adr10", "type": "ADR", "params": {"period": 10}, "overlay": False},
-            ],
-            entry_rules=[
-                {"left": "price.close", "operator": "crosses_above", "right": "pivot_high", "logic": "OR"},
-                {"left": "price.close", "operator": "crosses_below", "right": "pivot_low", "logic": "OR"},
-            ],
-            exit_rules=[
-                {"left": "pnl", "operator": ">=", "right": "tp1", "logic": "OR"},
-                {"left": "pnl", "operator": ">=", "right": "tp2", "logic": "OR"},
-                {"left": "pnl", "operator": "<=", "right": "sl", "logic": "OR"},
-                {"left": "signal", "operator": "==", "right": "reversal", "logic": "OR"},
-            ],
-            risk_params={
-                "position_size_type": "percent_risk",
-                "position_size_value": 1.0,
-                "stop_loss_type": "adr_pct",
-                "stop_loss_value": 25.0,
-                "take_profit_type": "adr_pct",
-                "take_profit_value": 15.0,
-                "trailing_stop": False,
-                "max_positions": 2,
-                "lot_split": [0.6, 0.4],
-                "breakeven_on_tp1": True,
-            },
-            filters={
-                "mss_config": DEFAULT_MSS_CONFIG,
-            },
-            is_system=True,
-            creator_id=admin.id,
-        )
-        db.add(mss)
-        db.commit()
-        import logging
-        logging.getLogger(__name__).info("Seeded MSS system strategy (id=%d)", mss.id)
-    finally:
-        db.close()
-
-
-def _seed_gold_breakout_strategy():
-    """Seed the Gold Breakout system strategy into the database if it doesn't exist."""
-    from app.core.database import SessionLocal
-    from app.models.strategy import Strategy
-    from app.models.user import User
-    from app.services.strategy.gold_bt_engine import DEFAULT_GOLD_BT_CONFIG
-
-    db = SessionLocal()
-    try:
-        existing = db.query(Strategy).filter(Strategy.is_system == True, Strategy.name == "Gold Breakout").first()
-        if existing:
-            return
-
-        admin = db.query(User).filter(User.is_admin == True).first()
-        if not admin:
-            admin = db.query(User).first()
-        if not admin:
-            import logging
-            logging.getLogger(__name__).warning("Cannot seed Gold Breakout strategy: no users in DB")
-            return
-
-        gold = Strategy(
-            name="Gold Breakout",
-            description=(
-                "Gold Breakout Trader strategy. Every N hours, captures a reference price and builds "
-                "a gray box zone (±boxHeight/2). Buy Stop is placed above the box, Sell Stop below. "
-                "Entries trigger on price crossover of those stops. TP1/TP2/TP3 stacked above/below "
-                "with configurable zone heights and gaps. SL defaults to the opposite stop level."
-            ),
-            indicators=[
-                {"id": "box_high", "type": "GoldBTBox", "params": {"side": "top"}, "overlay": True},
-                {"id": "box_low", "type": "GoldBTBox", "params": {"side": "bottom"}, "overlay": True},
-                {"id": "buy_stop", "type": "GoldBTStop", "params": {"direction": "buy"}, "overlay": True},
-                {"id": "sell_stop", "type": "GoldBTStop", "params": {"direction": "sell"}, "overlay": True},
-            ],
-            entry_rules=[
-                {"left": "price.close", "operator": "crosses_above", "right": "buy_stop", "logic": "OR", "direction": "long"},
-                {"left": "price.close", "operator": "crosses_below", "right": "sell_stop", "logic": "OR", "direction": "short"},
-            ],
-            exit_rules=[
-                {"left": "pnl", "operator": ">=", "right": "tp1", "logic": "OR"},
-                {"left": "pnl", "operator": ">=", "right": "tp2", "logic": "OR"},
-                {"left": "pnl", "operator": "<=", "right": "sl", "logic": "OR"},
-                {"left": "signal", "operator": "==", "right": "reversal", "logic": "OR"},
-            ],
-            risk_params={
-                "position_size_type": "percent_risk",
-                "position_size_value": 1.0,
-                "stop_loss_type": "opposite_stop",
-                "take_profit_type": "zone",
-                "trailing_stop": False,
-                "max_positions": 2,
-                "lot_split": [0.5, 0.5],
-                "breakeven_on_tp1": True,
-            },
-            filters={
-                "gold_bt_config": DEFAULT_GOLD_BT_CONFIG,
-            },
-            is_system=True,
-            creator_id=admin.id,
-        )
-        db.add(gold)
-        db.commit()
-        import logging
-        logging.getLogger(__name__).info("Seeded Gold Breakout system strategy (id=%d)", gold.id)
-    finally:
-        db.close()
-
-
-def _seed_system_strategies():
-    """Seed the 4 system trading strategies from strategies.txt if they don't exist."""
-    from app.core.database import SessionLocal
-    from app.models.strategy import Strategy
-    from app.models.user import User
-
-    SYSTEM_STRATEGIES = [
-        {
-            "name": "VWAP + MACD Breakout Scalper",
-            "description": (
-                "Momentum breakout strategy. Trades above/below VWAP confirmed by MACD crossovers. "
-                "Best on 1m/5m timeframes for XAUUSD. Uses ATR-based stops and MACD signal-cross exits."
-            ),
-            "indicators": [
-                {"id": "vwap_1", "type": "VWAP", "params": {}, "overlay": True},
-                {"id": "macd_1", "type": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9, "source": "close"}, "overlay": False},
-                {"id": "atr_1", "type": "ATR", "params": {"period": 14}, "overlay": False},
-            ],
-            "entry_rules": [
-                {"left": "price.close", "operator": "crosses_above", "right": "vwap_1", "logic": "AND", "direction": "long"},
-                {"left": "macd_1", "operator": "crosses_above", "right": "macd_1_signal", "logic": "AND", "direction": "long"},
-                {"left": "price.close", "operator": "crosses_below", "right": "vwap_1", "logic": "OR", "direction": "short"},
-                {"left": "macd_1", "operator": "crosses_below", "right": "macd_1_signal", "logic": "AND", "direction": "short"},
-            ],
-            "exit_rules": [
-                {"left": "macd_1", "operator": "crosses_below", "right": "macd_1_signal", "logic": "OR", "direction": "long"},
-                {"left": "macd_1", "operator": "crosses_above", "right": "macd_1_signal", "logic": "OR", "direction": "short"},
-            ],
-            "risk_params": {
-                "position_size_type": "fixed_lot",
-                "position_size_value": 0.01,
-                "stop_loss_type": "atr_multiple",
-                "stop_loss_value": 1.5,
-                "take_profit_type": "atr_multiple",
-                "take_profit_value": 2.0,
-                "trailing_stop": True,
-                "trailing_stop_type": "atr_multiple",
-                "trailing_stop_value": 1.0,
-                "max_positions": 1,
-                "max_drawdown_pct": 5.0,
-            },
-            "filters": {
-                "time_start": "08:00",
-                "time_end": "17:00",
-                "days_of_week": [0, 1, 2, 3, 4],
-            },
-        },
-        {
-            "name": "RSI + Bollinger Band Reversal",
-            "description": (
-                "Mean-reversion scalper. Enters when price touches outer Bollinger Band with RSI "
-                "confirming oversold/overbought reversal. ADX filter ensures range-bound conditions. "
-                "Best on 1m for XAUUSD."
-            ),
-            "indicators": [
-                {"id": "rsi_1", "type": "RSI", "params": {"period": 14, "source": "close"}, "overlay": False},
-                {"id": "bb_1", "type": "Bollinger", "params": {"period": 20, "std_dev": 2, "source": "close"}, "overlay": True},
-                {"id": "atr_1", "type": "ATR", "params": {"period": 14}, "overlay": False},
-                {"id": "adx_1", "type": "ADX", "params": {"period": 14}, "overlay": False},
-            ],
-            "entry_rules": [
-                {"left": "price.close", "operator": "<=", "right": "bb_1_lower", "logic": "AND", "direction": "long"},
-                {"left": "rsi_1", "operator": "crosses_above", "right": "30", "logic": "AND", "direction": "long"},
-                {"left": "price.close", "operator": ">=", "right": "bb_1_upper", "logic": "OR", "direction": "short"},
-                {"left": "rsi_1", "operator": "crosses_below", "right": "70", "logic": "AND", "direction": "short"},
-            ],
-            "exit_rules": [
-                {"left": "price.close", "operator": ">=", "right": "bb_1", "logic": "OR", "direction": "long"},
-                {"left": "price.close", "operator": "<=", "right": "bb_1", "logic": "OR", "direction": "short"},
-            ],
-            "risk_params": {
-                "position_size_type": "fixed_lot",
-                "position_size_value": 0.01,
-                "stop_loss_type": "atr_multiple",
-                "stop_loss_value": 1.0,
-                "take_profit_type": "atr_multiple",
-                "take_profit_value": 1.5,
-                "trailing_stop": True,
-                "trailing_stop_type": "atr_multiple",
-                "trailing_stop_value": 1.0,
-                "max_positions": 1,
-                "max_drawdown_pct": 5.0,
-            },
-            "filters": {
-                "time_start": "08:00",
-                "time_end": "17:00",
-                "days_of_week": [0, 1, 2, 3, 4],
-                "min_adx": 0,
-                "max_adx": 25,
-            },
-        },
-        {
-            "name": "200-EMA + VWAP Trend Scalper",
-            "description": (
-                "Multi-timeframe trend scalper. Uses 200-EMA as trend filter and VWAP for intraday "
-                "entries. Trades pullbacks to VWAP in the direction of the 200-EMA trend. "
-                "Best on 1m/5m with 15m trend confirmation."
-            ),
-            "indicators": [
-                {"id": "ema200", "type": "EMA", "params": {"period": 200, "source": "close"}, "overlay": True},
-                {"id": "vwap_1", "type": "VWAP", "params": {}, "overlay": True},
-                {"id": "atr_1", "type": "ATR", "params": {"period": 14}, "overlay": False},
-            ],
-            "entry_rules": [
-                {"left": "price.close", "operator": ">", "right": "ema200", "logic": "AND", "direction": "long"},
-                {"left": "price.close", "operator": "crosses_above", "right": "vwap_1", "logic": "AND", "direction": "long"},
-                {"left": "price.close", "operator": "<", "right": "ema200", "logic": "OR", "direction": "short"},
-                {"left": "price.close", "operator": "crosses_below", "right": "vwap_1", "logic": "AND", "direction": "short"},
-            ],
-            "exit_rules": [
-                {"left": "price.close", "operator": "crosses_below", "right": "vwap_1", "logic": "OR", "direction": "long"},
-                {"left": "price.close", "operator": "crosses_above", "right": "vwap_1", "logic": "OR", "direction": "short"},
-            ],
-            "risk_params": {
-                "position_size_type": "fixed_lot",
-                "position_size_value": 0.01,
-                "stop_loss_type": "atr_multiple",
-                "stop_loss_value": 1.5,
-                "take_profit_type": "fixed_pips",
-                "take_profit_value": 15,
-                "trailing_stop": True,
-                "trailing_stop_type": "atr_multiple",
-                "trailing_stop_value": 1.0,
-                "max_positions": 1,
-                "max_drawdown_pct": 5.0,
-            },
-            "filters": {
-                "time_start": "08:00",
-                "time_end": "17:00",
-                "days_of_week": [0, 1, 2, 3, 4],
-            },
-        },
-        {
-            "name": "Pivot Point Breakout/Reversal",
-            "description": (
-                "Dual-mode pivot strategy. In trending markets (ADX>20), trades breakouts through "
-                "the daily central pivot targeting R1/S1. In ranging markets (ADX<20), trades bounces "
-                "off pivot support/resistance with Stochastic confirmation. Best on 5m/15m."
-            ),
-            "indicators": [
-                {"id": "pivots", "type": "Pivot", "params": {"type": "standard"}, "overlay": True},
-                {"id": "adx_1", "type": "ADX", "params": {"period": 14}, "overlay": False},
-                {"id": "stoch_1", "type": "Stochastic", "params": {"k_period": 14, "d_period": 3, "smooth": 3}, "overlay": False},
-                {"id": "atr_1", "type": "ATR", "params": {"period": 14}, "overlay": False},
-            ],
-            "entry_rules": [
-                {"left": "price.close", "operator": "crosses_above", "right": "pivots_pp", "logic": "AND", "direction": "long"},
-                {"left": "stoch_1", "operator": "crosses_above", "right": "20", "logic": "AND", "direction": "long"},
-                {"left": "price.close", "operator": "crosses_below", "right": "pivots_pp", "logic": "OR", "direction": "short"},
-                {"left": "stoch_1", "operator": "crosses_below", "right": "80", "logic": "AND", "direction": "short"},
-            ],
-            "exit_rules": [
-                {"left": "price.close", "operator": ">=", "right": "pivots_r1", "logic": "OR", "direction": "long"},
-                {"left": "price.close", "operator": "<=", "right": "pivots_s1", "logic": "OR", "direction": "short"},
-            ],
-            "risk_params": {
-                "position_size_type": "fixed_lot",
-                "position_size_value": 0.01,
-                "stop_loss_type": "atr_multiple",
-                "stop_loss_value": 1.0,
-                "take_profit_type": "pivot_level",
-                "take_profit_value": 1.0,
-                "take_profit_2_type": "pivot_level",
-                "take_profit_2_value": 2.0,
-                "lot_split": [0.5, 0.5],
-                "breakeven_on_tp1": True,
-                "trailing_stop": False,
-                "max_positions": 1,
-                "max_drawdown_pct": 5.0,
-            },
-            "filters": {
-                "time_start": "08:00",
-                "time_end": "17:00",
-                "days_of_week": [0, 1, 2, 3, 4],
-                "min_adx": 0,
-                "max_adx": 0,
-            },
-        },
-    ]
-
+    _log = logging.getLogger(__name__)
     db = SessionLocal()
     try:
         admin = db.query(User).filter(User.is_admin == True).first()
         if not admin:
             admin = db.query(User).first()
         if not admin:
+            _log.warning("Cannot seed strategies: no users in DB")
             return
 
-        for cfg in SYSTEM_STRATEGIES:
+        # Master strategy catalog — each entry becomes a system strategy
+        catalog = [
+            {
+                "name": "Valentini Auction Market",
+                "file": "s01_valentini_auction_market.py",
+                "description": (
+                    "Volume Profile + Order Flow strategy inspired by Fabio Valentini "
+                    "(3x Robbins World Cup). Detects Point of Control, Value Area, and "
+                    "volume-confirmed breakouts or mean-reversion setups."
+                ),
+                "timeframes": "4H / Daily",
+                "tags": ["volume_profile", "order_flow", "swing"],
+            },
+            {
+                "name": "ICT Silver Bullet",
+                "file": "s02_ict_silver_bullet.py",
+                "description": (
+                    "ICT Silver Bullet time-based strategy. Trades Fair Value Gaps "
+                    "during specific kill zones (3-4AM, 10-11AM, 2-3PM NY). Combines "
+                    "FVG detection with liquidity sweep and market structure shift."
+                ),
+                "timeframes": "1m / 5m / 15m",
+                "tags": ["ict", "smart_money", "scalping", "intraday"],
+            },
+            {
+                "name": "Smart Money Concepts",
+                "file": "s03_smart_money_concepts.py",
+                "description": (
+                    "Full ICT / Smart Money framework. Combines liquidity sweeps, "
+                    "Fair Value Gaps, and Order Block detection for institutional-grade "
+                    "entry points with break-of-structure confirmation."
+                ),
+                "timeframes": "15m / 1H / 4H",
+                "tags": ["ict", "smart_money", "swing"],
+            },
+            {
+                "name": "Triple EMA VWAP Scalper",
+                "file": "s04_triple_ema_vwap_scalper.py",
+                "description": (
+                    "Intraday scalping strategy using 9/20/50 EMA crossovers confirmed "
+                    "by VWAP position. 62% historical win rate. Trades only with "
+                    "institutional flow (price above/below VWAP)."
+                ),
+                "timeframes": "1m / 5m / 15m",
+                "tags": ["ema", "vwap", "scalping", "intraday"],
+            },
+            {
+                "name": "Opening Range Breakout",
+                "file": "s05_opening_range_breakout.py",
+                "description": (
+                    "Trades the breakout of the first 15-minute opening range. "
+                    "Adapts target multiples based on market conditions. "
+                    "Session-aware with volume confirmation."
+                ),
+                "timeframes": "5m / 15m",
+                "tags": ["breakout", "intraday", "session"],
+            },
+            {
+                "name": "Supertrend Trend Follower",
+                "file": "s06_supertrend_follower.py",
+                "description": (
+                    "Oliver Seban's Supertrend indicator (11% avg gain/trade over 60 years). "
+                    "ATR-based dynamic trailing stop with EMA trend filter and whipsaw protection."
+                ),
+                "timeframes": "1H / 4H / Daily",
+                "tags": ["supertrend", "trend_following", "swing"],
+            },
+            {
+                "name": "Turtle Trading (Donchian)",
+                "file": "s07_turtle_trading.py",
+                "description": (
+                    "Richard Dennis Turtle Trading rules. 20-period Donchian channel "
+                    "breakout with 55-period confirmation. Enhanced with Curtis Faith "
+                    "SMA filter and ATR-based position sizing."
+                ),
+                "timeframes": "Daily / Weekly",
+                "tags": ["donchian", "breakout", "trend_following", "position"],
+            },
+            {
+                "name": "Larry Williams Volatility Breakout",
+                "file": "s08_larry_williams_breakout.py",
+                "description": (
+                    "Inspired by Larry Williams (11,000% Robbins Cup return). "
+                    "Uses previous day's range * factor to set breakout levels from "
+                    "the open. Williams %R for exit confirmation."
+                ),
+                "timeframes": "Daily",
+                "tags": ["volatility", "breakout", "swing"],
+            },
+            {
+                "name": "Connors RSI(2) Mean Reversion",
+                "file": "s09_connors_rsi2_mean_reversion.py",
+                "description": (
+                    "Larry Connors' RSI(2) mean reversion — 30%+ annual returns since 1999. "
+                    "Ultra-short RSI(2) catches extreme conditions. 200-SMA trend filter, "
+                    "cumulative RSI variation, and ADX choppy-market filter."
+                ),
+                "timeframes": "Daily",
+                "tags": ["rsi", "mean_reversion", "swing"],
+            },
+            {
+                "name": "TTM Squeeze Momentum",
+                "file": "s10_ttm_squeeze.py",
+                "description": (
+                    "John Carter's TTM Squeeze. Bollinger Bands contracting inside "
+                    "Keltner Channels signals volatility squeeze. When it fires, "
+                    "enter in direction of Donchian momentum for explosive moves."
+                ),
+                "timeframes": "15m / 1H / 4H / Daily",
+                "tags": ["squeeze", "bollinger", "keltner", "momentum"],
+            },
+            {
+                "name": "Ichimoku Cloud Breakout",
+                "file": "s11_ichimoku_cloud.py",
+                "description": (
+                    "Full Ichimoku Kinko Hyo system by Goichi Hosoda (30 years of dev). "
+                    "Tenkan/Kijun cross above cloud with Chikou Span confirmation "
+                    "and Kumo twist filter."
+                ),
+                "timeframes": "4H / Daily / Weekly",
+                "tags": ["ichimoku", "trend_following", "swing", "position"],
+            },
+            {
+                "name": "ADX + Parabolic SAR",
+                "file": "s12_adx_parabolic_sar.py",
+                "description": (
+                    "Combining two J. Welles Wilder classics. ADX confirms strong trend "
+                    "(> 25 and rising), Parabolic SAR provides entry on flip and "
+                    "dynamic trailing exit. DI+/DI- directional confirmation."
+                ),
+                "timeframes": "1H / 4H / Daily",
+                "tags": ["adx", "parabolic_sar", "trend_following"],
+            },
+            {
+                "name": "Woodies CCI Zero Line Reject",
+                "file": "s13_woodies_cci.py",
+                "description": (
+                    "Ken Wood's highest-probability CCI pattern. CCI(14) trends on one "
+                    "side of zero, pulls back to ±50 zone, then resumes direction. "
+                    "Turbo CCI(6) confirms timing."
+                ),
+                "timeframes": "5m / 15m / 1H",
+                "tags": ["cci", "momentum", "intraday"],
+            },
+            {
+                "name": "RSI Divergence Swing",
+                "file": "s14_rsi_divergence.py",
+                "description": (
+                    "Andrew Cardwell-inspired RSI divergence detection. Identifies regular "
+                    "and hidden divergences between price pivot points and RSI values. "
+                    "50-SMA trend filter ensures alignment."
+                ),
+                "timeframes": "1H / 4H / Daily",
+                "tags": ["rsi", "divergence", "swing"],
+            },
+            {
+                "name": "Bollinger Band Squeeze Breakout",
+                "file": "s15_bb_squeeze_breakout.py",
+                "description": (
+                    "John Bollinger's bandwidth analysis. Detects when Bollinger Bandwidth "
+                    "hits bottom-5% of its range (squeeze). Enters on expansion using "
+                    "%B for direction confirmation."
+                ),
+                "timeframes": "15m / 1H / 4H",
+                "tags": ["bollinger", "squeeze", "breakout"],
+            },
+            {
+                "name": "VWAP Mean Reversion Bands",
+                "file": "s16_vwap_mean_reversion.py",
+                "description": (
+                    "Brian Shannon-inspired VWAP band strategy. Price reverts to "
+                    "institutional fair value (VWAP). Trades bounces from ±2σ bands "
+                    "with volume spike and reversal candle confirmation."
+                ),
+                "timeframes": "1m / 5m / 15m",
+                "tags": ["vwap", "mean_reversion", "scalping", "intraday"],
+            },
+            {
+                "name": "EMA Ribbon Momentum (Guppy)",
+                "file": "s17_ema_ribbon.py",
+                "description": (
+                    "Daryl Guppy's Multiple Moving Average system. Ribbon of 6 EMAs "
+                    "(8,13,21,34,55,89). Enters when short-term EMAs fan out from "
+                    "long-term EMAs with expanding spread."
+                ),
+                "timeframes": "15m / 1H / 4H / Daily",
+                "tags": ["ema", "guppy", "momentum", "trend_following"],
+            },
+            {
+                "name": "Keltner Channel Breakout",
+                "file": "s18_keltner_breakout.py",
+                "description": (
+                    "Chester Keltner / Linda Raschke modernized channel system. "
+                    "EMA(20) ± 2.5×ATR(10) channels. Breakout entry + ADX filter "
+                    "to avoid choppy markets. Exit on channel re-entry."
+                ),
+                "timeframes": "15m / 1H / 4H",
+                "tags": ["keltner", "breakout", "momentum"],
+            },
+            {
+                "name": "Stochastic RSI Momentum",
+                "file": "s19_stoch_rsi_momentum.py",
+                "description": (
+                    "Chande & Kroll's Stochastic RSI. Applies stochastic formula to "
+                    "RSI for faster oscillation. K/D crossovers in oversold/overbought "
+                    "zones with EMA trend filter."
+                ),
+                "timeframes": "5m / 15m / 1H",
+                "tags": ["stochastic_rsi", "momentum", "intraday"],
+            },
+            {
+                "name": "Unger Multi-Strategy Rotation",
+                "file": "s20_unger_rotation.py",
+                "description": (
+                    "Andrea Unger's approach (4x World Champion). Regime detection "
+                    "using ADX + volatility. Switches between Donchian breakout "
+                    "(trending) and RSI+BB mean reversion (ranging) automatically."
+                ),
+                "timeframes": "1H / 4H / Daily",
+                "tags": ["rotation", "regime", "trend_following", "mean_reversion"],
+            },
+            {
+                "name": "Hull MA Crossover",
+                "file": "s21_hull_ma_crossover.py",
+                "description": (
+                    "Alan Hull's lag-reduced moving average. Dual HMA crossover "
+                    "(fast 9 / slow 21) for minimal-lag momentum signals. "
+                    "ADX filter ensures trend presence."
+                ),
+                "timeframes": "15m / 1H / 4H",
+                "tags": ["hull_ma", "crossover", "momentum"],
+            },
+            {
+                "name": "Nill Dual Momentum Swing",
+                "file": "s22_nill_momentum_swing.py",
+                "description": (
+                    "Inspired by Patrick Nill (9x Robbins Cup, 70-200%/yr). "
+                    "Dual ROC (fast 10, slow 30) alignment with MFI money flow "
+                    "confirmation. Enters on momentum flip."
+                ),
+                "timeframes": "4H / Daily",
+                "tags": ["roc", "mfi", "momentum", "swing"],
+            },
+            {
+                "name": "Awesome Oscillator Saucer",
+                "file": "s23_ao_saucer.py",
+                "description": (
+                    "Bill Williams Trading Chaos: AO Saucer pattern, Twin Peaks "
+                    "divergence, and Zero Line Cross. Multiple confirmation modes "
+                    "for trend continuation entries."
+                ),
+                "timeframes": "15m / 1H / 4H / Daily",
+                "tags": ["awesome_oscillator", "williams", "momentum"],
+            },
+            {
+                "name": "MACD Histogram Divergence",
+                "file": "s24_macd_histogram_div.py",
+                "description": (
+                    "Alexander Elder's MACD histogram method. Detects divergence "
+                    "between histogram peaks/troughs and price action. Early signal "
+                    "before classic MACD cross. 50-SMA trend filter."
+                ),
+                "timeframes": "1H / 4H / Daily",
+                "tags": ["macd", "divergence", "momentum", "swing"],
+            },
+            {
+                "name": "London Breakout Session",
+                "file": "s25_london_breakout.py",
+                "description": (
+                    "Institutional London session strategy. Captures Asian range "
+                    "(00-08 GMT) and trades the breakout at London open. Range-size "
+                    "ATR filter to avoid false signals. Session-end auto-close."
+                ),
+                "timeframes": "5m / 15m",
+                "tags": ["session", "breakout", "intraday"],
+            },
+            {
+                "name": "Market Structure Signals (BOS/CHoCH)",
+                "file": "s26_market_structure_signals.py",
+                "description": (
+                    "Break of Structure (BOS) and Change of Character (CHoCH) "
+                    "breakout strategy based on ProjectSyndicate's Market Structure "
+                    "Signals indicator. Detects pivot highs/lows, classifies breakouts, "
+                    "and uses ATR-based TP/SL with optional EMA trend filter."
+                ),
+                "timeframes": "15m / 1H / 4H",
+                "tags": ["market_structure", "bos", "choch", "breakout"],
+            },
+        ]
+
+        strategies_dir = os.path.join(os.path.dirname(__file__), "data", "strategies")
+        added = 0
+        updated = 0
+
+        for entry in catalog:
+            name = entry["name"]
+            file_path = os.path.join(strategies_dir, entry["file"])
+            if not os.path.isfile(file_path):
+                _log.warning("Strategy file missing: %s", file_path)
+                continue
+
+            # Auto-extract settings_schema from the strategy's DEFAULTS dict
+            schema_list: list = []
+            values_dict: dict = {}
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    source = f.read()
+                parsed = parse_python_strategy(source)
+                schema_list = parsed.get("settings_schema", [])
+                values_dict = parsed.get("settings_values", {})
+            except Exception as parse_err:
+                _log.warning("Could not parse settings for %s: %s", entry["file"], parse_err)
+
+            # Check if already exists
             existing = db.query(Strategy).filter(
-                Strategy.is_system == True,
-                Strategy.name == cfg["name"],
+                Strategy.is_system == True, Strategy.name == name
             ).first()
             if existing:
+                # Back-fill settings_schema if it was previously empty
+                cur_schema = existing.settings_schema
+                is_empty = (
+                    not cur_schema
+                    or cur_schema == "[]" or cur_schema == []
+                    or cur_schema == "null"
+                    or (isinstance(cur_schema, str) and cur_schema.strip() in ("[]", "", "null"))
+                )
+                if is_empty and schema_list:
+                    existing.settings_schema = schema_list
+                    existing.settings_values = values_dict
+                    updated += 1
                 continue
 
             strat = Strategy(
-                name=cfg["name"],
-                description=cfg["description"],
-                indicators=cfg["indicators"],
-                entry_rules=cfg["entry_rules"],
-                exit_rules=cfg["exit_rules"],
-                risk_params=cfg["risk_params"],
-                filters=cfg["filters"],
+                name=name,
+                description=entry["description"],
+                indicators=[],
+                entry_rules=[],
+                exit_rules=[],
+                risk_params={"position_size_type": "percent_risk", "position_size_value": 1.0},
+                filters={"tags": entry.get("tags", []), "timeframes": entry.get("timeframes", "")},
                 is_system=True,
+                strategy_type="python",
+                file_path=file_path,
+                settings_schema=schema_list,
+                settings_values=values_dict,
                 creator_id=admin.id,
             )
             db.add(strat)
+            added += 1
 
-        db.commit()
-        import logging
-        logging.getLogger(__name__).info("System strategies seeded successfully")
+        if added or updated:
+            db.commit()
+            _log.info("Seeded %d new + updated %d existing strategies (catalog: %d)", added, updated, len(catalog))
+    except Exception as e:
+        db.rollback()
+        _log.error("Failed to seed strategies: %s", e)
     finally:
         db.close()
 
@@ -521,9 +566,7 @@ def _seed_system_strategies():
 @app.on_event("startup")
 async def startup_event():
     _seed_admin_user()
-    _seed_mss_strategy()
-    _seed_gold_breakout_strategy()
-    _seed_system_strategies()
+    _seed_all_strategies()
     await ws_manager.start()
     await tick_aggregator.start()
     try:

@@ -78,6 +78,7 @@ class AgentRunner:
             self._symbol = agent.symbol
             self._timeframe = agent.timeframe
             self._broker_name = agent.broker_name or "mt5"
+            self._created_by = agent.created_by  # for notifications
 
             # Initialize evaluator based on strategy type
             strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
@@ -235,6 +236,15 @@ class AgentRunner:
                             self.agent_id, bar_data.get("time"), bar_data.get("close", 0),
                             len(self._bar_buffer))
 
+                # Log candle close to agent UI
+                bar_ts = bar_data.get("time", 0)
+                bar_dt = datetime.utcfromtimestamp(bar_ts).strftime("%Y-%m-%d %H:%M") if bar_ts else "??"
+                self._log("info",
+                    f"{self._timeframe} candle closed | {bar_dt} "
+                    f"O={bar_data.get('open', 0):.2f} H={bar_data.get('high', 0):.2f} "
+                    f"L={bar_data.get('low', 0):.2f} C={bar_data.get('close', 0):.2f}",
+                    {"bar_time": bar_ts, "close": bar_data.get("close", 0), "source": "ws"})
+
                 # Evaluate
                 await self._evaluate_signal()
 
@@ -308,6 +318,16 @@ class AgentRunner:
                     logger.info("[Agent %d] Polled %d new bar(s) from %s (C=%.5f)",
                                 self.agent_id, len(new_bars), self._broker_name,
                                 new_bars[-1]["close"])
+
+                    # Log each new candle close to agent UI
+                    for nb in new_bars:
+                        nb_ts = nb.get("time", 0)
+                        nb_dt = datetime.utcfromtimestamp(nb_ts).strftime("%Y-%m-%d %H:%M") if nb_ts else "??"
+                        self._log("info",
+                            f"{self._timeframe} candle closed | {nb_dt} "
+                            f"O={nb.get('open', 0):.5f} H={nb.get('high', 0):.5f} "
+                            f"L={nb.get('low', 0):.5f} C={nb.get('close', 0):.5f}",
+                            {"bar_time": nb_ts, "close": nb.get("close", 0), "source": "poll"})
                     await self._evaluate_signal()
 
             except asyncio.CancelledError:
@@ -602,6 +622,23 @@ class AgentRunner:
                     },
                 },
             )
+
+            # Send email/Telegram notification (fire-and-forget)
+            try:
+                from app.services.notification import notify
+                _ndb = SessionLocal()
+                try:
+                    await notify(
+                        _ndb, self._created_by,
+                        f"Trade {direction} {self._symbol}",
+                        f"Agent #{self.agent_id} opened {direction} {self._symbol} @ {signal.entry_price:.5f}\n"
+                        f"SL: {signal.stop_loss:.5f} | TP: {signal.take_profit_1:.5f}\n"
+                        f"Lot: {lot_size} | Status: {trade.status}",
+                    )
+                finally:
+                    _ndb.close()
+            except Exception:
+                pass
 
         finally:
             db.close()

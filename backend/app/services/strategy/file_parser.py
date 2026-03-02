@@ -52,18 +52,19 @@ def parse_python_strategy(content: str) -> dict:
         raise ValueError(f"Python syntax error: {e}")
 
     # Extract module docstring
-    if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, (ast.Constant, ast.Str)):
+    _ast_str_types = (ast.Constant,) + ((ast.Str,) if hasattr(ast, "Str") else ())
+    if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, _ast_str_types):
         val = tree.body[0].value
-        description = val.value if isinstance(val, ast.Constant) else val.s  # type: ignore
+        description = val.value if isinstance(val, ast.Constant) else getattr(val, "s", "")  # type: ignore
 
     # Look for class name
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             name = _camel_to_title(node.name)
             # Check class docstring
-            if node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Constant, ast.Str)):
+            if node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, _ast_str_types):
                 val = node.body[0].value
-                description = val.value if isinstance(val, ast.Constant) else val.s  # type: ignore
+                description = val.value if isinstance(val, ast.Constant) else getattr(val, "s", "")  # type: ignore
             break
 
     # Pattern 1: Look for SETTINGS or PARAMS dict literal at class or module level
@@ -128,9 +129,10 @@ def _eval_literal(node: ast.expr) -> Any:
     """Safely evaluate a literal value from AST."""
     if isinstance(node, ast.Constant):
         return node.value
-    if isinstance(node, ast.Num):  # Python 3.7 compat
+    # Python 3.7 compat (ast.Num/Str/NameConstant removed in 3.12)
+    if hasattr(ast, "Num") and isinstance(node, ast.Num):  # type: ignore[attr-defined]
         return node.n  # type: ignore
-    if isinstance(node, ast.Str):  # Python 3.7 compat
+    if hasattr(ast, "Str") and isinstance(node, ast.Str):  # type: ignore[attr-defined]
         return node.s  # type: ignore
     if isinstance(node, ast.List):
         return [_eval_literal(e) for e in node.elts]
@@ -138,7 +140,7 @@ def _eval_literal(node: ast.expr) -> Any:
         return tuple(_eval_literal(e) for e in node.elts)
     if isinstance(node, ast.Dict):
         return _eval_dict_literal(node)
-    if isinstance(node, ast.NameConstant):  # Python 3.7 compat
+    if hasattr(ast, "NameConstant") and isinstance(node, ast.NameConstant):  # type: ignore[attr-defined]
         return node.value  # type: ignore
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
         val = _eval_literal(node.operand)

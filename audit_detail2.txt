@@ -1,0 +1,31 @@
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+No trades yet
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\data\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+No data sources yet. Upload a CSV file or fetch from a broker to get started.
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\optimize\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\ml\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+<h3 className="text-lg font-medium mb-2">No Models Yet</h3>
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\trading\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+{/* No tick yet — show waiting state */}
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\knowledge\page.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+<h3 className="text-lg font-medium mb-2">No Articles Yet</h3>
+Get started by loading the starter content, or create your own articles.
+
+=== d:\Doc\DATA\tradeforge\frontend\src\components\AgentPanel.tsx ===
+--- EMPTY/NO-DATA (broad) ---
+<span>No agents yet. Create one to start algo trading.</span>
+No trades yet
+No logs yet
+

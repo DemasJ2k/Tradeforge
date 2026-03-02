@@ -9,6 +9,7 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     broker = Column(String(20), nullable=False)
     symbol = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)  # BUY or SELL

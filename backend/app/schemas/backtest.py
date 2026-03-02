@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel
 
 
@@ -9,6 +9,17 @@ class BacktestRequest(BaseModel):
     spread_points: float = 0.0
     commission_per_lot: float = 0.0
     point_value: float = 1.0
+    # V2 engine selection
+    engine_version: str = "v1"            # "v1" or "v2"
+    # V2-specific options (ignored when engine_version="v1")
+    slippage_pct: float = 0.0             # Random slippage as fraction of price
+    commission_pct: float = 0.0           # Percentage commission (e.g. 0.001 = 0.1%)
+    margin_rate: float = 0.01             # Margin rate for position sizing
+    use_fast_core: bool = False           # Use Rust/fallback fast runner
+    bars_per_day: float = 1.0             # For annualisation (e.g. 144 for M10)
+    tick_mode: str = "ohlc_five"          # Tick synthesis mode
+    # Phase 4 — Multi-symbol portfolio mode
+    datasource_ids: Optional[list[int]] = None  # Multiple datasources (overrides datasource_id)
 
 
 class TradeResult(BaseModel):
@@ -17,14 +28,18 @@ class TradeResult(BaseModel):
     entry_price: float
     direction: str
     size: float
-    stop_loss: float
-    take_profit: float
-    exit_bar: Optional[int]
-    exit_time: Optional[float]
-    exit_price: Optional[float]
-    exit_reason: str
-    pnl: float
-    pnl_pct: float
+    stop_loss: float = 0.0
+    take_profit: float = 0.0
+    exit_bar: Optional[int] = None
+    exit_time: Optional[float] = None
+    exit_price: Optional[float] = None
+    exit_reason: str = ""
+    pnl: float = 0.0
+    pnl_pct: float = 0.0
+    # V2 extra fields
+    commission: Optional[float] = None
+    slippage: Optional[float] = None
+    duration_bars: Optional[int] = None
 
 
 class BacktestStats(BaseModel):
@@ -56,6 +71,14 @@ class BacktestResponse(BaseModel):
     stats: BacktestStats
     trades: list[TradeResult]
     equity_curve: list[float]
+    # V2 extended response (None when engine_version="v1")
+    engine_version: str = "v1"
+    v2_stats: Optional[dict[str, Any]] = None        # Full 55+ metrics dict
+    tearsheet: Optional[dict[str, Any]] = None        # Tearsheet with MC, rolling, benchmark
+    elapsed_seconds: Optional[float] = None
+    # Phase 4 — Multi-symbol portfolio fields
+    portfolio_analytics: Optional[dict[str, Any]] = None  # Per-symbol, correlation, diversification
+    symbols: Optional[list[str]] = None                   # Symbols in portfolio mode
 
 
 # ── Walk-Forward Validation ──

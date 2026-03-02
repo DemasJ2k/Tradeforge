@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { api } from "@/lib/api";
 
 const inputCls =
@@ -12,10 +13,8 @@ const btnCls =
 function Logo() {
   return (
     <div className="mb-6 flex items-center justify-center gap-2">
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-black font-bold">
-        TF
-      </div>
-      <span className="text-xl font-semibold">TradeForge</span>
+      <Image src="/logo.png" alt="FlowrexAlgo" width={40} height={40} className="rounded-lg" />
+      <span className="text-xl font-semibold">FlowrexAlgo</span>
     </div>
   );
 }
@@ -87,7 +86,7 @@ function ResetPasswordForm() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/20 text-2xl">✅</div>
               <h2 className="text-sm font-semibold">Password Updated</h2>
             </div>
-            <p className="text-center text-xs text-muted mb-4">
+            <p className="text-center text-xs text-muted-foreground mb-4">
               Your password has been updated. Logging you in…
             </p>
             <button onClick={() => router.push("/")} className={btnCls}>
@@ -97,13 +96,13 @@ function ResetPasswordForm() {
         ) : (
           <>
             <h2 className="text-center text-sm font-semibold mb-1">Set New Password</h2>
-            <p className="text-center text-xs text-muted mb-4">
+            <p className="text-center text-xs text-muted-foreground mb-4">
               Choose a strong password for your account.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs text-muted mb-1.5">New Password</label>
+                <label className="block text-xs text-muted-foreground mb-1.5">New Password</label>
                 <input
                   type="password"
                   value={newPw}
@@ -116,7 +115,7 @@ function ResetPasswordForm() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-muted mb-1.5">Confirm Password</label>
+                <label className="block text-xs text-muted-foreground mb-1.5">Confirm Password</label>
                 <input
                   type="password"
                   value={confirmPw}
@@ -134,7 +133,7 @@ function ResetPasswordForm() {
               </button>
             </form>
 
-            <p className="mt-4 text-center text-xs text-muted">
+            <p className="mt-4 text-center text-xs text-muted-foreground">
               <button onClick={() => router.push("/")} className="text-accent hover:underline">
                 Back to Sign In
               </button>
@@ -150,7 +149,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
       <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-muted text-sm">Loading…</div>
+        <div className="text-muted-foreground text-sm">Loading…</div>
       </div>
     }>
       <ResetPasswordForm />

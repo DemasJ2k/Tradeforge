@@ -1,0 +1,80 @@
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+--- STYLE= LINES ---
+--- HARDCODED COLORS ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\data\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+
+            No data sources yet. Upload a CSV file or fetch from a broker to get started.
+
+--- STYLE= LINES ---
+--- HARDCODED COLORS ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\optimize\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+--- STYLE= LINES ---
+
+              style={{ width: `${Math.min(status.progress, 100)}%` }} />
+                            <div className="bg-accent h-2 rounded-full" style={{ width: `${v * 100}%` }} />
+                          <th className="py-1.5 text-left px-2" style={{ minWidth: 120 }}>P&amp;L Bar</th>
+                                      style={{ width: `${(Math.abs(g.net_profit) / maxAbs) * 100}%` }}
+
+--- HARDCODED COLORS ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\ml\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+
+              <label className="block text-xs text-muted-foreground mb-2">Features (leave empty for all)</label>
+
+--- STYLE= LINES ---
+
+                          <div className="h-full rounded bg-accent/60" style={{ width: `${widthPct}%` }} />
+                          style={{ height: `${height}%` }}
+
+--- HARDCODED COLORS ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\trading\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+
+                    : "No chart data available — try switching to a different symbol or data source"}
+
+--- STYLE= LINES ---
+
+            <div ref={macdContainerRef} className="w-full" style={{ height: 120 }} />
+
+--- HARDCODED COLORS ---
+
+        layout: { background: { color: "transparent" }, textColor: "#9ca3af" },
+        grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
+        rightPriceScale: { borderColor: "#374151" },
+          borderColor: "#374151",
+      const histSeries = macdChart.addSeries(HistogramSeries, { color: "#22c55e", priceLineVisible: false });
+        color: p.value >= 0 ? "#22c55e66" : "#ef444466",
+      const macdSeries = macdChart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceLineVisible: false });
+      const signalSeries = macdChart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false });
+            upColor={settings?.chart_up_color || "#22c55e"}
+            downColor={settings?.chart_down_color || "#ef4444"}
+
+
+=== d:\Doc\DATA\tradeforge\frontend\src\app\knowledge\page.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+
+            Get started by loading the starter content, or create your own articles.
+
+--- STYLE= LINES ---
+--- HARDCODED COLORS ---
+
+=== d:\Doc\DATA\tradeforge\frontend\src\components\AgentPanel.tsx ===
+--- SHADCN IMPORTS ---
+--- EMPTY STATE LINES ---
+--- STYLE= LINES ---
+--- HARDCODED COLORS ---
+

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
 import { api } from "@/lib/api";
@@ -13,10 +14,8 @@ const btnCls =
 function Logo() {
   return (
     <div className="mb-6 flex items-center justify-center gap-2">
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-black font-bold">
-        TF
-      </div>
-      <span className="text-xl font-semibold">TradeForge</span>
+      <Image src="/logo.png" alt="FlowrexAlgo" width={40} height={40} className="rounded-lg" />
+      <span className="text-xl font-semibold">FlowrexAlgo</span>
     </div>
   );
 }
@@ -57,7 +56,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-muted text-sm">Loading...</div>
+        <div className="text-muted-foreground text-sm">Loading...</div>
       </div>
     );
   }
@@ -89,16 +88,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         <div className="w-full max-w-sm rounded-xl border border-card-border bg-card-bg p-8">
           <Logo />
           <h2 className="text-center text-sm font-semibold mb-1">Change Your Password</h2>
-          <p className="text-center text-xs text-muted mb-4">
+          <p className="text-center text-xs text-muted-foreground mb-4">
             You must set a new password before continuing.
           </p>
           <form onSubmit={handleChangePw} className="space-y-4">
             <div>
-              <label className="block text-xs text-muted mb-1.5">New Password</label>
+              <label className="block text-xs text-muted-foreground mb-1.5">New Password</label>
               <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} className={inputCls} required />
             </div>
             <div>
-              <label className="block text-xs text-muted mb-1.5">Confirm Password</label>
+              <label className="block text-xs text-muted-foreground mb-1.5">Confirm Password</label>
               <input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className={inputCls} required />
             </div>
             {error && <p className="text-xs text-danger">{error}</p>}
@@ -131,7 +130,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         <div className="w-full max-w-sm rounded-xl border border-card-border bg-card-bg p-8">
           <Logo />
           <h2 className="text-center text-sm font-semibold mb-1">Two-Factor Authentication</h2>
-          <p className="text-center text-xs text-muted mb-4">
+          <p className="text-center text-xs text-muted-foreground mb-4">
             Enter the 6-digit code from your authenticator app.
           </p>
           <form onSubmit={handleTotp} className="space-y-4">
@@ -180,7 +179,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/20 text-2xl">✉️</div>
                 <h2 className="text-sm font-semibold">Check your inbox</h2>
               </div>
-              <p className="text-center text-xs text-muted mb-6">
+              <p className="text-center text-xs text-muted-foreground mb-6">
                 If <span className="text-foreground">{forgotEmail}</span> is registered, a reset link has been sent. It expires in 1 hour.
               </p>
               <button
@@ -193,12 +192,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           ) : (
             <>
               <h2 className="text-center text-sm font-semibold mb-1">Forgot Password</h2>
-              <p className="text-center text-xs text-muted mb-4">
+              <p className="text-center text-xs text-muted-foreground mb-4">
                 Enter your email and we&apos;ll send you a reset link.
               </p>
               <form onSubmit={handleForgot} className="space-y-4">
                 <div>
-                  <label className="block text-xs text-muted mb-1.5">Email Address</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Email Address</label>
                   <input
                     type="email"
                     value={forgotEmail}
@@ -214,7 +213,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
                   {forgotLoading ? "Sending…" : "Send Reset Link"}
                 </button>
               </form>
-              <p className="mt-4 text-center text-xs text-muted">
+              <p className="mt-4 text-center text-xs text-muted-foreground">
                 Remember your password?{" "}
                 <button
                   onClick={() => { setMode("login"); setError(""); }}
@@ -253,7 +252,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-muted mb-1.5">Username</label>
+              <label className="block text-xs text-muted-foreground mb-1.5">Username</label>
               <input
                 type="text"
                 value={username}
@@ -263,7 +262,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
               />
             </div>
             <div>
-              <label className="block text-xs text-muted mb-1.5">Password</label>
+              <label className="block text-xs text-muted-foreground mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
@@ -285,14 +284,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             <p className="mt-2 text-center text-xs">
               <button
                 onClick={() => { setMode("forgot"); setError(""); }}
-                className="text-muted hover:text-accent transition-colors"
+                className="text-muted-foreground hover:text-accent transition-colors"
               >
                 Forgot password?
               </button>
             </p>
           )}
 
-          <p className="mt-3 text-center text-xs text-muted">
+          <p className="mt-3 text-center text-xs text-muted-foreground">
             {mode === "login" ? (
               <>
                 Have an invitation?{" "}

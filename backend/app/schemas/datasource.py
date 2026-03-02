@@ -15,6 +15,14 @@ class DataSourceResponse(BaseModel):
     file_size_mb: int
     source_type: str = "upload"
     broker_name: str = ""
+    # Instrument profile
+    pip_value: float = 10.0
+    is_jpy_pair: bool = False
+    point_value: float = 1.0
+    lot_size: float = 100000.0
+    default_spread: float = 0.3
+    commission_model: str = "per_lot"
+    default_commission: float = 7.0
 
     class Config:
         from_attributes = True

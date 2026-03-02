@@ -1,24 +1,33 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import AuthGate from "@/components/AuthGate";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ChatSidebar from "@/components/ChatSidebar";
+import CommandPalette from "@/components/CommandPalette";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "TradeForge",
-  description: "Trading platform for strategy building, backtesting, and live trading",
+  title: "FlowrexAlgo",
+  description: "Algorithmic trading platform for strategy building, backtesting, and live trading",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -29,20 +38,24 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
-        <AuthGate>
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <TopBar />
-              <main className="flex-1 overflow-y-auto p-6">
-                {children}
-              </main>
+        <TooltipProvider delayDuration={300}>
+          <AuthGate>
+            <div className="flex h-screen overflow-hidden">
+              <Sidebar />
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <TopBar />
+                <main className="flex-1 overflow-y-auto p-6">
+                  {children}
+                </main>
+              </div>
             </div>
-          </div>
-          <ChatSidebar />
-        </AuthGate>
+            <ChatSidebar />
+            <CommandPalette />
+          </AuthGate>
+          <Toaster richColors position="bottom-right" />
+        </TooltipProvider>
       </body>
     </html>
   );

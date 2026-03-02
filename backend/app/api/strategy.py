@@ -37,6 +37,7 @@ def _to_response(s: Strategy) -> dict:
         "file_path": s.file_path,
         "settings_schema": s.settings_schema or [],
         "settings_values": s.settings_values or {},
+        "folder": s.folder or None,
         "created_at": s.created_at.isoformat() if s.created_at else "",
         "updated_at": s.updated_at.isoformat() if s.updated_at else "",
     }

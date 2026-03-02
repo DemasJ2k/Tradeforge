@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebar } from "@/hooks/useSidebar";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
+import {
+  ChevronRight,
+  ChevronDown,
+  Search,
+  LogOut,
+  User,
+} from "lucide-react";
 
 const fmtBalance = (n: number, currency: string) => {
   const k = Math.abs(n) >= 1_000_000
@@ -14,7 +22,20 @@ const fmtBalance = (n: number, currency: string) => {
   return `${currency} ${k}`;
 };
 
+const ROUTE_LABELS: Record<string, string> = {
+  "/": "Dashboard",
+  "/data": "Data Sources",
+  "/strategies": "Strategies",
+  "/backtest": "Backtest",
+  "/optimize": "Optimization",
+  "/ml": "ML Lab",
+  "/trading": "Trading",
+  "/knowledge": "Documents",
+  "/settings": "Settings",
+};
+
 export default function TopBar() {
+  const pathname = usePathname();
   const { user, logout } = useAuth();
   const { toggle } = useSidebar();
   const { accounts, activeBroker, setActiveBroker, refreshAccounts } = useBrokerAccounts();
@@ -54,18 +75,40 @@ export default function TopBar() {
   const activeAccount = accounts.find((a) => a.broker === activeBroker);
   const connectedCount = accounts.length;
 
+  // Build breadcrumb from pathname
+  const pageLabel = ROUTE_LABELS[pathname] || pathname.split("/").pop() || "Page";
+
   return (
-    <header className="flex h-14 items-center justify-between border-b border-card-border bg-sidebar-bg px-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-sm font-medium text-foreground">Dashboard</h1>
+    <header className="flex h-14 items-center justify-between border-b border-fa-card-border bg-fa-sidebar-bg px-4">
+      {/* Left: breadcrumb */}
+      <div className="flex items-center gap-1.5 text-sm">
+        <span className="text-muted-foreground">FlowrexAlgo</span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
+        <span className="font-medium text-foreground">{pageLabel}</span>
       </div>
 
+      {/* Right: search + broker + user */}
       <div className="flex items-center gap-3">
+        {/* Ctrl+K search trigger */}
+        <button
+          onClick={() => {
+            const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true });
+            document.dispatchEvent(event);
+          }}
+          className="flex items-center gap-2 rounded-lg border border-fa-card-border bg-fa-card-bg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Search...</span>
+          <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-fa-card-border bg-fa-sidebar-bg px-1.5 font-mono text-[10px] text-muted-foreground">
+            Ctrl K
+          </kbd>
+        </button>
+
         {/* Broker account switcher */}
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen((o) => !o)}
-            className="flex items-center gap-2 rounded-lg bg-card-bg px-3 py-1.5 text-xs hover:bg-sidebar-hover transition-colors"
+            className="flex items-center gap-2 rounded-lg bg-fa-card-bg px-3 py-1.5 text-xs hover:bg-fa-sidebar-hover transition-colors"
           >
             <div
               className={`h-2 w-2 rounded-full shrink-0 ${
@@ -77,7 +120,7 @@ export default function TopBar() {
                 <span className="font-medium capitalize text-foreground">
                   {activeAccount.broker}
                 </span>
-                <span className="text-muted">
+                <span className="text-muted-foreground">
                   {fmtBalance(activeAccount.balance, activeAccount.currency)}
                 </span>
                 {connectedCount > 1 && (
@@ -87,26 +130,24 @@ export default function TopBar() {
                 )}
               </>
             ) : (
-              <span className="text-muted">No broker connected</span>
+              <span className="text-muted-foreground">No broker connected</span>
             )}
             {connectedCount > 0 && (
-              <svg className="h-3 w-3 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
             )}
           </button>
 
           {dropdownOpen && connectedCount > 0 && (
-            <div className="absolute right-0 top-full z-50 mt-1 min-w-[260px] rounded-xl border border-card-border bg-card-bg shadow-xl">
-              <div className="border-b border-card-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <div className="absolute right-0 top-full z-50 mt-1 min-w-[260px] rounded-xl border border-fa-card-border bg-fa-card-bg shadow-xl">
+              <div className="border-b border-fa-card-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Connected Accounts
               </div>
               {accounts.map((acct) => (
                 <button
                   key={acct.broker}
                   onClick={() => { setActiveBroker(acct.broker); setDropdownOpen(false); }}
-                  className={`flex w-full items-center justify-between px-3 py-2.5 hover:bg-sidebar-hover transition-colors ${
-                    acct.broker === activeBroker ? "bg-sidebar-hover" : ""
+                  className={`flex w-full items-center justify-between px-3 py-2.5 hover:bg-fa-sidebar-hover transition-colors ${
+                    acct.broker === activeBroker ? "bg-fa-sidebar-hover" : ""
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -137,13 +178,18 @@ export default function TopBar() {
 
         {/* User menu */}
         {user && (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted">{user.username}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <User className="h-4 w-4" />
+              <span>{user.username}</span>
+            </div>
             <button
               onClick={logout}
-              className="rounded-lg px-3 py-1.5 text-xs text-muted hover:bg-sidebar-hover hover:text-foreground transition-colors"
+              title="Logout"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-fa-sidebar-hover hover:text-foreground transition-colors"
             >
-              Logout
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         )}
