@@ -62,9 +62,24 @@ class BuilderStrategy(StrategyBase):
             return
 
         entry_rules = self.config.get("entry_rules", [])
+
+        # Log first bar only — helps diagnose empty rules / wrong format
+        if self.ctx.bar_index == 1:
+            logger.info(
+                "BuilderStrategy first-bar check: entry_rules type=%s len=%s, "
+                "sample=%s",
+                type(entry_rules).__name__,
+                len(entry_rules) if isinstance(entry_rules, list) else "N/A",
+                str(entry_rules)[:300],
+            )
+
         direction = evaluate_direction(
             entry_rules, self.ctx.bar_index, self._get_value
         )
+
+        # One-time diagnostic at bar 50: sample indicator lookups
+        if self.ctx.bar_index == 50 and entry_rules:
+            self._log_indicator_diagnostics(entry_rules)
 
         if direction:
             self._open_trade(bar, direction)
@@ -163,10 +178,31 @@ class BuilderStrategy(StrategyBase):
     # ── Helpers ─────────────────────────────────────────────────────
 
     def _get_value(self, source: str, bar_idx: int) -> float:
-        """Value resolver for the condition engine."""
-        val = self.ctx.get_indicator(source, bars_ago=self.ctx.bar_index - bar_idx)
+        """Value resolver for the condition engine.
+
+        Handles frontend naming conventions:
+          - "price.close" → "close"
+          - "price.open"  → "open"
+          - indicator IDs  → direct lookup by name
+        """
+        # Strip "price." prefix used by frontend
+        resolved = source
+        if source.startswith("price."):
+            resolved = source[6:]  # "price.close" → "close"
+
+        val = self.ctx.get_indicator(resolved, bars_ago=self.ctx.bar_index - bar_idx)
         if not math.isnan(val):
             return val
+
+        # Fallback: case-insensitive search (e.g. "Close" vs "close")
+        sd = self.ctx._feed.get_symbol_data(self.symbol)
+        if sd:
+            for key in sd.indicators:
+                if key.lower() == resolved.lower():
+                    val = sd.get_indicator(key, bar_idx)
+                    if not math.isnan(val):
+                        return val
+
         # Try numeric literal
         try:
             return float(source)
@@ -231,3 +267,29 @@ class BuilderStrategy(StrategyBase):
         return ce_passes_filters(
             filters, bar.timestamp, self._get_value, self.ctx.bar_index
         )
+
+    def _log_indicator_diagnostics(self, entry_rules) -> None:
+        """Log indicator lookup values at bar 50 to help debug 0-trade issues."""
+        from app.services.backtest.condition_engine import normalise_rules, _collect_leaves
+        try:
+            tree = normalise_rules(entry_rules)
+            leaves = _collect_leaves(tree)
+            sources = set()
+            for leaf in leaves:
+                if "left" in leaf:
+                    sources.add(leaf["left"])
+                if "right" in leaf:
+                    sources.add(leaf["right"])
+            diag = {}
+            for src in sources:
+                val = self._get_value(src, 50)
+                diag[src] = val
+            sd = self.ctx._feed.get_symbol_data(self.symbol)
+            avail_keys = sorted(sd.indicators.keys()) if sd else []
+            logger.info(
+                "V3 indicator diagnostics at bar 50: lookups=%s, "
+                "available_keys=%s, leaves=%s",
+                diag, avail_keys, [l.get("left", "?") + " " + l.get("operator", "?") + " " + l.get("right", "?") for l in leaves],
+            )
+        except Exception as exc:
+            logger.warning("Diagnostics failed: %s", exc)

@@ -9,7 +9,6 @@ from app.core.database import engine
 
 MIGRATIONS = [
     ("pip_value",          "ALTER TABLE datasources ADD COLUMN pip_value REAL DEFAULT 10.0"),
-    ("is_jpy_pair",        "ALTER TABLE datasources ADD COLUMN is_jpy_pair BOOLEAN DEFAULT FALSE"),
     ("point_value",        "ALTER TABLE datasources ADD COLUMN point_value REAL DEFAULT 1.0"),
     ("lot_size",           "ALTER TABLE datasources ADD COLUMN lot_size REAL DEFAULT 100000.0"),
     ("default_spread",     "ALTER TABLE datasources ADD COLUMN default_spread REAL DEFAULT 0.3"),

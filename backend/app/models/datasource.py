@@ -23,7 +23,6 @@ class DataSource(Base):
     broker_name = Column(String(20), default="")        # mt5, oanda, coinbase, tradovate
     # Instrument profile
     pip_value = Column(Float, default=10.0)             # $ per pip per standard lot
-    is_jpy_pair = Column(Boolean, default=False)        # JPY pairs have different pip scale
     point_value = Column(Float, default=1.0)            # $ value per 1-point move per lot
     lot_size = Column(Float, default=100000.0)          # contract size (100000 for forex)
     default_spread = Column(Float, default=0.3)         # spread in points

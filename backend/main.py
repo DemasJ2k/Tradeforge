@@ -80,7 +80,6 @@ def _run_schema_migrations():
         ("datasources", "is_public",   "BOOLEAN DEFAULT TRUE"),
         # DataSource instrument profile columns
         ("datasources", "pip_value",          "REAL DEFAULT 10.0"),
-        ("datasources", "is_jpy_pair",        "BOOLEAN DEFAULT FALSE"),
         ("datasources", "point_value",        "REAL DEFAULT 1.0"),
         ("datasources", "lot_size",           "REAL DEFAULT 100000.0"),
         ("datasources", "default_spread",     "REAL DEFAULT 0.3"),
@@ -137,21 +136,37 @@ def _fix_boolean_columns():
     with engine.connect() as conn:
         if engine.dialect.name != "postgresql":
             return
-        # List of (table, column) that were incorrectly created as INTEGER
+        # List of (table, column) that may have been created as INTEGER
         fixes = [
-            ("datasources", "is_jpy_pair"),
-            ("datasources", "is_public"),
+            ("datasources", "is_public", "TRUE"),
         ]
-        for table, column in fixes:
+        for table, column, default in fixes:
             try:
+                # Check actual column type first
+                result = conn.execute(text(
+                    "SELECT data_type FROM information_schema.columns "
+                    f"WHERE table_name = '{table}' AND column_name = '{column}'"
+                ))
+                row = result.fetchone()
+                if not row:
+                    _log.info("Column %s.%s does not exist, skipping", table, column)
+                    continue
+                if row[0] == 'boolean':
+                    _log.info("Column %s.%s is already BOOLEAN, ok", table, column)
+                    continue
+                _log.info("Column %s.%s is %s, converting to BOOLEAN", table, column, row[0])
                 conn.execute(text(
                     f"ALTER TABLE {table} ALTER COLUMN {column} "
-                    f"TYPE BOOLEAN USING {column}::int::boolean"
+                    f"TYPE BOOLEAN USING CASE WHEN {column} = 0 THEN FALSE ELSE TRUE END"
+                ))
+                conn.execute(text(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT {default}"
                 ))
                 conn.commit()
-                _log.info("Fixed %s.%s: INTEGER -> BOOLEAN", table, column)
-            except Exception:
+                _log.info("Fixed %s.%s → BOOLEAN", table, column)
+            except Exception as exc:
                 conn.rollback()
+                _log.error("Failed to fix %s.%s: %s", table, column, exc)
 
 
 _fix_boolean_columns()

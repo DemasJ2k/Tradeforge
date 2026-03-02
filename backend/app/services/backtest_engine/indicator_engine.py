@@ -71,19 +71,30 @@ def compute_indicators(
             elif ind_type == "adx":
                 adx, plus_di, minus_di = _adx(highs, lows, closes, period)
                 results[name] = adx
+                results[f"{name}_plus_di"] = plus_di
+                results[f"{name}_minus_di"] = minus_di
+                # Legacy keys for backward compat
                 results[f"+di_{period}"] = plus_di
                 results[f"-di_{period}"] = minus_di
             elif ind_type == "macd":
-                fast = int(cfg.get("fast_period", 12))
-                slow = int(cfg.get("slow_period", 26))
-                signal = int(cfg.get("signal_period", 9))
+                fast = int(cfg.get("fast_period", cfg.get("fast", 12)))
+                slow = int(cfg.get("slow_period", cfg.get("slow", 26)))
+                signal = int(cfg.get("signal_period", cfg.get("signal", 9)))
                 macd_line, signal_line, histogram = _macd(source, fast, slow, signal)
+                results[name] = macd_line
+                results[f"{name}_signal"] = signal_line
+                results[f"{name}_hist"] = histogram
+                # Legacy keys for backward compat
                 results[f"macd_{fast}_{slow}"] = macd_line
                 results[f"macd_signal_{signal}"] = signal_line
                 results[f"macd_hist"] = histogram
             elif ind_type == "bollinger" or ind_type == "bbands":
                 std_dev = float(cfg.get("std_dev", 2.0))
                 upper, middle, lower = _bollinger(source, period, std_dev)
+                results[name] = middle
+                results[f"{name}_upper"] = upper
+                results[f"{name}_lower"] = lower
+                # Legacy keys for backward compat
                 results[f"bb_upper_{period}"] = upper
                 results[f"bb_middle_{period}"] = middle
                 results[f"bb_lower_{period}"] = lower
@@ -91,6 +102,9 @@ def compute_indicators(
                 k_period = int(cfg.get("k_period", period))
                 d_period = int(cfg.get("d_period", 3))
                 k, d = _stochastic(highs, lows, closes, k_period, d_period)
+                results[name] = k
+                results[f"{name}_d"] = d
+                # Legacy keys for backward compat
                 results[f"stoch_k_{k_period}"] = k
                 results[f"stoch_d_{d_period}"] = d
             elif ind_type == "vwap":
@@ -98,6 +112,9 @@ def compute_indicators(
             elif ind_type == "supertrend":
                 multiplier = float(cfg.get("multiplier", 3.0))
                 st, direction = _supertrend(highs, lows, closes, period, multiplier)
+                results[name] = st
+                results[f"{name}_dir"] = direction
+                # Legacy keys
                 results[f"supertrend_{period}"] = st
                 results[f"supertrend_dir_{period}"] = direction
             elif ind_type == "pivot":
@@ -124,6 +141,12 @@ def compute_indicators(
                 kijun = int(cfg.get("kijun", 26))
                 senkou_b = int(cfg.get("senkou_b", 52))
                 t, k_, sa, sb, chikou = _ichimoku(highs, lows, closes, tenkan, kijun, senkou_b)
+                results[name] = t  # main = tenkan-sen
+                results[f"{name}_kijun"] = k_
+                results[f"{name}_senkou_a"] = sa
+                results[f"{name}_senkou_b"] = sb
+                results[f"{name}_chikou"] = chikou
+                # Legacy keys
                 results["ichimoku_tenkan"] = t
                 results["ichimoku_kijun"] = k_
                 results["ichimoku_senkou_a"] = sa
@@ -146,8 +169,27 @@ def _sma(data: np.ndarray, period: int) -> np.ndarray:
     result = np.full(n, np.nan)
     if period > n:
         return result
-    cumsum = np.cumsum(data)
-    result[period - 1:] = (cumsum[period - 1:] - np.concatenate([[0], cumsum[:-period]])) / period
+
+    # Find the first index where `period` consecutive non-NaN values exist
+    first_valid = -1
+    if not np.isnan(data[0]):
+        first_valid = 0
+    else:
+        for i in range(n - period + 1):
+            if not np.any(np.isnan(data[i:i + period])):
+                first_valid = i
+                break
+
+    if first_valid < 0:
+        return result  # Not enough non-NaN data
+
+    # Use cumsum from first_valid onwards (assumes no NaN gaps after start)
+    valid_data = data[first_valid:]
+    vn = len(valid_data)
+    cumsum = np.cumsum(valid_data)
+    sma_vals = (cumsum[period - 1:] - np.concatenate([[0], cumsum[:-period]])) / period
+    start_idx = first_valid + period - 1
+    result[start_idx:start_idx + len(sma_vals)] = sma_vals
     return result
 
 
@@ -157,8 +199,22 @@ def _ema(data: np.ndarray, period: int) -> np.ndarray:
     if period > n:
         return result
     alpha = 2.0 / (period + 1)
-    result[period - 1] = np.mean(data[:period])
-    for i in range(period, n):
+
+    # Find first index where we have `period` consecutive non-NaN values
+    start = -1
+    for i in range(n - period + 1):
+        window = data[i:i + period]
+        if not np.any(np.isnan(window)):
+            start = i + period - 1
+            result[start] = np.mean(window)
+            break
+
+    if start < 0:
+        return result  # Not enough non-NaN data
+
+    for i in range(start + 1, n):
+        if np.isnan(data[i]):
+            continue
         result[i] = alpha * data[i] + (1 - alpha) * result[i - 1]
     return result
 

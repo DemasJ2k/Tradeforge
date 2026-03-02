@@ -43,6 +43,13 @@ def _normalize_indicator_configs(raw_configs: list[dict]) -> list[dict]:
     Engine format (flat):
         {"type": "sma", "name": "sma_1", "period": 5, "source": "close"}
     """
+    # Parameter name aliases: frontend name → engine name
+    _PARAM_ALIASES = {
+        "fast": "fast_period",
+        "slow": "slow_period",
+        "signal": "signal_period",
+    }
+
     out: list[dict] = []
     for cfg in raw_configs:
         flat: dict = {}
@@ -56,7 +63,12 @@ def _normalize_indicator_configs(raw_configs: list[dict]) -> list[dict]:
         # Flatten "params" sub-dict if present
         params = cfg.get("params", {})
         for k, v in params.items():
-            flat[k] = v
+            # Map frontend param names to engine param names
+            engine_key = _PARAM_ALIASES.get(k, k)
+            flat[engine_key] = v
+            # Also keep the original key for backward compat
+            if engine_key != k:
+                flat[k] = v
 
         # Also copy top-level keys that engine may use (period, source, etc.)
         for k in ("period", "source", "fast_period", "slow_period",
@@ -191,6 +203,28 @@ def run_v3_backtest(
         strategy_config.get("indicators", [])
     )
     feed.add_symbol(symbol, v3_bars, indicator_configs=indicator_configs)
+
+    # Diagnostic: log indicator keys so we can verify lookups
+    sd = feed.get_symbol_data(symbol)
+    if sd:
+        logger.info(
+            "V3 feed for %s: %d bars, indicator keys=%s",
+            symbol, sd.count, sorted(sd.indicators.keys()),
+        )
+    else:
+        logger.warning("V3 feed: no SymbolData for %s", symbol)
+
+    # Diagnostic: log entry rule structure
+    entry_rules = strategy_config.get("entry_rules", [])
+    logger.info(
+        "V3 strategy config: %d indicators, entry_rules type=%s, "
+        "entry_rules=%s, exit_rules=%d, risk_params keys=%s",
+        len(indicator_configs),
+        type(entry_rules).__name__,
+        str(entry_rules)[:500],
+        len(strategy_config.get("exit_rules", [])),
+        list(strategy_config.get("risk_params", {}).keys()),
+    )
 
     # Build strategy
     strategy = BuilderStrategy(strategy_config=strategy_config, symbol=symbol)

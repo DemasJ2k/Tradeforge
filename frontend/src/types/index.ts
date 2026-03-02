@@ -50,7 +50,6 @@ export interface DataSource {
   broker_name: string;
   // Instrument profile
   pip_value: number;
-  is_jpy_pair: boolean;
   point_value: number;
   lot_size: number;
   default_spread: number;

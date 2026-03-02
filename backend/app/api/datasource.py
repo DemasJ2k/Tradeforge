@@ -119,8 +119,8 @@ _INSTRUMENT_PROFILES: dict[str, dict] = {
     # Forex majors (default)
     "EURUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100000.0, "default_spread": 0.2, "default_commission": 7.0},
     "GBPUSD": {"pip_value": 10.0, "point_value": 1.0, "lot_size": 100000.0, "default_spread": 0.3, "default_commission": 7.0},
-    "USDJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.2, "default_commission": 7.0, "is_jpy_pair": True},
-    "EURJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.5, "default_commission": 7.0, "is_jpy_pair": True},
+    "USDJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.2, "default_commission": 7.0},
+    "EURJPY": {"pip_value": 9.1,  "point_value": 0.091, "lot_size": 100000.0, "default_spread": 0.5, "default_commission": 7.0},
 }
 
 
@@ -133,11 +133,7 @@ def _build_instrument_profile(symbol: str) -> dict:
     # Substring match
     for key, profile in _INSTRUMENT_PROFILES.items():
         if key in sym:
-            p = dict(profile)
-            # Auto-detect JPY
-            if any(j in sym for j in _JPY_KEYWORDS):
-                p["is_jpy_pair"] = True
-            return p
+            return dict(profile)
     # Forex default
     is_jpy = any(j in sym for j in _JPY_KEYWORDS)
     return {
@@ -146,7 +142,6 @@ def _build_instrument_profile(symbol: str) -> dict:
         "lot_size": 100000.0,
         "default_spread": 0.3,
         "default_commission": 7.0,
-        "is_jpy_pair": is_jpy,
     }
 
 
@@ -225,7 +220,6 @@ async def upload_csv(
         columns=",".join(headers),
         file_size_mb=size_mb,
         pip_value=profile.get("pip_value", 10.0),
-        is_jpy_pair=profile.get("is_jpy_pair", False),
         point_value=profile.get("point_value", 1.0),
         lot_size=profile.get("lot_size", 100000.0),
         default_spread=profile.get("default_spread", 0.3),
@@ -334,7 +328,6 @@ def delete_source(
 
 class InstrumentProfileUpdate(_BaseModel):
     pip_value: Optional[float] = None
-    is_jpy_pair: Optional[bool] = None
     point_value: Optional[float] = None
     lot_size: Optional[float] = None
     default_spread: Optional[float] = None
@@ -356,8 +349,6 @@ def update_instrument_profile(
 
     if payload.pip_value is not None:
         ds.pip_value = payload.pip_value
-    if payload.is_jpy_pair is not None:
-        ds.is_jpy_pair = payload.is_jpy_pair
     if payload.point_value is not None:
         ds.point_value = payload.point_value
     if payload.lot_size is not None:
@@ -557,7 +548,6 @@ async def fetch_from_broker(
                 source_type="broker",
                 broker_name=req.broker,
                 pip_value=profile.get("pip_value", 10.0),
-                is_jpy_pair=profile.get("is_jpy_pair", False),
                 point_value=profile.get("point_value", 1.0),
                 lot_size=profile.get("lot_size", 100000.0),
                 default_spread=profile.get("default_spread", 0.3),

@@ -272,7 +272,7 @@ export default function DataPage() {
                         <Info className="h-3.5 w-3.5 text-accent" />
                         <span className="text-xs font-medium text-accent uppercase tracking-wide">Instrument Profile</span>
                       </div>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
                         <div>
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Pip Value</div>
                           <div className="text-sm font-medium">{s.pip_value ?? "—"}</div>
@@ -292,10 +292,6 @@ export default function DataPage() {
                         <div>
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Commission</div>
                           <div className="text-sm font-medium">{s.default_commission ?? "—"} <span className="text-muted-foreground text-[10px]">{s.commission_model || ""}</span></div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">JPY Pair</div>
-                          <div className="text-sm font-medium">{s.is_jpy_pair ? "Yes" : "No"}</div>
                         </div>
                       </div>
                     </TableCell>
