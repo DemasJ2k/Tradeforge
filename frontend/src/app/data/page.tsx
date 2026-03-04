@@ -37,6 +37,25 @@ export default function DataPage() {
   const [fetching, setFetching] = useState(false);
   const [fetchMsg, setFetchMsg] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [previewRows, setPreviewRows] = useState<Record<number, string[][]>>({});
+  const [previewLoading, setPreviewLoading] = useState<number | null>(null);
+
+  const loadPreview = useCallback(async (id: number) => {
+    if (previewRows[id]) return; // already loaded
+    setPreviewLoading(id);
+    try {
+      const data = await api.get<{ candles: Record<string, unknown>[] }>(`/api/data/sources/${id}/candles?limit=10&offset=0`);
+      if (data.candles?.length) {
+        const cols = Object.keys(data.candles[0]);
+        const rows = data.candles.map((c) => cols.map((k) => String(c[k] ?? "")));
+        setPreviewRows((prev) => ({ ...prev, [id]: [cols, ...rows] }));
+      }
+    } catch {
+      // preview unavailable — not critical
+    } finally {
+      setPreviewLoading(null);
+    }
+  }, [previewRows]);
 
   const loadSources = useCallback(async () => {
     try {
@@ -224,7 +243,7 @@ export default function DataPage() {
                 <Fragment key={s.id}>
                 <TableRow
                   className="border-card-border/50 hover:bg-sidebar-hover cursor-pointer"
-                  onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                  onClick={() => { const next = expandedId === s.id ? null : s.id; setExpandedId(next); if (next) loadPreview(next); }}
                 >
                   <TableCell className="font-medium text-accent">
                     <div className="flex items-center gap-1.5">
@@ -293,6 +312,41 @@ export default function DataPage() {
                           <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Commission</div>
                           <div className="text-sm font-medium">{s.default_commission ?? "—"} <span className="text-muted-foreground text-[10px]">{s.commission_model || ""}</span></div>
                         </div>
+                      </div>
+
+                      {/* Data Row Preview */}
+                      <div className="mt-4 pt-3 border-t border-card-border/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Database className="h-3.5 w-3.5 text-accent" />
+                          <span className="text-xs font-medium text-accent uppercase tracking-wide">Data Preview</span>
+                          <span className="text-[10px] text-muted-foreground">(first 10 rows)</span>
+                        </div>
+                        {previewLoading === s.id ? (
+                          <p className="text-xs text-muted-foreground">Loading preview…</p>
+                        ) : previewRows[s.id] ? (
+                          <div className="overflow-x-auto rounded border border-card-border/30">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-background">
+                                  {previewRows[s.id][0].map((col, i) => (
+                                    <th key={i} className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap">{col}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {previewRows[s.id].slice(1).map((row, ri) => (
+                                  <tr key={ri} className="border-t border-card-border/20">
+                                    {row.map((cell, ci) => (
+                                      <td key={ci} className="px-2 py-1 text-foreground/80 whitespace-nowrap font-mono">{cell}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Preview unavailable</p>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -567,7 +567,8 @@ export default function StrategyEditor({ strategy, onSave, onCancel }: Props) {
       }
       onSave();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Save failed";
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -707,7 +708,7 @@ export default function StrategyEditor({ strategy, onSave, onCancel }: Props) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-sm text-danger">{typeof error === "string" ? error : String(error)}</p>}
 
       {/* Name & Description */}
       <Card className="bg-card-bg border-card-border">

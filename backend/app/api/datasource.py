@@ -90,15 +90,20 @@ def _parse_datetime(value: str) -> datetime | None:
 
 
 def _guess_symbol_timeframe(filename: str) -> tuple[str, str]:
-    """Try to extract symbol and timeframe from filename like XAUUSD_M10_...csv"""
+    """Try to extract symbol and timeframe from filename like XAUUSD_M10_...csv
+    Skips leading numeric-only parts (e.g. timestamps) so that
+    '1772411314_1771441559_XAUUSD_M10.csv' correctly yields ('XAUUSD', 'M10').
+    """
     name = Path(filename).stem.upper()
     parts = name.split("_")
-    symbol = parts[0] if parts else ""
+    _TIMEFRAMES = {"M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"}
+    symbol = ""
     timeframe = ""
-    for p in parts[1:]:
-        if p in ("M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"):
+    for p in parts:
+        if p in _TIMEFRAMES:
             timeframe = p
-            break
+        elif not symbol and not p.isdigit():
+            symbol = p
     return symbol, timeframe
 
 
@@ -157,7 +162,7 @@ async def upload_csv(
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
     content = await file.read()
-    size_mb = len(content) // (1024 * 1024)
+    size_mb = round(len(content) / (1024 * 1024), 2)
 
     if size_mb > settings.MAX_UPLOAD_SIZE_MB:
         raise HTTPException(status_code=400, detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)")
@@ -435,7 +440,7 @@ async def fetch_from_broker(
                 date_from=first_dt.strftime("%Y-%m-%d %H:%M") if first_dt else "",
                 date_to=last_dt.strftime("%Y-%m-%d %H:%M") if last_dt else "",
                 columns="time,open,high,low,close,volume",
-                file_size_mb=len(csv_content) // (1024 * 1024),
+                file_size_mb=round(len(csv_content) / (1024 * 1024), 2),
                 source_type="broker",
                 broker_name="mt5",
             )
@@ -544,7 +549,7 @@ async def fetch_from_broker(
                 date_from=first_dt.strftime("%Y-%m-%d %H:%M") if first_dt else "",
                 date_to=last_dt.strftime("%Y-%m-%d %H:%M") if last_dt else "",
                 columns="time,open,high,low,close,volume",
-                file_size_mb=len(csv_content) // (1024 * 1024),
+                file_size_mb=round(len(csv_content) / (1024 * 1024), 2),
                 source_type="broker",
                 broker_name=req.broker,
                 pip_value=profile.get("pip_value", 10.0),

@@ -86,7 +86,7 @@ export default function TradingPage() {
 
   // order panel
   const [showOrder, setShowOrder] = useState(false);
-  const [oSymbol, setOSymbol] = useState("EUR_USD");
+  const [oSymbol, setOSymbol] = useState("");
   const [oSide, setOSide] = useState<"BUY" | "SELL">("BUY");
   const [oSize, setOSize] = useState("1000");
   const [oType, setOType] = useState("MARKET");
@@ -565,7 +565,7 @@ export default function TradingPage() {
   const startPolling = useCallback(() => {
     refreshData();
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(refreshData, 3000);
+    pollRef.current = setInterval(refreshData, 5000);
   }, [refreshData]);
 
   /* ── connect ──────────────────────────────────── */
@@ -668,7 +668,7 @@ export default function TradingPage() {
                 {brokerName}
               </span>
               <Button
-                onClick={() => { setShowOrder(true); setOrderBroker(activeBroker ?? brokerAccounts.find(b => b.connected)?.broker ?? ""); }}
+                onClick={() => { setShowOrder(true); setOSymbol(chartSymbol); setOrderBroker(activeBroker ?? brokerAccounts.find(b => b.connected)?.broker ?? ""); }}
               >
                 New Order
               </Button>
@@ -1121,9 +1121,26 @@ export default function TradingPage() {
               <input
                 value={oSymbol}
                 onChange={(e) => setOSymbol(e.target.value)}
-                placeholder="EUR_USD"
+                placeholder="XAUUSD"
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
               />
+              {/* Live bid/ask for the selected symbol */}
+              {currentTick && oSymbol && oSymbol.toUpperCase() === chartSymbol?.toUpperCase() && (
+                <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                  <div className="rounded bg-background p-2 text-center">
+                    <div className="text-muted-foreground mb-0.5">Bid</div>
+                    <div className="text-green-400 font-mono font-medium">{fmtTick(currentTick.bid, currentTick.spread)}</div>
+                  </div>
+                  <div className="rounded bg-background p-2 text-center">
+                    <div className="text-muted-foreground mb-0.5">Ask</div>
+                    <div className="text-red-400 font-mono font-medium">{fmtTick(currentTick.ask, currentTick.spread)}</div>
+                  </div>
+                  <div className="rounded bg-background p-2 text-center">
+                    <div className="text-muted-foreground mb-0.5">Spread</div>
+                    <div className="text-zinc-400 font-mono">{fmtTick(currentTick.spread, currentTick.spread)}</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

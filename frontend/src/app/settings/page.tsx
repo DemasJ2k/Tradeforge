@@ -1299,9 +1299,29 @@ export default function SettingsPage() {
               <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-foreground">Database</h3>
               <div className="flex gap-3">
-                <a href={`${API}/api/settings/backup`} className={btnSecondary + ' inline-block text-center no-underline'}>
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = getToken();
+                      const res = await fetch(`${API}/api/settings/backup`, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      });
+                      if (!res.ok) throw new Error('Backup failed');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `tradeforge-backup-${new Date().toISOString().slice(0, 10)}.db`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      alert('Failed to download backup');
+                    }
+                  }}
+                  className={btnSecondary}
+                >
                   Download Backup
-                </a>
+                </button>
               </div>
 
               <hr className="border-card-border" />

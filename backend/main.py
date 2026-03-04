@@ -191,12 +191,12 @@ def _remove_incompatible_strategies():
 
     with engine.connect() as conn:
         rows = conn.execute(text(
-            "SELECT id, strategy_type, file_path, indicators, entry_rules FROM strategies"
+            "SELECT id, strategy_type, file_path, indicators, entry_rules, is_system FROM strategies"
         )).fetchall()
 
         ids_to_remove = []
         for r in rows:
-            sid, stype, fpath, ind_json, rules_json = r
+            sid, stype, fpath, ind_json, rules_json, is_system = r
             stype = stype or "builder"
             fpath = fpath or ""
 
@@ -210,7 +210,8 @@ def _remove_incompatible_strategies():
                 entry_rules = []
 
             # Python-file strategies are not V3-engine compatible
-            if stype == "python" and fpath:
+            # BUT keep system strategies — they must still appear in the UI
+            if stype == "python" and fpath and not is_system:
                 ids_to_remove.append(sid)
                 continue
 
@@ -265,9 +266,15 @@ app = FastAPI(
 )
 
 # CORS — production uses FRONTEND_URL env var; dev adds localhost origins
-_cors_origins = [settings.FRONTEND_URL]
-if settings.DEBUG:
-    _cors_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
+_cors_origins: list[str] = []
+if settings.FRONTEND_URL:
+    _cors_origins.append(settings.FRONTEND_URL)
+    # Also allow without trailing slash or with it
+    _cors_origins.append(settings.FRONTEND_URL.rstrip("/"))
+# Always allow localhost for development
+_cors_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
+# Deduplicate
+_cors_origins = list(dict.fromkeys(_cors_origins))
 
 app.add_middleware(
     CORSMiddleware,

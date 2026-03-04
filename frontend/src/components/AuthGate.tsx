@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
@@ -40,6 +40,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  const autoConnectRan = useRef(false);
+
   useEffect(() => {
     loadUser();
   }, [loadUser]);
@@ -48,8 +50,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user && !mustChangePassword && !totpRequired) {
       loadSettings();
-      // Auto-connect brokers that have auto_connect=True
-      api.post("/api/settings/broker-auto-connect").catch(() => {});
+      // Auto-connect brokers only once per session
+      if (!autoConnectRan.current) {
+        autoConnectRan.current = true;
+        api.post("/api/settings/broker-auto-connect").catch(() => {});
+      }
     }
   }, [user, mustChangePassword, totpRequired, loadSettings]);
 

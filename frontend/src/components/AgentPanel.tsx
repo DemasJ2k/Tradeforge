@@ -852,6 +852,18 @@ export default function AgentPanel() {
                 <option value="auto">Fully Autonomous</option>
               </select>
             </div>
+            <div>
+              <Label className="block text-xs text-muted-foreground mb-1.5">ML Model <span className="text-zinc-500">(optional)</span></Label>
+              <select value={editMlModelId ?? ""} onChange={e => setEditMlModelId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                <option value="">No ML filter</option>
+                {mlModels.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}{m.val_accuracy != null ? ` (${(m.val_accuracy * 100).toFixed(1)}% acc)` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="block text-xs text-muted-foreground mb-1.5">Lot Size</Label>

@@ -58,7 +58,7 @@ export default function TopBar() {
   // Poll broker accounts every 15 seconds
   useEffect(() => {
     refreshAccounts();
-    const interval = setInterval(refreshAccounts, 15_000);
+    const interval = setInterval(refreshAccounts, 60_000);
     return () => clearInterval(interval);
   }, [refreshAccounts]);
 

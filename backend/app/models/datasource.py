@@ -18,7 +18,7 @@ class DataSource(Base):
     date_from = Column(String(30), default="")
     date_to = Column(String(30), default="")
     columns = Column(String(500), default="")         # Comma-separated column names
-    file_size_mb = Column(Integer, default=0)
+    file_size_mb = Column(Float, default=0)
     source_type = Column(String(20), default="upload")  # upload, broker
     broker_name = Column(String(20), default="")        # mt5, oanda, coinbase, tradovate
     # Instrument profile

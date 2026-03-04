@@ -210,18 +210,6 @@ export default function ChatSidebar() {
     }
   }, [showMemories]);
 
-  // Keyboard shortcut: Ctrl+K to toggle
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "k") {
-        e.preventDefault();
-        setOpen((p) => !p);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
   // Focus input when opened
   useEffect(() => {
     if (open) inputRef.current?.focus();
