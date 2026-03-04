@@ -1,7 +1,7 @@
 """News & economic calendar models for caching API data."""
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Index, Boolean, JSON
 
 from app.core.database import Base
 
@@ -47,9 +47,27 @@ class NewsArticle(Base):
     sentiment_label = Column(String(30), nullable=True)     # Bearish / Neutral / Bullish
     # Related symbols
     related_symbols = Column(String(500), default="")       # Comma-separated: "XAUUSD,EURUSD"
+    # AI analysis
+    ai_analysis = Column(Text, nullable=True)               # JSON blob from LLM analysis
     fetched_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_news_published", "published_at"),
         Index("ix_news_category", "category"),
     )
+
+
+class NewsProvider(Base):
+    """Configured news data provider (Finnhub, Alpha Vantage, NewsAPI, etc.)."""
+    __tablename__ = "news_providers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)              # e.g. "Finnhub"
+    provider_type = Column(String(50), nullable=False)      # finnhub / alphavantage / newsapi / rss
+    api_key = Column(String(500), default="")               # API key (encrypted at rest via env)
+    base_url = Column(String(500), default="")              # Custom base URL for RSS feeds
+    enabled = Column(Boolean, default=True)
+    config = Column(JSON, default=dict)                     # Provider-specific config
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))

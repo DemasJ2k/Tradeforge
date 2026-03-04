@@ -32,6 +32,8 @@ from app.api import dashboard as dashboard_api
 from app.api import recycle_bin as recycle_bin_api
 from app.api import optimization_phase as optimization_phase_api
 from app.api import news as news_api
+from app.api import watchlist as watchlist_api
+from app.api import webhook as webhook_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -48,6 +50,7 @@ from app.models import agent as agent_model  # noqa: F401
 from app.models import password_reset as password_reset_model  # noqa: F401
 from app.models import optimization_phase as optimization_phase_model  # noqa: F401
 from app.models import news as news_model  # noqa: F401
+from app.models import watchlist as watchlist_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -114,6 +117,8 @@ def _run_schema_migrations():
         # Trade SL/TP tracking
         ("trades", "stop_loss",   "REAL"),
         ("trades", "take_profit", "REAL"),
+        # News AI analysis
+        ("news_articles", "ai_analysis", "TEXT"),
     ]
 
     insp = inspect(engine)
@@ -342,6 +347,8 @@ app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
 app.include_router(recycle_bin_api.router)
 app.include_router(news_api.router)
+app.include_router(watchlist_api.router)
+app.include_router(webhook_api.router)
 
 
 def _seed_admin_user():
