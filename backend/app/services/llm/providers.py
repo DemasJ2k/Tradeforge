@@ -69,6 +69,27 @@ class LLMProvider(ABC):
         """Yield text chunks as they arrive."""
         ...
 
+    async def chat_with_tools(
+        self,
+        messages: list[dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        system_prompt: str,
+        tools: list[dict] | None = None,
+    ) -> dict:
+        """Call LLM with tool definitions. Returns:
+        {
+            "text": str,
+            "tool_calls": [{"id": str, "name": str, "arguments": dict}],
+            "tokens_in": int,
+            "tokens_out": int,
+        }
+        Default implementation falls back to regular chat (no tool calling).
+        """
+        reply, t_in, t_out = await self.chat(messages, model, temperature, max_tokens, system_prompt)
+        return {"text": reply, "tool_calls": [], "tokens_in": t_in, "tokens_out": t_out}
+
 
 # ══════════════════════════════════════════════════════════════════════
 # Claude (Anthropic)
@@ -96,6 +117,73 @@ class ClaudeProvider(LLMProvider):
         )
         reply = resp.content[0].text
         return reply, resp.usage.input_tokens, resp.usage.output_tokens
+
+    async def chat_with_tools(self, messages, model, temperature, max_tokens, system_prompt, tools=None):
+        model = model or "claude-sonnet-4-20250514"
+
+        # Build messages — handle tool-related message types
+        api_messages = []
+        for m in messages:
+            role = m.get("role", "")
+            if role == "system":
+                continue
+            elif role == "tool":
+                # Tool result → Anthropic format
+                api_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": m.get("tool_call_id", ""),
+                        "content": m.get("content", ""),
+                    }],
+                })
+            elif role == "assistant" and m.get("tool_calls"):
+                # Assistant message with tool calls
+                content = []
+                if m.get("content"):
+                    content.append({"type": "text", "text": m["content"]})
+                for tc in m["tool_calls"]:
+                    content.append({
+                        "type": "tool_use",
+                        "id": tc.get("id", ""),
+                        "name": tc.get("name", ""),
+                        "input": tc.get("arguments", {}),
+                    })
+                api_messages.append({"role": "assistant", "content": content})
+            else:
+                api_messages.append({"role": role, "content": m.get("content", "")})
+
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system_prompt or "You are a helpful AI trading assistant.",
+            "messages": api_messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        resp = await self.async_client.messages.create(**kwargs)
+
+        # Parse response content blocks
+        text_parts = []
+        tool_calls = []
+        for block in resp.content:
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_use":
+                tool_calls.append({
+                    "id": block.id,
+                    "name": block.name,
+                    "arguments": block.input,
+                })
+
+        return {
+            "text": "\n".join(text_parts),
+            "tool_calls": tool_calls,
+            "tokens_in": resp.usage.input_tokens,
+            "tokens_out": resp.usage.output_tokens,
+        }
 
     async def stream(self, messages, model, temperature, max_tokens, system_prompt):
         model = model or "claude-sonnet-4-20250514"
@@ -142,6 +230,74 @@ class OpenAIProvider(LLMProvider):
         choice = resp.choices[0]
         usage = resp.usage
         return choice.message.content, usage.prompt_tokens, usage.completion_tokens
+
+    async def chat_with_tools(self, messages, model, temperature, max_tokens, system_prompt, tools=None):
+        import json as _json
+        model = model or "gpt-4o-mini"
+
+        api_messages = []
+        if system_prompt:
+            api_messages.append({"role": "system", "content": system_prompt})
+
+        for m in messages:
+            role = m.get("role", "")
+            if role == "system":
+                continue
+            elif role == "tool":
+                api_messages.append({
+                    "role": "tool",
+                    "tool_call_id": m.get("tool_call_id", ""),
+                    "content": m.get("content", ""),
+                })
+            elif role == "assistant" and m.get("tool_calls"):
+                msg = {"role": "assistant", "content": m.get("content") or None}
+                msg["tool_calls"] = [
+                    {
+                        "id": tc.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("name", ""),
+                            "arguments": _json.dumps(tc.get("arguments", {})),
+                        },
+                    }
+                    for tc in m["tool_calls"]
+                ]
+                api_messages.append(msg)
+            else:
+                api_messages.append({"role": role, "content": m.get("content", "")})
+
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": api_messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        resp = await self.client.chat.completions.create(**kwargs)
+        choice = resp.choices[0]
+        usage = resp.usage
+
+        tool_calls = []
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                try:
+                    args = _json.loads(tc.function.arguments)
+                except (ValueError, TypeError):
+                    args = {}
+                tool_calls.append({
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": args,
+                })
+
+        return {
+            "text": choice.message.content or "",
+            "tool_calls": tool_calls,
+            "tokens_in": usage.prompt_tokens,
+            "tokens_out": usage.completion_tokens,
+        }
 
     async def stream(self, messages, model, temperature, max_tokens, system_prompt):
         model = model or "gpt-4o-mini"
@@ -204,6 +360,98 @@ class GeminiProvider(LLMProvider):
         tokens_out = resp.usage_metadata.candidates_token_count if hasattr(resp, 'usage_metadata') and resp.usage_metadata else 0
 
         return resp.text, tokens_in, tokens_out
+
+    async def chat_with_tools(self, messages, model, temperature, max_tokens, system_prompt, tools=None):
+        model_name = model or "gemini-2.0-flash"
+
+        kwargs = {
+            "system_instruction": system_prompt or "You are a helpful AI trading assistant.",
+            "generation_config": self.genai.GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            ),
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        gm = self.genai.GenerativeModel(model_name, **kwargs)
+
+        # Build history — filter out tool-related messages for Gemini's simpler format
+        history = []
+        for m in messages[:-1]:
+            role_raw = m.get("role", "user")
+            if role_raw == "system":
+                continue
+            elif role_raw == "tool":
+                # Gemini: function response
+                import google.generativeai as genai_mod
+                from google.protobuf.struct_pb2 import Struct
+                import json as _json
+
+                func_name = m.get("name", "tool_result")
+                try:
+                    result_data = _json.loads(m.get("content", "{}"))
+                except (ValueError, TypeError):
+                    result_data = {"result": m.get("content", "")}
+
+                s = Struct()
+                s.update(result_data)
+                part = genai_mod.protos.Part(
+                    function_response=genai_mod.protos.FunctionResponse(
+                        name=func_name, response=s
+                    )
+                )
+                history.append({"role": "user", "parts": [part]})
+            elif role_raw == "assistant" and m.get("tool_calls"):
+                # Gemini: function call from model
+                import google.generativeai as genai_mod
+                from google.protobuf.struct_pb2 import Struct
+
+                parts = []
+                if m.get("content"):
+                    parts.append(m["content"])
+                for tc in m["tool_calls"]:
+                    s = Struct()
+                    s.update(tc.get("arguments", {}))
+                    parts.append(genai_mod.protos.Part(
+                        function_call=genai_mod.protos.FunctionCall(
+                            name=tc.get("name", ""), args=s
+                        )
+                    ))
+                history.append({"role": "model", "parts": parts})
+            else:
+                role = "model" if role_raw == "assistant" else "user"
+                history.append({"role": role, "parts": [m.get("content", "")]})
+
+        chat_session = gm.start_chat(history=history)
+        last_msg = messages[-1].get("content", "") if messages else ""
+
+        loop = asyncio.get_event_loop()
+        resp = await loop.run_in_executor(None, lambda: chat_session.send_message(last_msg))
+
+        # Parse response parts
+        text_parts = []
+        tool_calls = []
+        for part in resp.parts:
+            if hasattr(part, "text") and part.text:
+                text_parts.append(part.text)
+            elif hasattr(part, "function_call") and part.function_call:
+                fc = part.function_call
+                tool_calls.append({
+                    "id": f"gemini_{fc.name}_{id(fc)}",
+                    "name": fc.name,
+                    "arguments": dict(fc.args) if fc.args else {},
+                })
+
+        tokens_in = resp.usage_metadata.prompt_token_count if hasattr(resp, 'usage_metadata') and resp.usage_metadata else 0
+        tokens_out = resp.usage_metadata.candidates_token_count if hasattr(resp, 'usage_metadata') and resp.usage_metadata else 0
+
+        return {
+            "text": "\n".join(text_parts),
+            "tool_calls": tool_calls,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+        }
 
     async def stream(self, messages, model, temperature, max_tokens, system_prompt):
         model_name = model or "gemini-2.0-flash"

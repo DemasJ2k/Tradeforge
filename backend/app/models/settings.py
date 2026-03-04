@@ -54,6 +54,11 @@ class UserSettings(Base):
     export_format = Column(String(10), default="csv")  # csv, json
     max_storage_mb = Column(Integer, default=0)  # 0=unlimited
 
+    # --- AI Copilot ---
+    copilot_enabled = Column(Integer, default=1)           # 0=off, 1=on
+    copilot_autonomy = Column(String(20), default="assisted")  # analysis_only | assisted | full_auto
+    copilot_permissions = Column(JSON, default=dict)       # per-tool overrides: {"place_order": "blocked"}
+
     # --- Platform ---
     session_timeout_minutes = Column(Integer, default=0)  # 0=no timeout
     notifications = Column(JSON, default=dict)  # {backtest: true, optimize: true, trade: true}

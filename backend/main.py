@@ -107,6 +107,10 @@ def _run_schema_migrations():
         ("ml_models",            "deleted_at", "TIMESTAMP"),
         ("knowledge_articles",   "deleted_at", "TIMESTAMP"),
         ("llm_conversations",    "deleted_at", "TIMESTAMP"),
+        # AI Copilot settings
+        ("user_settings", "copilot_enabled",     "INTEGER DEFAULT 1"),
+        ("user_settings", "copilot_autonomy",    "VARCHAR(20) DEFAULT 'assisted'"),
+        ("user_settings", "copilot_permissions", "TEXT DEFAULT '{}'"),
     ]
 
     insp = inspect(engine)

@@ -80,6 +80,9 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         notification_smtp_use_tls=bool(s.notification_smtp_use_tls),
         notification_telegram_bot_token_set=bool(s.notification_telegram_bot_token_encrypted),
         notification_telegram_chat_id=s.notification_telegram_chat_id or "",
+        copilot_enabled=bool(getattr(s, "copilot_enabled", 1)),
+        copilot_autonomy=getattr(s, "copilot_autonomy", "assisted") or "assisted",
+        copilot_permissions=getattr(s, "copilot_permissions", {}) or {},
     )
 
 
@@ -121,7 +124,7 @@ def update_settings(
         s.notification_telegram_bot_token_encrypted = encrypt_value(raw) if raw else ""
 
     # Map boolean fields to int for SQLite
-    bool_to_int = {"compact_mode", "chart_grid", "chart_crosshair", "notification_smtp_use_tls"}
+    bool_to_int = {"compact_mode", "chart_grid", "chart_crosshair", "notification_smtp_use_tls", "copilot_enabled"}
     for key, val in data.items():
         if key in bool_to_int:
             setattr(s, key, int(val))

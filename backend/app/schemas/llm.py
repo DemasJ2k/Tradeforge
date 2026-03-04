@@ -113,3 +113,23 @@ class MLActionPlan(BaseModel):
     learning_rate: float = 0.1
     explanation: str = ""
     tokens_used: dict = {}
+
+
+# ─── Copilot (Tool Calling) ──────────────────────────────────────────
+
+class CopilotConfirmRequest(BaseModel):
+    approved: bool = False
+
+
+class CopilotToolInfo(BaseModel):
+    name: str
+    description: str
+    category: str
+    default_permission: str  # auto | confirm | blocked
+    effective_permission: str  # resolved based on user settings
+
+
+class CopilotToolList(BaseModel):
+    tools: list[CopilotToolInfo]
+    autonomy: str
+    total: int

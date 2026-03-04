@@ -50,6 +50,11 @@ class SettingsUpdate(BaseModel):
     session_timeout_minutes: Optional[int] = None
     notifications: Optional[dict] = None
 
+    # AI Copilot
+    copilot_enabled: Optional[bool] = None
+    copilot_autonomy: Optional[str] = None  # analysis_only | assisted | full_auto
+    copilot_permissions: Optional[dict] = None  # per-tool overrides
+
     # Notification channels
     notification_email: Optional[str] = None
     notification_smtp_host: Optional[str] = None
@@ -106,6 +111,11 @@ class SettingsResponse(BaseModel):
     # Platform
     session_timeout_minutes: int = 0
     notifications: dict = {}
+
+    # AI Copilot
+    copilot_enabled: bool = True
+    copilot_autonomy: str = "assisted"
+    copilot_permissions: dict = {}
 
     # Notification channels
     notification_email: str = ""

@@ -285,6 +285,156 @@ class LLMService:
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': convo.id, 'title': convo.title, 'tokens_in': est_tokens_in, 'tokens_out': est_tokens_out, 'model': model})}\n\n"
 
 
+    @staticmethod
+    async def stream_copilot_chat(
+        db: Session,
+        user_id: int,
+        message: str,
+        conversation_id: Optional[int],
+        page_context: str = "",
+        context_data: Optional[dict] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream a copilot chat with tool calling. Yields SSE events."""
+        import json
+
+        settings = LLMService._get_settings(db, user_id)
+        api_key = decrypt_value(settings.llm_api_key_encrypted)
+        provider_name = settings.llm_provider
+        model = settings.llm_model
+        temperature = float(settings.llm_temperature or "0.7")
+        max_tokens = int(settings.llm_max_tokens or "4096")
+        custom_prompt = settings.llm_system_prompt or ""
+
+        # Copilot settings
+        copilot_enabled = bool(getattr(settings, "copilot_enabled", 1))
+        if not copilot_enabled:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Copilot is disabled. Enable it in Settings → AI Copilot.'})}\n\n"
+            return
+
+        autonomy = getattr(settings, "copilot_autonomy", "assisted") or "assisted"
+        user_overrides = getattr(settings, "copilot_permissions", {}) or {}
+
+        memories = db.query(LLMMemory).filter(LLMMemory.user_id == user_id).all()
+
+        # Enhanced system prompt for copilot mode
+        copilot_instructions = (
+            "\n\nYou have access to platform tools that let you take real actions. "
+            "When the user asks you to do something (list strategies, run a backtest, check positions, etc.), "
+            "use the appropriate tool rather than explaining how to do it manually. "
+            "Always explain what you're about to do and summarize results clearly after tool execution. "
+            "If a tool returns an error, explain it to the user and suggest alternatives."
+        )
+        system_prompt = _build_system_prompt(
+            memories, page_context, context_data, custom_prompt
+        ) + copilot_instructions
+
+        # Load or create conversation
+        if conversation_id:
+            convo = db.query(LLMConversation).filter(
+                LLMConversation.id == conversation_id,
+                LLMConversation.user_id == user_id,
+            ).first()
+            if not convo:
+                raise ValueError("Conversation not found")
+        else:
+            convo = LLMConversation(
+                user_id=user_id,
+                page_context=page_context,
+                messages=[],
+                title="New Chat",
+            )
+            db.add(convo)
+            db.commit()
+            db.refresh(convo)
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        msgs = list(convo.messages or [])
+        msgs.append({"role": "user", "content": message, "timestamp": now_str})
+
+        MAX_HISTORY = 30
+        api_messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in msgs[-MAX_HISTORY:]
+            if m.get("role") in ("user", "assistant")
+        ]
+
+        provider = get_provider(provider_name, api_key)
+
+        # Emit conversation_id immediately so frontend can track it
+        yield f"data: {json.dumps({'type': 'conversation', 'conversation_id': convo.id})}\n\n"
+
+        # Run copilot executor
+        from app.services.llm.copilot_executor import copilot_stream
+
+        full_text_parts = []
+        total_tokens_in = 0
+        total_tokens_out = 0
+
+        async for event_str in copilot_stream(
+            db=db,
+            user_id=user_id,
+            messages=api_messages,
+            system_prompt=system_prompt,
+            provider=provider,
+            provider_name=provider_name,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            autonomy=autonomy,
+            user_overrides=user_overrides,
+        ):
+            # Forward SSE events to client
+            yield event_str
+
+            # Extract text and metadata from events
+            try:
+                # Parse the SSE data line
+                if event_str.startswith("data: "):
+                    data = json.loads(event_str[6:].strip())
+                    if data.get("type") == "chunk":
+                        full_text_parts.append(data.get("content", ""))
+                    elif data.get("type") == "done":
+                        total_tokens_in = data.get("tokens_in", 0)
+                        total_tokens_out = data.get("tokens_out", 0)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # Save conversation with the reply
+        reply_text = "".join(full_text_parts)
+        if reply_text:
+            msgs.append({
+                "role": "assistant",
+                "content": reply_text,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+
+        convo.messages = msgs
+        convo.updated_at = datetime.now(timezone.utc)
+
+        if len([m for m in msgs if m.get("role") in ("user", "assistant")]) == 2:
+            convo.title = _auto_title(message)
+
+        db.commit()
+
+        # Track usage
+        if total_tokens_in or total_tokens_out:
+            cost = estimate_cost(provider_name, model, total_tokens_in, total_tokens_out)
+            usage = LLMUsage(
+                user_id=user_id,
+                conversation_id=convo.id,
+                provider=provider_name,
+                model=model,
+                tokens_in=total_tokens_in,
+                tokens_out=total_tokens_out,
+                cost_estimate=cost,
+            )
+            db.add(usage)
+            db.commit()
+
+        # Final done event with conversation metadata
+        yield f"data: {json.dumps({'type': 'done', 'conversation_id': convo.id, 'title': convo.title, 'tokens_in': total_tokens_in, 'tokens_out': total_tokens_out, 'model': model})}\n\n"
+
+
 def _auto_title(first_message: str) -> str:
     """Generate a short title from the first user message."""
     title = first_message.strip()

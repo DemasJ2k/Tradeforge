@@ -22,6 +22,7 @@ from app.schemas.llm import (
     UsageStats,
     MLActionRequest,
     MLActionPlan,
+    CopilotConfirmRequest,
 )
 from app.services.llm.service import LLMService
 from app.services.llm.tools import interpret_ml_request, get_ml_context_for_chat
@@ -323,3 +324,95 @@ async def get_ml_context(
 ):
     """Get ML page context data for the ChatSidebar."""
     return get_ml_context_for_chat(db, current_user.id)
+
+
+# ─── Copilot (Tool Calling) ──────────────────────────────────────────
+
+@router.post("/copilot/chat/stream")
+async def copilot_chat_stream(
+    payload: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream a copilot chat with tool calling (SSE)."""
+    try:
+        generator = LLMService.stream_copilot_chat(
+            db=db,
+            user_id=current_user.id,
+            message=payload.message,
+            conversation_id=payload.conversation_id,
+            page_context=payload.page_context or "",
+            context_data=payload.context_data,
+        )
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Copilot error: {str(e)[:300]}")
+
+
+@router.post("/copilot/confirm/{confirm_id}")
+async def copilot_confirm(
+    confirm_id: str,
+    payload: CopilotConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Approve or deny a pending copilot tool call."""
+    from app.services.llm.copilot_executor import execute_confirmed_tool
+
+    approved = payload.approved
+
+    async def _gen():
+        async for event in execute_confirmed_tool(db, confirm_id, approved):
+            yield event
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/copilot/tools")
+def list_copilot_tools(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List available copilot tools with their current permission levels."""
+    from app.services.llm.copilot_tools import TOOL_REGISTRY
+    from app.services.llm.copilot_executor import resolve_permission
+    from app.models.settings import UserSettings
+
+    settings = db.query(UserSettings).filter(
+        UserSettings.user_id == current_user.id
+    ).first()
+
+    autonomy = getattr(settings, "copilot_autonomy", "assisted") if settings else "assisted"
+    user_overrides = getattr(settings, "copilot_permissions", {}) if settings else {}
+    user_overrides = user_overrides or {}
+
+    tools = []
+    for name, tool in TOOL_REGISTRY.items():
+        effective = resolve_permission(tool, autonomy, user_overrides)
+        tools.append({
+            "name": name,
+            "description": tool.description,
+            "category": tool.category,
+            "default_permission": tool.permission,
+            "effective_permission": effective,
+        })
+
+    return {"tools": tools, "autonomy": autonomy, "total": len(tools)}
