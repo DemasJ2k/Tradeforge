@@ -160,6 +160,19 @@ async def start_agent(
 
     await algo_engine.start_agent(agent_id)
     db.refresh(agent)
+
+    # Fire webhooks
+    try:
+        from app.services.webhook import fire_webhooks
+        await fire_webhooks(db, user.id, "agent_started", {
+            "agent_id": agent_id,
+            "name": agent.name,
+            "symbol": agent.symbol,
+            "strategy_id": agent.strategy_id,
+        })
+    except Exception:
+        pass
+
     return _agent_to_response(agent)
 
 
@@ -177,6 +190,18 @@ async def stop_agent(
 
     await algo_engine.stop_agent(agent_id)
     db.refresh(agent)
+
+    # Fire webhooks
+    try:
+        from app.services.webhook import fire_webhooks
+        await fire_webhooks(db, user.id, "agent_stopped", {
+            "agent_id": agent_id,
+            "name": agent.name,
+            "symbol": agent.symbol,
+        })
+    except Exception:
+        pass
+
     return _agent_to_response(agent)
 
 

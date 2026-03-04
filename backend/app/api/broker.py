@@ -228,6 +228,19 @@ async def close_position(
     db.add(trade)
     db.commit()
 
+    # Fire webhooks
+    try:
+        from app.services.webhook import fire_webhooks
+        await fire_webhooks(db, user.id, "trade_closed", {
+            "symbol": order.symbol,
+            "direction": order.side.value,
+            "size": order.size,
+            "exit_price": order.filled_price,
+            "broker": adapter.broker_name,
+        })
+    except Exception:
+        pass  # Webhook failure should not break trading
+
     return OrderResponse(
         order_id=order.order_id,
         symbol=order.symbol,
@@ -275,11 +288,28 @@ async def place_order(
             entry_price=order.filled_price or 0,
             entry_time=order.filled_time or order.created_time,
             lot_size=order.size,
+            stop_loss=payload.stop_loss,
+            take_profit=payload.take_profit,
             status="open",
             metadata_={"order_id": order.order_id},
         )
         db.add(trade)
         db.commit()
+
+        # Fire webhooks
+        try:
+            from app.services.webhook import fire_webhooks
+            await fire_webhooks(db, user.id, "trade_opened", {
+                "symbol": order.symbol,
+                "direction": order.side.value,
+                "size": order.size,
+                "entry_price": order.filled_price,
+                "stop_loss": payload.stop_loss,
+                "take_profit": payload.take_profit,
+                "broker": adapter.broker_name,
+            })
+        except Exception:
+            pass  # Webhook failure should not break trading
 
     return OrderResponse(
         order_id=order.order_id,
