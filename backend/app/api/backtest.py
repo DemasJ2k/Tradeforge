@@ -100,6 +100,36 @@ def _parse_datetime(val: str) -> float:
     raise ValueError(f"Cannot parse datetime: {val}")
 
 
+def _resolve_csv_path(datasource) -> Path:
+    """Resolve the CSV file path for a datasource.
+
+    Handles:
+      1. Original filepath (works locally)
+      2. Fallback to UPLOAD_DIR / filename (original upload name)
+      3. Search for files ending with filename in UPLOAD_DIR
+         (handles timestamp-prefixed filenames on Render)
+    """
+    # Try original filepath
+    fp = Path(datasource.filepath)
+    if fp.exists():
+        return fp
+
+    upload_dir = Path(settings.UPLOAD_DIR)
+
+    # Try UPLOAD_DIR / original filename
+    fp = upload_dir / datasource.filename
+    if fp.exists():
+        return fp
+
+    # Search for timestamp-prefixed files ending with original filename
+    if upload_dir.exists():
+        for f in upload_dir.iterdir():
+            if f.is_file() and f.name.endswith(datasource.filename):
+                return f
+
+    raise FileNotFoundError(f"CSV file not found for datasource {datasource.id}: {datasource.filename}")
+
+
 def _load_bars_from_csv(file_path: str, validate: bool = True) -> list[Bar]:
     """Load bars from a CSV file.
 
@@ -183,11 +213,9 @@ def run_backtest(
     if not datasource:
         raise HTTPException(status_code=404, detail="Data source not found")
 
-    file_path = Path(datasource.filepath)
-    if not file_path.exists():
-        # Fallback: try UPLOAD_DIR / filename
-        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(datasource)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found on disk")
 
     # Load bars
@@ -249,10 +277,9 @@ def run_backtest(
             total_bars_all = 0
             sym_names = []
             for ds in datasources_multi:
-                fp = Path(ds.filepath)
-                if not fp.exists():
-                    fp = Path(settings.UPLOAD_DIR) / ds.filename
-                if not fp.exists():
+                try:
+                    fp = _resolve_csv_path(ds)
+                except FileNotFoundError:
                     raise HTTPException(status_code=404, detail=f"CSV not found: {ds.filename}")
 
                 ds_bars = _load_bars_from_csv(str(fp))
@@ -441,10 +468,9 @@ def run_backtest_v3(
     if not datasource:
         raise HTTPException(status_code=404, detail="Data source not found")
 
-    file_path = Path(datasource.filepath)
-    if not file_path.exists():
-        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(datasource)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found on disk")
 
     bars = _load_bars_from_csv(str(file_path))
@@ -569,10 +595,9 @@ def run_walk_forward_v3(
     if not datasource:
         raise HTTPException(status_code=404, detail="Data source not found")
 
-    file_path = Path(datasource.filepath)
-    if not file_path.exists():
-        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(datasource)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found on disk")
 
     bars = _load_bars_from_csv(str(file_path))
@@ -747,10 +772,9 @@ def run_walk_forward(
     if not datasource:
         raise HTTPException(status_code=404, detail="Data source not found")
 
-    file_path = Path(datasource.filepath)
-    if not file_path.exists():
-        file_path = Path(settings.UPLOAD_DIR) / datasource.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(datasource)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="CSV file not found on disk")
 
     bars = _load_bars_from_csv(str(file_path))
@@ -944,10 +968,9 @@ def compute_indicators(
     if not ds:
         raise HTTPException(404, "Data source not found")
 
-    file_path = Path(ds.filepath)
-    if not file_path.exists():
-        file_path = Path(settings.UPLOAD_DIR) / ds.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(ds)
+    except FileNotFoundError:
         raise HTTPException(404, "Data file not found on disk")
 
     bars = _load_bars_from_csv(str(file_path), validate=True)
@@ -1043,10 +1066,9 @@ def get_backtest_chart_data(
     if not ds:
         raise HTTPException(404, "Data source not found for backtest symbol")
 
-    file_path = Path(ds.filepath)
-    if not file_path.exists():
-        file_path = Path(settings.UPLOAD_DIR) / ds.filename
-    if not file_path.exists():
+    try:
+        file_path = _resolve_csv_path(ds)
+    except FileNotFoundError:
         raise HTTPException(404, "Data file not found on disk")
 
     raw_bars = _load_bars_from_csv(str(file_path), validate=True)
