@@ -130,15 +130,17 @@ def _parse_datetime(val: str) -> float:
 def _resolve_csv_path(datasource) -> Path:
     """Resolve the CSV file path for a datasource.
 
-    Handles:
-      1. Original filepath (works locally)
-      2. Fallback to UPLOAD_DIR / filename (original upload name)
-      3. Search for files ending with filename in UPLOAD_DIR
-         (handles timestamp-prefixed filenames on Render)
+    Search order:
+      1. Original filepath from DB (works locally)
+      2. UPLOAD_DIR / filename  (env-configured upload dir)
+      3. Search UPLOAD_DIR for files ending with filename
+      4. Repo-embedded data dir (backend/data/uploads/) — for Render
+      5. Search repo-embedded dir for files ending with filename
     """
     tried = []
+    fname = getattr(datasource, "filename", None) or ""
 
-    # Try original filepath
+    # ── 1. Try original filepath from DB ──
     orig = getattr(datasource, "filepath", None) or ""
     if orig:
         fp = Path(orig)
@@ -146,25 +148,39 @@ def _resolve_csv_path(datasource) -> Path:
         if fp.exists():
             return fp
 
+    # ── 2-3. Try UPLOAD_DIR (may be /tmp/uploads on Render) ──
     upload_dir = Path(settings.UPLOAD_DIR)
-    fname = getattr(datasource, "filename", None) or ""
-
-    # Try UPLOAD_DIR / original filename
     if fname:
         fp = upload_dir / fname
         tried.append(f"upload_dir/filename={fp}")
         if fp.exists():
             return fp
 
-    # Search for timestamp-prefixed files ending with original filename
     if upload_dir.exists() and fname:
-        files_in_dir = [f.name for f in upload_dir.iterdir() if f.is_file()]
-        tried.append(f"upload_dir exists, {len(files_in_dir)} files: {files_in_dir[:10]}")
         for f in upload_dir.iterdir():
             if f.is_file() and f.name.endswith(fname):
+                tried.append(f"found via endswith in upload_dir")
                 return f
-    elif not upload_dir.exists():
-        tried.append(f"upload_dir NOT FOUND: {upload_dir}")
+
+    # ── 4-5. Try repo-embedded data directory ──
+    # This is backend/data/uploads/ relative to the source tree.
+    # On Render, UPLOAD_DIR may be /tmp/uploads but CSV files are
+    # committed to the repo at backend/data/uploads/.
+    repo_data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
+    if repo_data_dir != upload_dir:
+        if fname:
+            fp = repo_data_dir / fname
+            tried.append(f"repo_data/filename={fp}")
+            if fp.exists():
+                return fp
+        if repo_data_dir.exists() and fname:
+            for f in repo_data_dir.iterdir():
+                if f.is_file() and f.name.endswith(fname):
+                    tried.append(f"found via endswith in repo_data_dir: {f}")
+                    return f
+            tried.append(f"repo_data_dir has {len(list(repo_data_dir.iterdir()))} files, none matched")
+        elif not repo_data_dir.exists():
+            tried.append(f"repo_data_dir NOT FOUND: {repo_data_dir}")
 
     detail = (
         f"CSV not found for datasource {getattr(datasource, 'id', '?')}: "
