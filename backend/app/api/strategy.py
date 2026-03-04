@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Optional
 
@@ -38,7 +39,10 @@ def _to_response(s: Strategy) -> dict:
         "settings_schema": s.settings_schema or [],
         "settings_values": s.settings_values or {},
         "folder": s.folder or None,
-        "verified_performance": s.verified_performance if hasattr(s, 'verified_performance') and s.verified_performance else None,
+        "verified_performance": (
+            json.loads(s.verified_performance) if isinstance(s.verified_performance, str)
+            else s.verified_performance
+        ) if hasattr(s, 'verified_performance') and s.verified_performance else None,
         "created_at": s.created_at.isoformat() if s.created_at else "",
         "updated_at": s.updated_at.isoformat() if s.updated_at else "",
     }
