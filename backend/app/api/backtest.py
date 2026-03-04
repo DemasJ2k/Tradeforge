@@ -53,6 +53,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
 
+def _ensure_dict(value) -> dict:
+    """Ensure value is a dict — parse JSON string if necessary.
+
+    SQLite JSON columns sometimes return raw strings instead of dicts.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
 @router.get("/debug-paths")
 def debug_paths(db: Session = Depends(get_db)):
     """Temporary diagnostic endpoint — shows UPLOAD_DIR contents and datasource paths."""
@@ -319,7 +336,7 @@ def run_backtest(
             # Python strategy support — pass type, file path, and settings
             "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
             "file_path": getattr(strategy, "file_path", "") or "",
-            "settings_values": getattr(strategy, "settings_values", {}) or {},
+            "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
         }
 
         # If MSS/Gold BT, merge their config into risk_params/filters
@@ -557,7 +574,7 @@ def run_backtest_v3(
         # Python strategy support — pass type, file path, and settings
         "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
         "file_path": getattr(strategy, "file_path", "") or "",
-        "settings_values": getattr(strategy, "settings_values", {}) or {},
+        "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
     }
 
     symbol = datasource.symbol or "ASSET"

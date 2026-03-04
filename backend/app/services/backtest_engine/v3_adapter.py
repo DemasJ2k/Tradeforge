@@ -241,6 +241,15 @@ def run_v3_backtest(
             # Convert bars to dicts for legacy strategy compatibility
             bar_dicts = [b.to_dict() for b in v3_bars]
             settings = strategy_config.get("settings_values", {})
+            # Safety: ensure settings is a dict (SQLite JSON columns may return strings)
+            if isinstance(settings, str):
+                import json as _json
+                try:
+                    settings = _json.loads(settings)
+                except Exception:
+                    settings = {}
+            if not isinstance(settings, dict):
+                settings = {}
             strategy = LegacyPythonStrategy(
                 file_path=file_path,
                 settings=settings,
