@@ -18,8 +18,13 @@ build_output.txt
 frontend_log.txt
 
 # Project local data artifacts
-backend/data/uploads/
 backend/data/ml_models/
 backend/data/*.db
 backend/*.db
 nul
+
+# Include CSV uploads in repo (needed for Render ephemeral filesystem)
+# Large legacy files excluded individually:
+backend/data/uploads/DIA_5m_5Yea.csv
+backend/data/uploads/EURUSD_5m_2Yea.csv
+backend/data/uploads/SPY_5m_1Yea.csv
