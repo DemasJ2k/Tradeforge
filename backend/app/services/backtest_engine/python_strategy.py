@@ -182,24 +182,27 @@ def _safe_builtins() -> dict:
 
 # ── Legacy Python Strategy Adapter ──────────────────────────────────
 #
-# Bridges old-style strategies that define init(bars, settings) + on_bar(i, bar)
-# with injected globals (open_trade, close_trade, open_trades, bars,
-# __strategy_context__) into the V3 StrategyBase interface.
+# Bridges class-based Python strategies into the V3 StrategyBase interface.
+#
+# Strategy file pattern (all 26 system strategies follow this):
+#   - Class with init(self, bars, settings) and on_bar(self, i, bar)
+#   - Module-level globals: open_trade(), close_trade(), open_trades, bars
+#   - open_trade(bar_idx, direction, entry_price, sl, tp, risk_fraction)
+#   - close_trade(trade_dict, bar_idx, close_price, reason)
 
 
 class LegacyPythonStrategy(StrategyBase):
-    """Wraps old-style Python strategies for the V3 engine.
+    """Wraps class-based Python strategies for the V3 engine.
 
-    Old-style strategies define:
-      - init(bars, settings) → context dict
-      - on_bar(i, bar)       → uses injected globals
+    Strategies define a class with:
+      - init(self, bars, settings): pre-compute indicators
+      - on_bar(self, i, bar):       evaluate signals per bar
 
-    Injected globals:
-      - bars:                   full bar list (list[dict])
-      - __strategy_context__:   dict returned by init()
-      - open_trade(dir, price, sl, tp):  open a new trade
-      - close_trade(id, price, reason):  close a trade
-      - open_trades:            list of open trade dicts
+    Injected module-level globals:
+      - bars:         full bar list (list[dict])
+      - open_trade(bar_idx, direction, price, sl, tp, risk): open position
+      - close_trade(trade_dict, bar_idx, price, reason):     close position
+      - open_trades:  list of currently open trade dicts
     """
 
     def __init__(self, file_path: str, settings: dict, all_bars: list[dict]):
@@ -208,7 +211,7 @@ class LegacyPythonStrategy(StrategyBase):
         self.settings = settings
         self.all_bars = all_bars  # Full bar list for bars[i] lookback
         self._module_ns: dict = {}
-        self._strategy_ctx: Optional[dict] = None
+        self._strategy_instance = None  # Instantiated strategy class
         self._open_trades: list[dict] = []
         self._trade_counter: int = 0
         self._loaded = False
@@ -229,7 +232,7 @@ class LegacyPythonStrategy(StrategyBase):
             "__builtins__": _builtins.__dict__,
             "__name__": f"strategy_{path.stem}",
             "math": _math,
-            # These will be updated before each on_bar call
+            # Injected trade management functions
             "open_trade": self._bridge_open_trade,
             "close_trade": self._bridge_close_trade,
             "open_trades": self._open_trades,
@@ -250,43 +253,86 @@ class LegacyPythonStrategy(StrategyBase):
         except Exception as e:
             raise RuntimeError(f"Error loading strategy {path.name}: {e}") from e
 
+        # Find strategy class — look for a class with init() and on_bar()
+        for name, obj in self._module_ns.items():
+            if (
+                isinstance(obj, type)
+                and not name.startswith("_")
+                and hasattr(obj, "init")
+                and hasattr(obj, "on_bar")
+            ):
+                self._strategy_instance = obj()
+                logger.info(
+                    "Found strategy class: %s in %s", name, path.name
+                )
+                break
+
+        if self._strategy_instance is None:
+            logger.warning(
+                "No strategy class with init()/on_bar() found in %s. "
+                "Looking for module-level functions.", path.name
+            )
+
         self._loaded = True
         logger.info("Loaded legacy Python strategy: %s", path.name)
 
     def on_init(self) -> None:
-        """Load module and call strategy's init()."""
+        """Load module and call strategy's init(bars, settings)."""
         if not self._loaded:
             self._load()
 
-        init_fn = self._module_ns.get("init")
-        if init_fn and callable(init_fn):
+        # Class-based strategy: call instance.init(bars, settings)
+        if self._strategy_instance is not None:
             try:
-                self._strategy_ctx = init_fn(self.all_bars, self.settings)
-                if isinstance(self._strategy_ctx, dict):
-                    self._module_ns["__strategy_context__"] = self._strategy_ctx
+                self._strategy_instance.init(self.all_bars, self.settings)
                 logger.info(
-                    "Legacy strategy init() returned context with keys: %s",
-                    list(self._strategy_ctx.keys()) if isinstance(self._strategy_ctx, dict) else "N/A",
+                    "Strategy %s.init() completed, %d bars",
+                    type(self._strategy_instance).__name__,
+                    len(self.all_bars),
                 )
             except Exception as e:
-                logger.error("Legacy strategy init() failed: %s", e)
+                logger.error("Strategy init() failed: %s", e)
                 raise
+        else:
+            # Fallback: module-level init(bars, settings)
+            init_fn = self._module_ns.get("init")
+            if init_fn and callable(init_fn):
+                try:
+                    result = init_fn(self.all_bars, self.settings)
+                    if isinstance(result, dict):
+                        self._module_ns["__strategy_context__"] = result
+                except Exception as e:
+                    logger.error("Module init() failed: %s", e)
+                    raise
 
     def on_bar(self, bar: Bar) -> None:
         """Call the strategy's on_bar(i, bar_dict)."""
         i = self.ctx.bar_index
 
-        # Update injected globals
+        # Update injected globals so strategy sees current open_trades
         self._module_ns["open_trades"] = self._open_trades
 
-        on_bar_fn = self._module_ns.get("on_bar")
-        if on_bar_fn and callable(on_bar_fn):
+        try:
+            bar_dict = self.all_bars[i] if i < len(self.all_bars) else bar.to_dict()
+        except (IndexError, KeyError):
+            bar_dict = bar.to_dict()
+
+        if self._strategy_instance is not None:
+            # Class-based: call instance.on_bar(i, bar_dict)
             try:
-                on_bar_fn(i, self.all_bars[i])
+                self._strategy_instance.on_bar(i, bar_dict)
             except Exception as e:
-                # Log but don't crash — allow the backtest to continue
                 if i < 5 or i % 1000 == 0:
-                    logger.warning("Legacy on_bar(%d) error: %s", i, e)
+                    logger.warning("Strategy on_bar(%d) error: %s", i, e)
+        else:
+            # Module-level: call on_bar(i, bar_dict)
+            on_bar_fn = self._module_ns.get("on_bar")
+            if on_bar_fn and callable(on_bar_fn):
+                try:
+                    on_bar_fn(i, bar_dict)
+                except Exception as e:
+                    if i < 5 or i % 1000 == 0:
+                        logger.warning("Legacy on_bar(%d) error: %s", i, e)
 
     def on_position_closed(self, symbol: str, pnl: float) -> None:
         """Sync open_trades when engine closes a position (SL/TP hit)."""
@@ -294,12 +340,17 @@ class LegacyPythonStrategy(StrategyBase):
             self._open_trades.pop(0)
 
     # ── Bridge Functions (injected into strategy namespace) ──────────
+    #
+    # Signature matches what ALL 26 system strategies call:
+    #   open_trade(bar_idx, direction, entry_price, sl, tp, risk_fraction)
+    #   close_trade(trade_dict, bar_idx, close_price, reason)
 
-    def _bridge_open_trade(self, direction: str, entry_price: float,
-                           sl: float, tp: float, **kwargs) -> None:
-        """Bridge: open_trade("long", price, sl, tp) → ctx.buy_bracket()."""
+    def _bridge_open_trade(self, bar_idx: int, direction: str,
+                           entry_price: float, sl: float, tp: float,
+                           risk: float = 0.01) -> None:
+        """Bridge: open_trade(i, "long", price, sl, tp, risk) → V3 bracket."""
         self._trade_counter += 1
-        trade_id = f"legacy_{self.ctx.bar_index}_{self._trade_counter}"
+        trade_id = f"leg_{bar_idx}_{self._trade_counter}"
 
         if direction == "long":
             self.ctx.buy_bracket(
@@ -318,14 +369,16 @@ class LegacyPythonStrategy(StrategyBase):
             "entry_price": entry_price,
             "sl": sl,
             "tp": tp,
-            "entry_bar": self.ctx.bar_index,
+            "entry_bar": bar_idx,
         })
 
-    def _bridge_close_trade(self, trade_id: str, price: float,
-                            reason: str = "", **kwargs) -> None:
-        """Bridge: close_trade(id, price, reason) → ctx.close_position()."""
+    def _bridge_close_trade(self, trade: dict, bar_idx: int,
+                            close_price: float, reason: str = "") -> None:
+        """Bridge: close_trade(trade_dict, i, price, reason) → V3 close."""
+        trade_id = trade.get("id", "") if isinstance(trade, dict) else str(trade)
+
         self.ctx.close_position(
             symbol=self.ctx._instrument.symbol,
             tag=f"close_{reason}",
         )
-        self._open_trades = [t for t in self._open_trades if t["id"] != trade_id]
+        self._open_trades = [t for t in self._open_trades if t.get("id") != trade_id]
