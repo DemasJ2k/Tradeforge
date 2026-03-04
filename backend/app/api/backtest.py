@@ -52,6 +52,33 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
+
+@router.get("/debug-paths")
+def debug_paths(db: Session = Depends(get_db)):
+    """Temporary diagnostic endpoint — shows UPLOAD_DIR contents and datasource paths."""
+    upload_dir = Path(settings.UPLOAD_DIR)
+    files = []
+    if upload_dir.exists():
+        files = sorted([f.name for f in upload_dir.iterdir() if f.is_file()])[:30]
+    ds_list = db.query(DataSource).limit(5).all()
+    ds_info = []
+    for ds in ds_list:
+        ds_info.append({
+            "id": ds.id,
+            "filename": ds.filename,
+            "filepath": ds.filepath,
+            "filepath_exists": Path(ds.filepath).exists() if ds.filepath else False,
+            "upload_join_exists": (upload_dir / ds.filename).exists() if ds.filename else False,
+        })
+    return {
+        "upload_dir": str(upload_dir),
+        "upload_dir_exists": upload_dir.exists(),
+        "files_in_dir": files,
+        "file_count": len(files),
+        "datasources_sample": ds_info,
+    }
+
+
 # Column alias sets for CSV parsing (same as datasource.py)
 DATETIME_ALIASES = {"time", "date", "datetime", "timestamp", "<time>"}
 OPEN_ALIASES = {"open", "o", "<open>"}
@@ -109,25 +136,42 @@ def _resolve_csv_path(datasource) -> Path:
       3. Search for files ending with filename in UPLOAD_DIR
          (handles timestamp-prefixed filenames on Render)
     """
+    tried = []
+
     # Try original filepath
-    fp = Path(datasource.filepath)
-    if fp.exists():
-        return fp
+    orig = getattr(datasource, "filepath", None) or ""
+    if orig:
+        fp = Path(orig)
+        tried.append(f"filepath={fp}")
+        if fp.exists():
+            return fp
 
     upload_dir = Path(settings.UPLOAD_DIR)
+    fname = getattr(datasource, "filename", None) or ""
 
     # Try UPLOAD_DIR / original filename
-    fp = upload_dir / datasource.filename
-    if fp.exists():
-        return fp
+    if fname:
+        fp = upload_dir / fname
+        tried.append(f"upload_dir/filename={fp}")
+        if fp.exists():
+            return fp
 
     # Search for timestamp-prefixed files ending with original filename
-    if upload_dir.exists():
+    if upload_dir.exists() and fname:
+        files_in_dir = [f.name for f in upload_dir.iterdir() if f.is_file()]
+        tried.append(f"upload_dir exists, {len(files_in_dir)} files: {files_in_dir[:10]}")
         for f in upload_dir.iterdir():
-            if f.is_file() and f.name.endswith(datasource.filename):
+            if f.is_file() and f.name.endswith(fname):
                 return f
+    elif not upload_dir.exists():
+        tried.append(f"upload_dir NOT FOUND: {upload_dir}")
 
-    raise FileNotFoundError(f"CSV file not found for datasource {datasource.id}: {datasource.filename}")
+    detail = (
+        f"CSV not found for datasource {getattr(datasource, 'id', '?')}: "
+        f"filename={fname}, tried: {'; '.join(tried)}"
+    )
+    logger.error(detail)
+    raise FileNotFoundError(detail)
 
 
 def _load_bars_from_csv(file_path: str, validate: bool = True) -> list[Bar]:
@@ -470,8 +514,8 @@ def run_backtest_v3(
 
     try:
         file_path = _resolve_csv_path(datasource)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="CSV file not found on disk")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     bars = _load_bars_from_csv(str(file_path))
     if len(bars) < 50:
