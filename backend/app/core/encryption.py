@@ -42,5 +42,10 @@ def decrypt_value(encrypted: str) -> str:
         try:
             return _FERNET.decrypt(encrypted.encode()).decode()
         except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Fernet decryption failed — SECRET_KEY may have changed since "
+                "credentials were saved. User should re-save credentials."
+            )
             return ""
     return ""

@@ -465,9 +465,24 @@ async def fetch_from_broker(
         creds_blob: dict = {}
         if s and s.broker_api_keys:
             try:
-                creds_blob = _json.loads(decrypt_value(s.broker_api_keys))
-            except Exception:
-                pass
+                raw = decrypt_value(s.broker_api_keys)
+                if not raw:
+                    raise HTTPException(
+                        400,
+                        f"Credentials for '{req.broker}' could not be decrypted. "
+                        "The server SECRET_KEY may have changed. "
+                        "Please re-save your credentials in Settings → Brokers."
+                    )
+                creds_blob = _json.loads(raw)
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error("Failed to parse broker credentials: %s", e)
+                raise HTTPException(
+                    400,
+                    f"Credentials for '{req.broker}' are corrupted. "
+                    "Please re-save your credentials in Settings → Brokers."
+                )
 
         entry = creds_blob.get(req.broker)
         if not entry:
@@ -480,9 +495,22 @@ async def fetch_from_broker(
         try:
             if req.broker == "oanda":
                 from app.services.broker.oanda import OandaAdapter
+                api_key = entry.get("api_key", "")
+                account_id = entry.get("account_id", "")
+                if not api_key or not account_id:
+                    missing = []
+                    if not api_key:
+                        missing.append("API Key")
+                    if not account_id:
+                        missing.append("Account ID")
+                    raise HTTPException(
+                        400,
+                        f"Oanda credentials incomplete — missing: {', '.join(missing)}. "
+                        "Go to Settings → Brokers → Oanda → Edit to fill them in."
+                    )
                 adapter = OandaAdapter(
-                    api_key=entry.get("api_key", ""),
-                    account_id=entry.get("account_id", ""),
+                    api_key=api_key,
+                    account_id=account_id,
                     practice=entry.get("practice", True),
                 )
             elif req.broker == "coinbase":
