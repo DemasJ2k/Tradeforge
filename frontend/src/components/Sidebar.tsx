@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   Brain,
   TrendingUp,
+  Newspaper,
   BookOpen,
   Settings,
   PanelLeftClose,
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Optimize", href: "/optimize", icon: SlidersHorizontal },
   { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Trading", href: "/trading", icon: TrendingUp },
+  { name: "News", href: "/news", icon: Newspaper },
   { name: "Documents", href: "/knowledge", icon: BookOpen },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

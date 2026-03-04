@@ -31,6 +31,7 @@ from app.api import agent as agent_api
 from app.api import dashboard as dashboard_api
 from app.api import recycle_bin as recycle_bin_api
 from app.api import optimization_phase as optimization_phase_api
+from app.api import news as news_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -46,6 +47,7 @@ from app.models import invitation  # noqa: F401
 from app.models import agent as agent_model  # noqa: F401
 from app.models import password_reset as password_reset_model  # noqa: F401
 from app.models import optimization_phase as optimization_phase_model  # noqa: F401
+from app.models import news as news_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -332,6 +334,7 @@ app.include_router(ws_api.router)
 app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
 app.include_router(recycle_bin_api.router)
+app.include_router(news_api.router)
 
 
 def _seed_admin_user():
@@ -679,6 +682,18 @@ def _seed_all_strategies():
                 "timeframes": "M5 / M15 / 1H",
                 "tags": ["institutional", "ict", "smc", "liquidity", "smart_money"],
             },
+            {
+                "name": "News Event Guard",
+                "file": "s28_news_event_guard.py",
+                "description": (
+                    "News-aware strategy that manages risk around high-impact economic events. "
+                    "Three modes: Defensive (closes positions before NFP/FOMC/CPI), Reactive "
+                    "(trades post-news breakouts), and Straddle (pending orders before release). "
+                    "Integrates with the News service for real-time event awareness."
+                ),
+                "timeframes": "M1 / M5 / M15",
+                "tags": ["news", "defensive", "event_trading", "risk_management"],
+            },
         ]
 
         # Optimized parameters and verified performance from Optuna + Walk-Forward validation
@@ -896,12 +911,23 @@ async def startup_event():
     # Start paper trade monitor (simulates SL/TP exits for agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
     await trade_monitor.start()
+    # Start news background refresh (economic calendar + market news)
+    from app.services.news.aggregator import start_background_refresh as start_news_refresh
+    try:
+        await start_news_refresh()
+    except Exception as e:
+        logging.getLogger(__name__).warning("News refresh start skipped: %s", e)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     await trade_monitor.stop()
     await algo_engine.stop()
+    from app.services.news.aggregator import stop_background_refresh as stop_news_refresh
+    try:
+        await stop_news_refresh()
+    except Exception:
+        pass
     try:
         await mt5_streamer.stop()
     except Exception:

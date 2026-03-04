@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(Path(__file__).resolve().parent.parent.parent / "data" / "uploads")
     MAX_UPLOAD_SIZE_MB: int = 500
 
+    # News APIs
+    FINNHUB_API_KEY: str = ""
+    ALPHAVANTAGE_API_KEY: str = ""
+    NEWS_CACHE_TTL_MINUTES: int = 15
+
     # SMTP (for invitation emails)
     SMTP_SERVER: str = ""
     SMTP_PORT: int = 587
