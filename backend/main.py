@@ -131,43 +131,55 @@ _run_schema_migrations()
 
 
 def _fix_boolean_columns():
-    """Fix INTEGER columns that should be BOOLEAN (PostgreSQL strict typing)."""
+    """Fix INTEGER columns that should be BOOLEAN (PostgreSQL strict typing).
+
+    On PostgreSQL, inserting Python True into an INTEGER column fails with
+    'column "is_public" is of type integer but expression is of type boolean'.
+    This migration converts such columns to proper BOOLEAN type.
+    """
     from sqlalchemy import text
     _log = logging.getLogger(__name__)
-    with engine.connect() as conn:
-        if engine.dialect.name != "postgresql":
-            return
-        # List of (table, column) that may have been created as INTEGER
-        fixes = [
-            ("datasources", "is_public", "TRUE"),
-        ]
-        for table, column, default in fixes:
-            try:
-                # Check actual column type first
+
+    if engine.dialect.name != "postgresql":
+        _log.info("Not PostgreSQL (%s) — skipping boolean fix", engine.dialect.name)
+        return
+
+    # (table, column, default_value)
+    fixes = [
+        ("datasources", "is_public", "TRUE"),
+    ]
+
+    for table, column, default in fixes:
+        try:
+            with engine.begin() as conn:  # auto-commit on success, rollback on error
                 result = conn.execute(text(
                     "SELECT data_type FROM information_schema.columns "
-                    f"WHERE table_name = '{table}' AND column_name = '{column}'"
-                ))
+                    f"WHERE table_name = :tbl AND column_name = :col"
+                ), {"tbl": table, "col": column})
                 row = result.fetchone()
                 if not row:
                     _log.info("Column %s.%s does not exist, skipping", table, column)
                     continue
-                if row[0] == 'boolean':
-                    _log.info("Column %s.%s is already BOOLEAN, ok", table, column)
+                dtype = row[0].lower()
+                if dtype == 'boolean':
+                    _log.info("Column %s.%s is already BOOLEAN ✓", table, column)
                     continue
-                _log.info("Column %s.%s is %s, converting to BOOLEAN", table, column, row[0])
+
+                _log.warning("Column %s.%s is '%s' — converting to BOOLEAN", table, column, dtype)
+                # Drop default, alter type, re-add default
+                conn.execute(text(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT"
+                ))
                 conn.execute(text(
                     f"ALTER TABLE {table} ALTER COLUMN {column} "
-                    f"TYPE BOOLEAN USING CASE WHEN {column} = 0 THEN FALSE ELSE TRUE END"
+                    f"TYPE BOOLEAN USING CASE WHEN {column}::int = 0 THEN FALSE ELSE TRUE END"
                 ))
                 conn.execute(text(
                     f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT {default}"
                 ))
-                conn.commit()
-                _log.info("Fixed %s.%s → BOOLEAN", table, column)
-            except Exception as exc:
-                conn.rollback()
-                _log.error("Failed to fix %s.%s: %s", table, column, exc)
+                _log.info("Fixed %s.%s → BOOLEAN ✓", table, column)
+        except Exception as exc:
+            _log.error("Failed to fix %s.%s: %s", table, column, exc, exc_info=True)
 
 
 _fix_boolean_columns()
