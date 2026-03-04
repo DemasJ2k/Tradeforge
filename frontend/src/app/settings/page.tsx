@@ -46,11 +46,11 @@ const ENTITY_LABELS: Record<string, { label: string; icon: string }> = {
 };
 
 function RecycleBinSection() {
-  const [items, setItems] = React.useState<{id: number; name: string; entity_type: string; deleted_at: string}[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [actionLoading, setActionLoading] = React.useState<string | null>(null);
+  const [items, setItems] = useState<{id: number; name: string; entity_type: string; deleted_at: string}[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const loadBin = React.useCallback(async () => {
+  const loadBin = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/recycle-bin`, { headers: authHeaders() });
       if (res.ok) {
@@ -61,7 +61,7 @@ function RecycleBinSection() {
     finally { setLoading(false); }
   }, []);
 
-  React.useEffect(() => { loadBin(); }, [loadBin]);
+  useEffect(() => { loadBin(); }, [loadBin]);
 
   const handleRestore = async (type: string, id: number) => {
     const key = `restore-${type}-${id}`;
