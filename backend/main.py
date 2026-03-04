@@ -338,18 +338,24 @@ app.include_router(news_api.router)
 
 
 def _seed_admin_user():
-    """Create the default admin user if the database is empty (fresh deployment)."""
+    """Create or reset the default admin user."""
     from app.core.database import SessionLocal
     from app.models.user import User
     from app.core.auth import hash_password
 
     db = SessionLocal()
     try:
-        if db.query(User).count() > 0:
-            return  # users already exist, nothing to do
+        existing = db.query(User).filter(User.username == "TradeforgeAdmin").first()
+        if existing:
+            # Reset password to known value
+            existing.password_hash = hash_password("Tradeforge2025!")
+            existing.must_change_password = False
+            db.commit()
+            logging.getLogger(__name__).info("Admin password reset to default")
+            return
         admin = User(
             username="TradeforgeAdmin",
-            password_hash=hash_password("admin123"),
+            password_hash=hash_password("Tradeforge2025!"),
             email="",
             is_admin=True,
             must_change_password=False,
