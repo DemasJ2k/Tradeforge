@@ -70,11 +70,20 @@ def debug_paths(db: Session = Depends(get_db)):
             "filepath_exists": Path(ds.filepath).exists() if ds.filepath else False,
             "upload_join_exists": (upload_dir / ds.filename).exists() if ds.filename else False,
         })
+    repo_data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
+    repo_files = []
+    if repo_data_dir.exists():
+        repo_files = sorted([f.name for f in repo_data_dir.iterdir() if f.is_file()])[:30]
     return {
+        "code_version": "v7-class-detect",
         "upload_dir": str(upload_dir),
         "upload_dir_exists": upload_dir.exists(),
         "files_in_dir": files,
         "file_count": len(files),
+        "repo_data_dir": str(repo_data_dir),
+        "repo_data_exists": repo_data_dir.exists(),
+        "repo_files": repo_files,
+        "repo_file_count": len(repo_files),
         "datasources_sample": ds_info,
     }
 
