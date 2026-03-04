@@ -146,11 +146,11 @@ class BacktestEngine:
             elif ind_type == "ATR":
                 self.indicator_values[ind_id] = ind.atr(highs, lows, closes, int(params.get("period", 14)))
             elif ind_type == "MACD":
-                ml, sl, hist = ind.macd(source, int(params.get("fast", 12)), int(params.get("slow", 26)), int(params.get("signal", 9)))
+                ml, sl, hist = ind.macd(source, int(params.get("fast", params.get("fast_period", 12))), int(params.get("slow", params.get("slow_period", 26))), int(params.get("signal", params.get("signal_period", 9))))
                 self.indicator_values[ind_id] = ml
                 self.indicator_values[f"{ind_id}_signal"] = sl
                 self.indicator_values[f"{ind_id}_hist"] = hist
-            elif ind_type == "BOLLINGER":
+            elif ind_type in ("BOLLINGER", "BB"):
                 upper, middle, lower = ind.bollinger_bands(source, int(params.get("period", 20)), float(params.get("std_dev", 2.0)))
                 self.indicator_values[f"{ind_id}_upper"] = upper
                 self.indicator_values[ind_id] = middle
@@ -188,6 +188,11 @@ class BacktestEngine:
             return getattr(bar, field, bar.close)
         if source in self.indicator_values:
             return self.indicator_values[source][bar_idx]
+        # Dot notation fallback: "bb_1.upper" → "bb_1_upper"
+        if "." in source:
+            alt_key = source.replace(".", "_")
+            if alt_key in self.indicator_values:
+                return self.indicator_values[alt_key][bar_idx]
         # Try as literal number
         try:
             return float(source)
@@ -261,32 +266,40 @@ class BacktestEngine:
         """Evaluate entry rules and determine trade direction.
         Returns 'long', 'short', or '' (no signal).
 
-        Each rule can carry a 'direction' field ('long', 'short', 'both').
-        - Rules with direction='long' only fire for long trades.
-        - Rules with direction='short' only fire for short trades.
-        - Rules with direction='both' fire for either (direction inferred from operator).
+        Rules are partitioned by their 'direction' field:
+        - 'long' rules are grouped together
+        - 'short' rules are grouped together
+        - 'both' rules apply as shared conditions for all directions
 
-        For OR-connected rules, checks each rule independently and returns
-        the direction of the first matching rule.
-        For AND-connected rules, all must pass; direction comes from
-        the first rule that specifies one, otherwise inferred."""
+        Within each direction group, ALL conditions must pass (AND).
+        Returns the first direction whose complete group passes.
+        """
         if not rules:
             return ""
 
-        # Check if rules use OR logic — evaluate each independently
-        has_or = any(r.get("logic", "AND").upper() == "OR" for r in rules)
+        long_rules = [r for r in rules if r.get("direction", "both") == "long"]
+        short_rules = [r for r in rules if r.get("direction", "both") == "short"]
+        both_rules = [r for r in rules if r.get("direction", "both") not in ("long", "short")]
 
-        if has_or:
-            # For OR-connected rules, find the first matching one
-            for rule in rules:
-                if self._eval_condition(rule, bar_idx):
-                    return self._direction_from_rule(rule)
-            return ""
-        else:
-            # AND logic: all must pass
+        # If no rule has an explicit direction, use legacy behaviour
+        if not long_rules and not short_rules:
             if self._eval_rules(rules, bar_idx):
                 return self._direction_from_rules(rules)
             return ""
+
+        # Evaluate shared "both" rules once
+        if both_rules and not all(self._eval_condition(r, bar_idx) for r in both_rules):
+            return ""
+
+        # Check long group
+        if long_rules and all(self._eval_condition(r, bar_idx) for r in long_rules):
+            return "long"
+
+        # Check short group
+        if short_rules and all(self._eval_condition(r, bar_idx) for r in short_rules):
+            return "short"
+
+        return ""
 
     def _direction_from_rule(self, rule: dict) -> str:
         """Get trade direction from a single rule.
@@ -549,11 +562,14 @@ class BacktestEngine:
                     self._close_trade(trade, bar_idx, trade.take_profit, "take_profit")
                     continue
 
-            # Check exit rules
+            # Check exit rules (direction-aware)
             exit_rules = self.config.get("exit_rules", [])
-            if exit_rules and self._eval_rules(exit_rules, bar_idx):
-                self._close_trade(trade, bar_idx, bar.close, "exit_signal")
-                continue
+            if exit_rules:
+                filtered = [r for r in exit_rules
+                            if r.get("direction", "both") in (trade.direction, "both")]
+                if filtered and self._eval_rules(filtered, bar_idx):
+                    self._close_trade(trade, bar_idx, bar.close, "exit_signal")
+                    continue
 
             # Trailing stop
             risk = self.config.get("risk_params", {})

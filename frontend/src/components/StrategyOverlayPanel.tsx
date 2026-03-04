@@ -30,7 +30,7 @@ const LINE_COLORS = [
 ];
 
 /* ─── Band indicator types (use dashed + area fill) ─ */
-const BAND_TYPES = new Set(["BB", "KELTNER", "DONCHIAN", "ENVELOPE"]);
+const BAND_TYPES = new Set(["BB", "BOLLINGER", "Bollinger", "KELTNER", "DONCHIAN", "ENVELOPE"]);
 
 /* ─── Types ───────────────────────────────────────── */
 interface OverlayLine {
@@ -53,7 +53,7 @@ interface Props {
 /* ─── Indicator overlay classification ────────────── */
 const OVERLAY_TYPES = new Set([
   "SMA", "EMA", "WMA", "DEMA", "TEMA", "HMA", "KAMA",
-  "BB",   // bollinger bands overlay
+  "BB", "BOLLINGER", "Bollinger",   // bollinger bands overlay
   "ICHIMOKU",
   "VWAP", "PIVOT",
   "SUPERTREND",

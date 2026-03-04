@@ -99,10 +99,16 @@ export function strategyToGraph(
       return { nodeId: pId, handle: HANDLE.OUT };
     }
 
-    // Indicator ref (possibly with sub-key like "bb_1.upper")
+    // Indicator ref — supports dot notation ("bb_1.upper") and underscore notation ("bb_1_upper")
     const baseName = ref.split(".")[0];
     if (indicatorNodeIds[baseName]) {
       return { nodeId: indicatorNodeIds[baseName], handle: HANDLE.OUT };
+    }
+    // Try underscore-separated: "bb_1_upper" → check if "bb_1" exists
+    for (const indId of Object.keys(indicatorNodeIds)) {
+      if (ref.startsWith(indId + "_") && ref.length > indId.length + 1) {
+        return { nodeId: indicatorNodeIds[indId], handle: HANDLE.OUT };
+      }
     }
 
     // Numeric constant

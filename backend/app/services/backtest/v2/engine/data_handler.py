@@ -232,6 +232,15 @@ class SymbolData:
                 return arr[bar_index]
             return float("nan")
 
+        # Dot notation fallback: "bb_1.upper" → "bb_1_upper"
+        if "." in source and not source.startswith("price."):
+            alt_key = source.replace(".", "_")
+            if alt_key in self.indicator_arrays:
+                arr = self.indicator_arrays[alt_key]
+                if bar_index < len(arr):
+                    return arr[bar_index]
+                return float("nan")
+
         # Try numeric literal
         try:
             return float(source)
@@ -282,16 +291,16 @@ class SymbolData:
                 max_warmup = max(max_warmup, p + 1)
 
             elif ind_type == "MACD":
-                fast = int(params.get("fast", 12))
-                slow = int(params.get("slow", 26))
-                sig = int(params.get("signal", 9))
+                fast = int(params.get("fast", params.get("fast_period", 12)))
+                slow = int(params.get("slow", params.get("slow_period", 26)))
+                sig = int(params.get("signal", params.get("signal_period", 9)))
                 ml, sl, hist = ind.macd(source, fast, slow, sig)
                 self.indicator_arrays[ind_id] = ml
                 self.indicator_arrays[f"{ind_id}_signal"] = sl
                 self.indicator_arrays[f"{ind_id}_hist"] = hist
                 max_warmup = max(max_warmup, slow + sig)
 
-            elif ind_type == "BOLLINGER":
+            elif ind_type in ("BOLLINGER", "BB"):
                 std_dev = float(params.get("std_dev", 2.0))
                 upper, middle, lower = ind.bollinger_bands(source, period, std_dev)
                 self.indicator_arrays[f"{ind_id}_upper"] = upper

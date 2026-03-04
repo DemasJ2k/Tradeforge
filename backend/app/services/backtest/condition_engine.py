@@ -289,22 +289,22 @@ def evaluate_direction(
     """Evaluate rules and return trade direction: "long", "short", or "" (no signal).
 
     Handles both flat (legacy) and tree (new) formats.
-    """
-    tree = normalise_rules(rules)
 
-    # Fast path: flat list with OR → first matching rule determines direction
-    if isinstance(rules, list) and all("type" not in r and "node_type" not in r for r in rules):
-        has_or = any(r.get("logic", "AND").upper() == "OR" for r in rules)
-        if has_or:
-            for rule in rules:
-                if _eval_single(rule, bar_idx, value_fn):
-                    return _direction_from_rule(rule)
-            return ""
-        if evaluate_condition_tree(rules, bar_idx, value_fn):
-            return _direction_from_flat_rules(rules)
+    For flat legacy rules with direction fields, rules are partitioned by
+    direction.  All conditions in a direction group must pass (AND) for that
+    direction to fire.  "both" rules are shared across all direction groups.
+    """
+    if rules is None or (isinstance(rules, list) and len(rules) == 0):
         return ""
 
-    # Tree evaluation
+    # ── Flat legacy list (no type/node_type keys) ─────────────────────
+    if isinstance(rules, list) and all(
+        "type" not in r and "node_type" not in r for r in rules
+    ):
+        return _evaluate_direction_flat(rules, bar_idx, value_fn)
+
+    # ── Tree evaluation ──────────────────────────────────────────────
+    tree = normalise_rules(rules)
     if not _eval_node(tree, bar_idx, value_fn):
         return ""
 
@@ -318,6 +318,60 @@ def evaluate_direction(
     if leaves:
         return _infer_direction(leaves[0])
     return "long"
+
+
+def _evaluate_direction_flat(
+    rules: list[dict],
+    bar_idx: int,
+    value_fn: ValueFn,
+) -> str:
+    """Evaluate a flat legacy rule list partitioned by direction.
+
+    Rules are grouped by their ``direction`` field ("long", "short", "both").
+    Within each direction group, ALL conditions must pass (AND logic).
+    "both" rules are appended to every direction group.
+
+    Returns the first direction whose complete group passes:
+      - "long" rules (+ "both" rules) all true  → "long"
+      - "short" rules (+ "both" rules) all true → "short"
+      - neither passes → ""
+
+    If NO rule has an explicit direction, fall back to the old behaviour:
+    evaluate all rules together and infer direction from operators.
+    """
+    long_rules: list[dict] = []
+    short_rules: list[dict] = []
+    both_rules: list[dict] = []
+
+    for r in rules:
+        d = r.get("direction", "both").lower()
+        if d == "long":
+            long_rules.append(r)
+        elif d == "short":
+            short_rules.append(r)
+        else:
+            both_rules.append(r)
+
+    # If no rule has an explicit direction, use legacy behaviour
+    if not long_rules and not short_rules:
+        if all(_eval_single(r, bar_idx, value_fn) for r in rules):
+            return _direction_from_flat_rules(rules)
+        return ""
+
+    # Evaluate shared "both" rules once
+    both_pass = all(_eval_single(r, bar_idx, value_fn) for r in both_rules) if both_rules else True
+    if not both_pass:
+        return ""
+
+    # Check long group
+    if long_rules and all(_eval_single(r, bar_idx, value_fn) for r in long_rules):
+        return "long"
+
+    # Check short group
+    if short_rules and all(_eval_single(r, bar_idx, value_fn) for r in short_rules):
+        return "short"
+
+    return ""
 
 
 # ---------------------------------------------------------------------------

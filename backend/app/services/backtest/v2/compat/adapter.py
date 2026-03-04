@@ -157,13 +157,21 @@ class V1StrategyAdapter(StrategyBase):
     # ── Exit Logic ──────────────────────────────────────────────────
 
     def _check_v1_exits(self, event: BarEvent, idx: int) -> None:
-        """Check exit rules and trailing stop."""
+        """Check exit rules and trailing stop.
+
+        Direction-aware: only evaluates exit rules matching the current
+        position direction (or "both").
+        """
         exit_rules = self.v1_config.get("exit_rules", [])
-        if exit_rules and self._eval_rules(exit_rules, idx):
+        if exit_rules:
             pos = self.ctx.get_position(self.symbol)
             if pos and not pos.is_flat:
-                self.ctx.close_position(self.symbol, "exit_signal")
-                return
+                pos_dir = "long" if pos.is_long else "short"
+                filtered = [r for r in exit_rules
+                            if r.get("direction", "both") in (pos_dir, "both")]
+                if filtered and self._eval_rules(filtered, idx):
+                    self.ctx.close_position(self.symbol, "exit_signal")
+                    return
 
         # Trailing stop: adjust SL on open limit/stop orders
         risk = self.v1_config.get("risk_params", {})

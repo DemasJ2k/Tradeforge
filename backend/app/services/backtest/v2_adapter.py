@@ -157,13 +157,23 @@ class BuilderStrategy(StrategyBase):
     # ── Exit Logic ──────────────────────────────────────────────────
 
     def _check_exits(self, event: BarEvent) -> None:
-        """Check exit rules (SL/TP handled by bracket orders in V2)."""
+        """Check exit rules (SL/TP handled by bracket orders in V2).
+
+        Direction-aware: only evaluates exit rules matching the current
+        position direction (or "both").
+        """
         bar_idx = self.ctx.bar_index
         exit_rules = self.config.get("exit_rules", [])
-        if exit_rules and self._eval_rules(exit_rules, bar_idx):
-            pos = self.ctx.get_position(self.symbol)
-            if pos and not pos.is_flat:
-                self.ctx.close_position(self.symbol, tag="exit_signal")
+        if not exit_rules:
+            return
+        pos = self.ctx.get_position(self.symbol)
+        if not pos or pos.is_flat:
+            return
+        pos_dir = "long" if pos.is_long else "short"
+        filtered = [r for r in exit_rules
+                    if r.get("direction", "both") in (pos_dir, "both")]
+        if filtered and self._eval_rules(filtered, bar_idx):
+            self.ctx.close_position(self.symbol, tag="exit_signal")
 
     # ── Rule Evaluation (delegated to condition_engine) ──────────────
 
@@ -705,10 +715,16 @@ class MultiSymbolBuilderStrategy(StrategyBase):
     def _check_exits(self, event: BarEvent, symbol: str) -> None:
         bar_idx = self.ctx.bar_index
         exit_rules = self.config.get("exit_rules", [])
-        if exit_rules and self._eval_rules(exit_rules, bar_idx, symbol):
-            pos = self.ctx.get_position(symbol)
-            if pos and not pos.is_flat:
-                self.ctx.close_position(symbol, tag="exit_signal")
+        if not exit_rules:
+            return
+        pos = self.ctx.get_position(symbol)
+        if not pos or pos.is_flat:
+            return
+        pos_dir = "long" if pos.is_long else "short"
+        filtered = [r for r in exit_rules
+                    if r.get("direction", "both") in (pos_dir, "both")]
+        if filtered and self._eval_rules(filtered, bar_idx, symbol):
+            self.ctx.close_position(symbol, tag="exit_signal")
 
     # ── Rule evaluation (symbol-aware, delegated to condition_engine) ──
 

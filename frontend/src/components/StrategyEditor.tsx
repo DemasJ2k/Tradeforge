@@ -233,11 +233,11 @@ const ENTRY_TEMPLATES: EntryTemplate[] = [
     description: "Price breaks above upper or below lower BB",
     icon: "⚡",
     requiredIndicators: [
-      { type: "BB", params: { period: 20, std_dev: 2, source: "close" } },
+      { type: "Bollinger", params: { period: 20, std_dev: 2, source: "close" } },
     ],
     conditions: [
-      { left: "price.close", operator: ">", right: "bb_1.upper", logic: "AND", direction: "long" },
-      { left: "price.close", operator: "<", right: "bb_1.lower", logic: "AND", direction: "short" },
+      { left: "price.close", operator: ">", right: "bb_1_upper", logic: "AND", direction: "long" },
+      { left: "price.close", operator: "<", right: "bb_1_lower", logic: "AND", direction: "short" },
     ],
   },
   {
@@ -291,11 +291,11 @@ const ENTRY_TEMPLATES: EntryTemplate[] = [
     description: "MACD crossover during active trading hours",
     icon: "⏰",
     requiredIndicators: [
-      { type: "MACD", params: { fast_period: 12, slow_period: 26, signal_period: 9, source: "close" } },
+      { type: "MACD", params: { fast: 12, slow: 26, signal: 9, source: "close" } },
     ],
     conditions: [
-      { left: "macd_1.macd", operator: "crosses_above", right: "macd_1.signal", logic: "AND", direction: "long" },
-      { left: "macd_1.macd", operator: "crosses_below", right: "macd_1.signal", logic: "AND", direction: "short" },
+      { left: "macd_1", operator: "crosses_above", right: "macd_1_signal", logic: "AND", direction: "long" },
+      { left: "macd_1", operator: "crosses_below", right: "macd_1_signal", logic: "AND", direction: "short" },
     ],
   },
 ];
