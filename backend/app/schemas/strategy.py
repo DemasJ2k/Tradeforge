@@ -131,7 +131,7 @@ class StrategyResponse(BaseModel):
     exit_rules: list[dict]
     risk_params: dict
     filters: dict
-    creator_id: int
+    creator_id: Optional[int] = None
     is_system: bool = False
     strategy_type: str = "builder"
     file_path: Optional[str] = None

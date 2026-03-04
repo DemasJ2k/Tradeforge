@@ -2,8 +2,9 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Configure root logger to show INFO for our application modules
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -265,24 +266,30 @@ app = FastAPI(
     version=settings.APP_VERSION,
 )
 
-# CORS — production uses FRONTEND_URL env var; dev adds localhost origins
-_cors_origins: list[str] = []
-if settings.FRONTEND_URL:
-    _cors_origins.append(settings.FRONTEND_URL)
-    # Also allow without trailing slash or with it
-    _cors_origins.append(settings.FRONTEND_URL.rstrip("/"))
-# Always allow localhost for development
-_cors_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
-# Deduplicate
-_cors_origins = list(dict.fromkeys(_cors_origins))
-
+# CORS — allow all origins.  Auth is via JWT Bearer tokens (not cookies),
+# so wildcard CORS is safe and avoids env-var misconfiguration on Render.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler — ensures unhandled errors return JSON (visible
+# through CORS) instead of opaque 500 pages, and logs the full traceback.
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    logging.getLogger(__name__).error(
+        "Unhandled %s on %s %s:\n%s",
+        type(exc).__name__, request.method, request.url.path,
+        traceback.format_exc(),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {type(exc).__name__}: {str(exc)[:300]}"},
+    )
 
 # Routes
 app.include_router(health.router)

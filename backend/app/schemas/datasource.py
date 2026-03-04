@@ -12,7 +12,7 @@ class DataSourceResponse(BaseModel):
     date_from: str
     date_to: str
     columns: str
-    file_size_mb: int
+    file_size_mb: float
     source_type: str = "upload"
     broker_name: str = ""
     # Instrument profile
