@@ -20,6 +20,8 @@ class Trade(Base):
     lot_size = Column(Float, nullable=False)
     pnl = Column(Float)
     commission = Column(Float, default=0.0)
+    stop_loss = Column(Float, nullable=True)
+    take_profit = Column(Float, nullable=True)
     strategy_id = Column(Integer, ForeignKey("strategies.id"))
     status = Column(String(20), default="open")    # open, closed
     metadata_ = Column("metadata", JSON, default=dict)
