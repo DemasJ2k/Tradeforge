@@ -95,6 +95,8 @@ def _run_schema_migrations():
         ("trades", "user_id", "INTEGER"),
         # Strategy folder grouping
         ("strategies", "folder", "VARCHAR(100)"),
+        # Verified performance data for optimized system strategies
+        ("strategies", "verified_performance", "TEXT"),
         # Soft-delete (recycle bin) columns
         ("strategies",           "deleted_at", "TIMESTAMP"),
         ("datasources",          "deleted_at", "TIMESTAMP"),
@@ -665,7 +667,126 @@ def _seed_all_strategies():
                 "timeframes": "15m / 1H / 4H",
                 "tags": ["market_structure", "bos", "choch", "breakout"],
             },
+            {
+                "name": "Institutional Composite (ICT/SMC)",
+                "file": "s27_institutional_composite.py",
+                "description": (
+                    "Research-based institutional strategy combining ICT, SMC, and "
+                    "Wyckoff concepts. Uses Kill Zone timing, liquidity sweep detection, "
+                    "Fair Value Gaps, Order Blocks, and Premium/Discount zones. Trades "
+                    "where institutions trade, at institutional price levels."
+                ),
+                "timeframes": "M5 / M15 / 1H",
+                "tags": ["institutional", "ict", "smc", "liquidity", "smart_money"],
+            },
         ]
+
+        # Optimized parameters and verified performance from Optuna + Walk-Forward validation
+        # These are the best configurations found across all datasets (22 GOOD results)
+        _OPTIMIZED_CONFIGS = {
+            "s03_smart_money_concepts.py": {
+                "params": {"atr_period": 11, "atr_sl_mult": 3.2, "atr_tp_mult": 1.0,
+                           "swing_lookback": 17, "ob_lookback": 6, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 3.69, "win_rate": 93.2, "max_dd_pct": 0.86,
+                                "sharpe": 0.24, "trades": 44, "net_profit_pct": 4.25,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "M5"},
+            },
+            "s07_turtle_trading.py": {
+                "params": {"entry_period": 40, "exit_period": 15, "atr_period": 16,
+                           "ma_fast": 47, "ma_slow": 233, "use_trend_filter": True,
+                           "risk_per_trade": 0.005, "atr_stop_mult": 1.25},
+                "performance": {"profit_factor": 1.79, "win_rate": 37.8, "max_dd_pct": 5.44,
+                                "sharpe": 0.60, "trades": 111, "net_profit_pct": 30.8,
+                                "wf_score": 60.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s10_ttm_squeeze.py": {
+                "params": {"bb_period": 16, "bb_mult": 1.75, "kc_period": 18, "kc_mult": 1.7,
+                           "mom_period": 9, "atr_period": 14, "atr_sl_mult": 1.0,
+                           "atr_tp_mult": 6.5, "min_squeeze_bars": 2, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.35, "win_rate": 18.7, "max_dd_pct": 14.52,
+                                "sharpe": 0.27, "trades": 626, "net_profit_pct": 159.83,
+                                "wf_score": 100.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s11_ichimoku_cloud.py": {
+                "params": {"tenkan_period": 7, "kijun_period": 33, "senkou_b_period": 47,
+                           "displacement": 30, "atr_period": 15, "atr_sl_mult": 2.35,
+                           "atr_tp_mult": 5.25, "require_chikou": True,
+                           "require_kumo_twist": False, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 2.27, "win_rate": 51.6, "max_dd_pct": 2.54,
+                                "sharpe": 0.66, "trades": 62, "net_profit_pct": 21.34,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "EURUSD", "tf": "H1"},
+            },
+            "s13_woodies_cci.py": {
+                "params": {"cci_period": 16, "cci_turbo": 4, "zlr_zone": 50, "trend_bars": 3,
+                           "atr_period": 17, "atr_sl_mult": 1.5, "atr_tp_mult": 1.05,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 2.10, "win_rate": 75.4, "max_dd_pct": 1.86,
+                                "sharpe": 0.84, "trades": 118, "net_profit_pct": 16.83,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s15_bb_squeeze_breakout.py": {
+                "params": {"bb_period": 27, "bb_mult": 2.1, "bbw_lookback": 60,
+                           "bbw_percentile": 0.25, "pct_b_entry": 0.9, "pct_b_short": 0.4,
+                           "atr_period": 19, "atr_sl_mult": 1.35, "atr_tp_mult": 8.9,
+                           "require_momentum": False, "exit_bb_revert": False,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.92, "win_rate": 23.4, "max_dd_pct": 3.98,
+                                "sharpe": 0.45, "trades": 77, "net_profit_pct": 32.2,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s17_ema_ribbon.py": {
+                "params": {"short_emas": [8, 13, 21], "long_emas": [34, 55, 89],
+                           "expansion_bars": 3, "atr_period": 13, "atr_sl_mult": 1.7,
+                           "atr_tp_mult": 2.35, "trail_ema": 14, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.42, "win_rate": 51.0, "max_dd_pct": 3.67,
+                                "sharpe": 0.61, "trades": 253, "net_profit_pct": 28.61,
+                                "wf_score": 60.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s19_stoch_rsi_momentum.py": {
+                "params": {"rsi_period": 20, "stoch_period": 20, "k_smooth": 2, "d_smooth": 3,
+                           "ob_level": 73, "os_level": 29, "ema_trend_period": 52,
+                           "atr_period": 15, "atr_sl_mult": 4.1, "atr_tp_mult": 1.6,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.81, "win_rate": 82.7, "max_dd_pct": 1.0,
+                                "sharpe": 0.58, "trades": 98, "net_profit_pct": 7.18,
+                                "wf_score": 100.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s22_nill_momentum_swing.py": {
+                "params": {"roc_fast": 10, "roc_slow": 30, "mfi_period": 14, "mfi_bull": 50,
+                           "mfi_bear": 50, "atr_period": 15, "atr_sl_mult": 1.25,
+                           "atr_tp_mult": 2.45, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.67, "win_rate": 46.5, "max_dd_pct": 6.46,
+                                "sharpe": 0.63, "trades": 144, "net_profit_pct": 28.51,
+                                "wf_score": 60.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s24_macd_histogram_div.py": {
+                "params": {"fast_period": 15, "slow_period": 22, "signal_period": 6,
+                           "div_lookback": 50, "sma_filter": 60, "atr_period": 18,
+                           "atr_sl_mult": 2.05, "atr_tp_mult": 1.0, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 5.15, "win_rate": 92.5, "max_dd_pct": 0.51,
+                                "sharpe": 0.91, "trades": 40, "net_profit_pct": 6.61,
+                                "wf_score": 100.0, "robustness": "GOOD", "symbol": "EURUSD", "tf": "H1"},
+            },
+            "s25_london_breakout.py": {
+                "params": {"asia_start_hour": 0, "asia_end_hour": 8, "london_start_hour": 8,
+                           "london_end_hour": 16, "breakout_buffer_pct": 0.0005,
+                           "target_range_mult": 2.05, "sl_at_range_opposite": False,
+                           "atr_period": 18, "atr_sl_mult": 3.55, "min_range_atr": 0.15,
+                           "max_range_atr": 3.1, "risk_per_trade": 0.005, "max_daily_trades": 3},
+                "performance": {"profit_factor": 1.62, "win_rate": 59.2, "max_dd_pct": 4.91,
+                                "sharpe": 0.09, "trades": 76, "net_profit_pct": 10.16,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "M1"},
+            },
+            "s26_market_structure_signals.py": {
+                "params": {"swing_length": 12, "bos_confirm": "wick", "choch_only": False,
+                           "atr_period": 19, "atr_sl_mult": 1.35, "atr_tp_mult": 8.5,
+                           "ema_period": 82, "use_ema_filter": False, "cooldown_bars": 5,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 2.99, "win_rate": 32.9, "max_dd_pct": 4.96,
+                                "sharpe": 0.75, "trades": 79, "net_profit_pct": 69.75,
+                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+        }
 
         strategies_dir = os.path.join(os.path.dirname(__file__), "data", "strategies")
         added = 0
@@ -690,6 +811,17 @@ def _seed_all_strategies():
             except Exception as parse_err:
                 _log.warning("Could not parse settings for %s: %s", entry["file"], parse_err)
 
+            # Check for optimized config
+            opt_config = _OPTIMIZED_CONFIGS.get(entry["file"])
+            opt_params = opt_config["params"] if opt_config else None
+            opt_perf = opt_config["performance"] if opt_config else None
+
+            # If optimized params exist, merge them into values_dict
+            if opt_params and values_dict:
+                values_dict = {**values_dict, **opt_params}
+            elif opt_params:
+                values_dict = opt_params
+
             # Check if already exists
             existing = db.query(Strategy).filter(
                 Strategy.is_system == True, Strategy.name == name
@@ -707,6 +839,12 @@ def _seed_all_strategies():
                     existing.settings_schema = schema_list
                     existing.settings_values = values_dict
                     updated += 1
+                # Always update verified_performance and optimized settings
+                if opt_perf:
+                    existing.verified_performance = opt_perf
+                if opt_params:
+                    existing.settings_values = values_dict
+                    updated += 1
                 continue
 
             strat = Strategy(
@@ -722,6 +860,7 @@ def _seed_all_strategies():
                 file_path=file_path,
                 settings_schema=schema_list,
                 settings_values=values_dict,
+                verified_performance=opt_perf,
                 creator_id=admin.id,
             )
             db.add(strat)

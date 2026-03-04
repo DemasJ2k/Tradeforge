@@ -25,6 +25,7 @@ class Strategy(Base):
     settings_schema = Column(JSON, default=list)            # [{key, label, type, default, min, max, step, options}]
     settings_values = Column(JSON, default=dict)            # {key: current_value}
     folder = Column(String(100), nullable=True)                # user folder grouping (None = root)
+    verified_performance = Column(JSON, nullable=True, default=None)  # {profit_factor, win_rate, max_dd_pct, sharpe, wf_score, trades, net_profit_pct, symbol, timeframe, robustness}
 
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

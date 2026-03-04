@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon } from "lucide-react";
+import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -290,7 +290,31 @@ export default function StrategiesPage() {
           {s.description && (
             <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{s.description}</p>
           )}
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          {/* Verified performance badges */}
+          {s.verified_performance && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[10px] flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                {s.verified_performance.robustness === "GOOD" ? "Verified" : s.verified_performance.robustness}
+              </Badge>
+              <Badge className="bg-blue-500/10 text-blue-400 border-0 text-[10px]">
+                PF {s.verified_performance.profit_factor.toFixed(2)}
+              </Badge>
+              <Badge className="bg-green-500/10 text-green-400 border-0 text-[10px]">
+                WR {s.verified_performance.win_rate.toFixed(0)}%
+              </Badge>
+              <Badge className="bg-amber-500/10 text-amber-400 border-0 text-[10px]">
+                DD {s.verified_performance.max_dd_pct.toFixed(1)}%
+              </Badge>
+              <Badge className="bg-purple-500/10 text-purple-300 border-0 text-[10px]">
+                {s.verified_performance.symbol} {s.verified_performance.tf}
+              </Badge>
+              <Badge className="bg-cyan-500/10 text-cyan-400 border-0 text-[10px]">
+                WF {s.verified_performance.wf_score}%
+              </Badge>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
             {s.strategy_type && s.strategy_type !== "builder" && (
               <Badge className="bg-purple-500/10 text-purple-400 border-0 text-[10px]">
                 {s.strategy_type === "python" ? "🐍 Python" : s.strategy_type === "json" ? "📋 JSON" : s.strategy_type === "pinescript" ? "🌲 Pine Script" : s.strategy_type}

@@ -194,7 +194,15 @@ export default function ChatSidebar() {
   useEffect(() => {
     if (showHistory) {
       setShowMemories(false);
-      api.get<ConversationList>("/api/llm/conversations").then((res) => setConversations(res.items)).catch(() => {});
+      api.get<ConversationList>("/api/llm/conversations").then((res) => {
+        if (Array.isArray(res)) {
+          setConversations(res);
+        } else if (res && Array.isArray(res.items)) {
+          setConversations(res.items);
+        } else {
+          setConversations([]);
+        }
+      }).catch(() => setConversations([]));
     }
   }, [showHistory]);
 

@@ -184,6 +184,18 @@ export interface Strategy {
   settings_schema: SettingsSchemaEntry[];
   settings_values: Record<string, unknown>;
   folder?: string | null;
+  verified_performance?: {
+    profit_factor: number;
+    win_rate: number;
+    max_dd_pct: number;
+    sharpe: number;
+    trades: number;
+    net_profit_pct: number;
+    wf_score: number;
+    robustness: "GOOD" | "MARGINAL" | "POOR";
+    symbol: string;
+    tf: string;
+  } | null;
   created_at: string;
   updated_at: string;
 }

@@ -91,18 +91,32 @@ def _parse_datetime(value: str) -> datetime | None:
 
 def _guess_symbol_timeframe(filename: str) -> tuple[str, str]:
     """Try to extract symbol and timeframe from filename like XAUUSD_M10_...csv
-    Skips leading numeric-only parts (e.g. timestamps) so that
+    Skips leading numeric-only parts (e.g. timestamps) and short fragments so that
     '1772411314_1771441559_XAUUSD_M10.csv' correctly yields ('XAUUSD', 'M10').
+    Also handles filenames like 'EURUSD_5m_2Yea.csv' and 'DIA_5m_5Yea.csv'.
     """
     name = Path(filename).stem.upper()
     parts = name.split("_")
     _TIMEFRAMES = {"M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"}
+    # Also detect lowercase timeframe patterns like "5m", "15m", "1h"
+    _TF_ALIASES = {"1M": "M1", "5M": "M5", "10M": "M10", "15M": "M15", "30M": "M30",
+                   "1H": "H1", "4H": "H4", "1D": "D1"}
+    _KNOWN_SYMBOLS = {"XAUUSD", "XAGUSD", "XPTUSD", "EURUSD", "GBPUSD", "USDJPY",
+                      "EURJPY", "GBPJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
+                      "US30", "US100", "US500", "NAS100", "GER40", "BTCUSD", "ETHUSD",
+                      "DIA", "SPY", "QQQ", "IWM"}
     symbol = ""
     timeframe = ""
     for p in parts:
         if p in _TIMEFRAMES:
             timeframe = p
-        elif not symbol and not p.isdigit():
+        elif p in _TF_ALIASES:
+            timeframe = _TF_ALIASES[p]
+        elif not symbol and p in _KNOWN_SYMBOLS:
+            # Exact match on known symbols — highest priority
+            symbol = p
+        elif not symbol and not p.isdigit() and len(p) >= 3 and p.isalpha():
+            # Fallback: accept alpha-only parts with >= 3 chars (skip timestamps, "50000BARS" etc.)
             symbol = p
     return symbol, timeframe
 
@@ -440,6 +454,7 @@ async def fetch_from_broker(
                 file_size_mb=round(len(csv_content) / (1024 * 1024), 2),
                 source_type="broker",
                 broker_name="mt5",
+                creator_id=user.id,
             )
             db.add(ds)
             db.commit()
