@@ -52,7 +52,9 @@ export default function StrategySettingsModal({ strategy, onClose, onSaved }: Pr
     setValues(defaults);
   };
 
-  const schema = strategy.settings_schema || [];
+  // Ensure schema is always an array (handle edge case where API returns null/string)
+  const rawSchema = strategy.settings_schema;
+  const schema: SettingsSchemaEntry[] = Array.isArray(rawSchema) ? rawSchema : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -128,12 +130,13 @@ function SettingsField({
 }) {
   const inputClass =
     "w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm outline-none focus:border-accent transition-colors";
+  const displayLabel = entry.label || entry.key || "Setting";
 
   if (entry.type === "bool") {
     return (
       <label className="flex items-center justify-between cursor-pointer group">
         <div>
-          <span className="text-sm">{entry.label}</span>
+          <span className="text-sm">{displayLabel}</span>
           {entry.key && <span className="text-xs text-muted-foreground ml-2 opacity-0 group-hover:opacity-100 transition-opacity">{entry.key}</span>}
         </div>
         <div
@@ -151,7 +154,7 @@ function SettingsField({
   if (entry.type === "select" && entry.options) {
     return (
       <div>
-        <label className="block text-xs text-muted-foreground mb-1">{entry.label}</label>
+        <label className="block text-xs text-muted-foreground mb-1">{displayLabel}</label>
         <select
           value={String(value ?? "")}
           onChange={(e) => onChange(e.target.value)}
@@ -172,7 +175,7 @@ function SettingsField({
     return (
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-muted-foreground">{entry.label}</label>
+          <label className="text-xs text-muted-foreground">{displayLabel}</label>
           <span className="text-xs font-mono text-accent">
             {entry.type === "int" ? Math.round(numValue) : numValue.toFixed(2)}
           </span>
@@ -213,7 +216,7 @@ function SettingsField({
   // String fallback
   return (
     <div>
-      <label className="block text-xs text-muted-foreground mb-1">{entry.label}</label>
+      <label className="block text-xs text-muted-foreground mb-1">{displayLabel}</label>
       <input
         type="text"
         value={String(value ?? "")}

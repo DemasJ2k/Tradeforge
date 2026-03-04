@@ -148,9 +148,8 @@ def delete_strategy(
     strat = db.query(Strategy).filter(Strategy.id == strategy_id).first()
     if not strat:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    if strat.is_system:
-        raise HTTPException(status_code=403, detail="System strategies cannot be deleted")
-    if strat.creator_id != current_user.id:
+    # Allow deleting system strategies (user can always re-create them)
+    if not strat.is_system and strat.creator_id != current_user.id:
         raise HTTPException(status_code=404, detail="Strategy not found")
 
     # Clean up all related records to avoid FK constraint errors

@@ -323,15 +323,13 @@ export default function StrategiesPage() {
             <Copy className="h-3.5 w-3.5" />
           </Button>
           {!s.is_system && (
-            <>
-              <Button variant="ghost" size="icon" onClick={() => setMovingStrategy(s)} title="Move to folder" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                <FolderOpen className="h-3.5 w-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} title="Delete" className="h-7 w-7 text-muted-foreground hover:text-danger">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </>
+            <Button variant="ghost" size="icon" onClick={() => setMovingStrategy(s)} title="Move to folder" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+              <FolderOpen className="h-3.5 w-3.5" />
+            </Button>
           )}
+          <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} title="Delete" className="h-7 w-7 text-muted-foreground hover:text-danger">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
       </CardContent>
