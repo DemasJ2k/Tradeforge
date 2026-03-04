@@ -24,6 +24,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "fast_period",      "label": "Fast HMA Period",        "type": "int",   "default": 9,    "min": 3,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "Period for the fast Hull Moving Average"},
+    {"key": "slow_period",      "label": "Slow HMA Period",        "type": "int",   "default": 21,   "min": 10,   "max": 200,  "step": 1,   "group": "Indicator Settings", "description": "Period for the slow Hull Moving Average"},
+    {"key": "atr_period",       "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR lookback period for stop/target sizing"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",    "type": "float", "default": 2.0,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult",  "type": "float", "default": 3.0,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "adx_period",       "label": "ADX Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Filters",            "description": "ADX lookback period for trend strength filter"},
+    {"key": "adx_threshold",    "label": "ADX Threshold",          "type": "int",   "default": 20,   "min": 10,   "max": 50,   "step": 1,   "group": "Filters",            "description": "Minimum ADX value to allow crossover entries"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _wma(values, period):
     """Weighted Moving Average."""
     n = len(values)

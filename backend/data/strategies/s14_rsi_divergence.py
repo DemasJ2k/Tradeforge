@@ -28,6 +28,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "rsi_period", "label": "RSI Period", "type": "int", "default": 14, "min": 5, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for the RSI oscillator"},
+    {"key": "pivot_lookback", "label": "Pivot Lookback", "type": "int", "default": 5, "min": 2, "max": 15, "step": 1, "group": "Entry Rules", "description": "Bars on each side required to confirm a swing pivot high or low"},
+    {"key": "max_div_bars", "label": "Max Divergence Bars", "type": "int", "default": 30, "min": 10, "max": 60, "step": 1, "group": "Entry Rules", "description": "Maximum bars allowed between two pivot points for a valid divergence"},
+    {"key": "min_div_bars", "label": "Min Divergence Bars", "type": "int", "default": 5, "min": 2, "max": 15, "step": 1, "group": "Entry Rules", "description": "Minimum bars separation between pivot points (also used as signal cooldown)"},
+    {"key": "use_hidden_div", "label": "Use Hidden Divergence", "type": "bool", "default": True, "group": "Entry Rules", "description": "Enable hidden divergence patterns for trend continuation signals"},
+    {"key": "sma_trend_period", "label": "Trend SMA Period", "type": "int", "default": 50, "min": 20, "max": 200, "step": 10, "group": "Filters", "description": "SMA period for trend filter (long only above, short only below)"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _rsi(bars, period):
     n = len(bars)
     out = [50.0] * n

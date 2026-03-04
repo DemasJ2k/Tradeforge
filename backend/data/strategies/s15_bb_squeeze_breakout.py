@@ -30,6 +30,22 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "bb_period", "label": "Bollinger Band Period", "type": "int", "default": 20, "min": 10, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Bollinger Bands moving average and standard deviation"},
+    {"key": "bb_mult", "label": "Bollinger Band Multiplier", "type": "float", "default": 2.0, "min": 1.0, "max": 3.5, "step": 0.1, "group": "Indicator Settings", "description": "Standard deviation multiplier for Bollinger Band width"},
+    {"key": "bbw_lookback", "label": "Bandwidth Lookback", "type": "int", "default": 120, "min": 30, "max": 250, "step": 10, "group": "Entry Rules", "description": "Number of bars to evaluate whether bandwidth is at a historical low"},
+    {"key": "bbw_percentile", "label": "Bandwidth Percentile", "type": "float", "default": 0.10, "min": 0.01, "max": 0.30, "step": 0.01, "group": "Entry Rules", "description": "Bandwidth must be in the bottom N percentile to qualify as a squeeze"},
+    {"key": "pct_b_entry", "label": "%B Long Entry", "type": "float", "default": 0.70, "min": 0.50, "max": 0.95, "step": 0.05, "group": "Entry Rules", "description": "Minimum %B value required for a long breakout entry"},
+    {"key": "pct_b_short", "label": "%B Short Entry", "type": "float", "default": 0.30, "min": 0.05, "max": 0.50, "step": 0.05, "group": "Entry Rules", "description": "Maximum %B value required for a short breakout entry"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 4.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "require_momentum", "label": "Require Momentum Confirmation", "type": "bool", "default": True, "group": "Filters", "description": "Require close to move in breakout direction vs previous close"},
+    {"key": "exit_bb_revert", "label": "Exit on BB Midline Revert", "type": "bool", "default": False, "group": "Exit Rules", "description": "Exit trade when price reverts to Bollinger Band midline"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _sma_vals(values, period):
     n = len(values)
     out = [0.0] * n

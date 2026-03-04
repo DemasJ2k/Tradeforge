@@ -31,6 +31,19 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "roc_fast",         "label": "Fast ROC Period",        "type": "int",   "default": 10,   "min": 3,    "max": 30,   "step": 1,   "group": "Indicator Settings", "description": "Rate of Change period for short-term momentum"},
+    {"key": "roc_slow",         "label": "Slow ROC Period",        "type": "int",   "default": 30,   "min": 10,   "max": 100,  "step": 1,   "group": "Indicator Settings", "description": "Rate of Change period for underlying trend momentum"},
+    {"key": "mfi_period",       "label": "MFI Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "Money Flow Index lookback period"},
+    {"key": "mfi_bull",         "label": "MFI Bullish Threshold",  "type": "int",   "default": 50,   "min": 30,   "max": 80,   "step": 1,   "group": "Entry Rules",        "description": "MFI must be above this level for long entries"},
+    {"key": "mfi_bear",         "label": "MFI Bearish Threshold",  "type": "int",   "default": 50,   "min": 20,   "max": 70,   "step": 1,   "group": "Entry Rules",        "description": "MFI must be below this level for short entries"},
+    {"key": "atr_period",       "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR lookback period for stop/target sizing"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",    "type": "float", "default": 2.0,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult",  "type": "float", "default": 3.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _roc(bars, period):
     """Rate of Change."""
     n = len(bars)

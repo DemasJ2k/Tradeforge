@@ -35,6 +35,23 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "asia_start_hour",      "label": "Asia Session Start (UTC)",  "type": "int",   "default": 0,     "min": 0,    "max": 23,  "step": 1,    "group": "Session",         "description": "Hour (UTC) when the Asian session range tracking begins"},
+    {"key": "asia_end_hour",        "label": "Asia Session End (UTC)",    "type": "int",   "default": 8,     "min": 1,    "max": 23,  "step": 1,    "group": "Session",         "description": "Hour (UTC) when the Asian session range tracking ends"},
+    {"key": "london_start_hour",    "label": "London Session Start (UTC)","type": "int",   "default": 8,     "min": 0,    "max": 23,  "step": 1,    "group": "Session",         "description": "Hour (UTC) when the London trading session begins"},
+    {"key": "london_end_hour",      "label": "London Session End (UTC)",  "type": "int",   "default": 16,    "min": 1,    "max": 23,  "step": 1,    "group": "Session",         "description": "Hour (UTC) when the London trading session ends"},
+    {"key": "breakout_buffer_pct",  "label": "Breakout Buffer %",        "type": "float", "default": 0.001, "min": 0.0,  "max": 0.01,"step": 0.001,"group": "Entry Rules",     "description": "Percentage buffer beyond the Asian range required for a valid breakout"},
+    {"key": "target_range_mult",    "label": "Target Range Multiplier",  "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Exit Rules",      "description": "Take-profit as a multiple of the Asian session range size"},
+    {"key": "sl_at_range_opposite", "label": "SL at Range Opposite",     "type": "bool",  "default": True,                                          "group": "Exit Rules",      "description": "Place stop-loss at the opposite side of the Asian range instead of ATR-based"},
+    {"key": "atr_period",           "label": "ATR Period",               "type": "int",   "default": 14,    "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",          "label": "ATR SL Multiplier",        "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Risk Management", "description": "Fallback stop-loss distance (ATR multiples) when range SL is disabled"},
+    {"key": "min_range_atr",        "label": "Min Range (ATR)",          "type": "float", "default": 0.3,   "min": 0.1,  "max": 2.0, "step": 0.1,  "group": "Filters",         "description": "Minimum Asian range size in ATR units to filter out tight ranges"},
+    {"key": "max_range_atr",        "label": "Max Range (ATR)",          "type": "float", "default": 3.0,   "min": 1.0,  "max": 10.0,"step": 0.1,  "group": "Filters",         "description": "Maximum Asian range size in ATR units to filter out excessive volatility"},
+    {"key": "risk_per_trade",       "label": "Risk Per Trade",           "type": "float", "default": 0.01,  "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management", "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+    {"key": "max_daily_trades",     "label": "Max Daily Trades",         "type": "int",   "default": 2,     "min": 1,    "max": 10,  "step": 1,    "group": "Risk Management", "description": "Maximum number of trades allowed per trading day"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

@@ -100,6 +100,57 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    # Session / Kill Zones
+    {"key": "use_kill_zone",       "label": "Use Kill Zone Filter",      "type": "bool",  "default": True,                                                "group": "Session / Kill Zones", "description": "Only trade during London and New York kill zones"},
+    {"key": "london_start_hour",   "label": "London Start Hour (UTC)",   "type": "int",   "default": 7,     "min": 0,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the London kill zone begins"},
+    {"key": "london_end_hour",     "label": "London End Hour (UTC)",     "type": "int",   "default": 10,    "min": 1,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the London kill zone ends"},
+    {"key": "ny_start_hour",       "label": "NY Start Hour (UTC)",       "type": "int",   "default": 12,    "min": 0,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the New York kill zone begins"},
+    {"key": "ny_end_hour",         "label": "NY End Hour (UTC)",         "type": "int",   "default": 15,    "min": 1,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the New York kill zone ends"},
+
+    # Market Structure
+    {"key": "swing_length",        "label": "Swing Length",              "type": "int",   "default": 15,    "min": 5,    "max": 50,  "step": 1,    "group": "Market Structure",     "description": "Bars on each side to confirm a swing high/low pivot"},
+    {"key": "use_ema_filter",      "label": "Use EMA Filter",           "type": "bool",  "default": True,                                                "group": "Market Structure",     "description": "Use EMA crossover and position as an additional trend filter"},
+    {"key": "ema_fast",            "label": "EMA Fast Period",          "type": "int",   "default": 21,    "min": 5,    "max": 50,  "step": 1,    "group": "Market Structure",     "description": "Fast EMA period for trend detection"},
+    {"key": "ema_slow",            "label": "EMA Slow Period",          "type": "int",   "default": 50,    "min": 20,   "max": 200, "step": 1,    "group": "Market Structure",     "description": "Slow EMA period for trend detection"},
+
+    # Liquidity Sweep
+    {"key": "sweep_lookback",      "label": "Sweep Lookback",           "type": "int",   "default": 25,    "min": 5,    "max": 60,  "step": 1,    "group": "Liquidity Sweep",      "description": "Bars to look back for swing levels when detecting liquidity sweeps"},
+    {"key": "sweep_threshold_atr", "label": "Sweep Threshold (ATR)",    "type": "float", "default": 0.1,   "min": 0.01, "max": 1.0, "step": 0.01, "group": "Liquidity Sweep",      "description": "Minimum wick beyond swing level (in ATR) to qualify as a sweep"},
+
+    # Fair Value Gaps
+    {"key": "fvg_min_size_atr",    "label": "FVG Min Size (ATR)",       "type": "float", "default": 0.3,   "min": 0.1,  "max": 2.0, "step": 0.1,  "group": "Fair Value Gaps",      "description": "Minimum fair value gap size in ATR units"},
+    {"key": "fvg_max_age",         "label": "FVG Max Age (bars)",       "type": "int",   "default": 25,    "min": 5,    "max": 100, "step": 1,    "group": "Fair Value Gaps",      "description": "Maximum candles old an FVG can be to remain valid"},
+
+    # Order Blocks
+    {"key": "ob_min_impulse_atr",  "label": "OB Min Impulse (ATR)",     "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Order Blocks",         "description": "Minimum ATR move after an order block to validate it"},
+    {"key": "ob_max_age",          "label": "OB Max Age (bars)",        "type": "int",   "default": 30,    "min": 5,    "max": 100, "step": 1,    "group": "Order Blocks",         "description": "Maximum candles old an order block can be to remain valid"},
+
+    # Premium / Discount
+    {"key": "use_pd_filter",       "label": "Use Premium/Discount",     "type": "bool",  "default": True,                                                "group": "Premium/Discount",     "description": "Only buy in discount zone and sell in premium zone"},
+    {"key": "pd_range_lookback",   "label": "P/D Range Lookback",       "type": "int",   "default": 50,    "min": 20,   "max": 200, "step": 1,    "group": "Premium/Discount",     "description": "Bars to look back for the high/low range used in Fibonacci zone calc"},
+    {"key": "premium_fib",         "label": "Premium Fib Level",        "type": "float", "default": 0.5,   "min": 0.3,  "max": 0.8, "step": 0.01, "group": "Premium/Discount",     "description": "Fibonacci level dividing premium from discount (0.5 = equilibrium)"},
+
+    # AMD Model
+    {"key": "use_amd",             "label": "Use AMD Model",            "type": "bool",  "default": False,                                               "group": "AMD Model",            "description": "Enable the Accumulation-Manipulation-Distribution (Power of 3) model"},
+    {"key": "asian_start_hour",    "label": "Asian Start Hour (UTC)",   "type": "int",   "default": 0,     "min": 0,    "max": 23,  "step": 1,    "group": "AMD Model",            "description": "UTC hour when the Asian accumulation range begins"},
+    {"key": "asian_end_hour",      "label": "Asian End Hour (UTC)",     "type": "int",   "default": 7,     "min": 1,    "max": 23,  "step": 1,    "group": "AMD Model",            "description": "UTC hour when the Asian accumulation range ends"},
+
+    # Volume
+    {"key": "use_volume_filter",   "label": "Use Volume Filter",        "type": "bool",  "default": True,                                                "group": "Volume",               "description": "Require volume spike confirmation for non-sweep signals"},
+    {"key": "vol_lookback",        "label": "Volume Lookback",          "type": "int",   "default": 20,    "min": 5,    "max": 60,  "step": 1,    "group": "Volume",               "description": "Bars for calculating average volume"},
+    {"key": "vol_spike_mult",      "label": "Volume Spike Multiplier",  "type": "float", "default": 1.3,   "min": 1.0,  "max": 3.0, "step": 0.1,  "group": "Volume",               "description": "Current volume must exceed average by this factor (1.3 = 30% above)"},
+
+    # Risk Management
+    {"key": "atr_period",          "label": "ATR Period",               "type": "int",   "default": 14,    "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management",      "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",         "label": "ATR SL Multiplier",        "type": "float", "default": 2.0,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Risk Management",      "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",         "label": "ATR TP Multiplier",        "type": "float", "default": 3.5,   "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Risk Management",      "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "cooldown_bars",       "label": "Cooldown Bars",            "type": "int",   "default": 3,     "min": 0,    "max": 20,  "step": 1,    "group": "Risk Management",      "description": "Minimum bars between consecutive trades"},
+    {"key": "max_concurrent",      "label": "Max Concurrent Trades",    "type": "int",   "default": 2,     "min": 1,    "max": 10,  "step": 1,    "group": "Risk Management",      "description": "Maximum number of simultaneously open positions"},
+    {"key": "risk_per_trade",      "label": "Risk Per Trade",           "type": "float", "default": 0.01,  "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",      "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+]
+
+
 class InstitutionalComposite:
     """
     Mimics institutional trading by combining:

@@ -25,6 +25,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "cci_period", "label": "CCI Period", "type": "int", "default": 14, "min": 5, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for the primary Commodity Channel Index"},
+    {"key": "cci_turbo", "label": "CCI Turbo Period", "type": "int", "default": 6, "min": 3, "max": 14, "step": 1, "group": "Indicator Settings", "description": "Lookback period for the short-term CCI used as entry confirmation"},
+    {"key": "zlr_zone", "label": "ZLR Zone", "type": "int", "default": 50, "min": 20, "max": 100, "step": 5, "group": "Entry Rules", "description": "CCI must pull back to within this distance of zero for a Zero Line Reject"},
+    {"key": "trend_bars", "label": "Trend Bars", "type": "int", "default": 5, "min": 2, "max": 20, "step": 1, "group": "Entry Rules", "description": "Minimum consecutive bars CCI must stay on one side of zero before a ZLR is valid"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 1.5, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 2.5, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _cci(bars, period):
     """Commodity Channel Index = (TP - SMA(TP)) / (0.015 * MeanDev)."""
     n = len(bars)

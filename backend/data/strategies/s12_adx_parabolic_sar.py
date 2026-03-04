@@ -29,6 +29,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "adx_period", "label": "ADX Period", "type": "int", "default": 14, "min": 7, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ADX and DI+/DI- calculation"},
+    {"key": "adx_threshold", "label": "ADX Threshold", "type": "int", "default": 20, "min": 10, "max": 40, "step": 1, "group": "Filters", "description": "Minimum ADX value required to confirm a strong trend before entry"},
+    {"key": "adx_require_rising", "label": "Require Rising ADX", "type": "bool", "default": False, "group": "Filters", "description": "Only enter when ADX slope is positive (rising trend strength)"},
+    {"key": "sar_af_start", "label": "SAR AF Start", "type": "float", "default": 0.02, "min": 0.01, "max": 0.05, "step": 0.01, "group": "Indicator Settings", "description": "Parabolic SAR initial acceleration factor"},
+    {"key": "sar_af_step", "label": "SAR AF Step", "type": "float", "default": 0.02, "min": 0.01, "max": 0.05, "step": 0.01, "group": "Indicator Settings", "description": "Parabolic SAR acceleration factor increment per new extreme"},
+    {"key": "sar_af_max", "label": "SAR AF Maximum", "type": "float", "default": 0.20, "min": 0.10, "max": 0.40, "step": 0.01, "group": "Indicator Settings", "description": "Parabolic SAR maximum acceleration factor cap"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 4.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

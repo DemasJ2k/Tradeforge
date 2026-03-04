@@ -28,6 +28,19 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "ao_fast",        "label": "AO Fast Period",       "type": "int",   "default": 5,    "min": 2,   "max": 20,  "step": 1,   "group": "Indicator Settings", "description": "Fast SMA period for Awesome Oscillator median price"},
+    {"key": "ao_slow",        "label": "AO Slow Period",       "type": "int",   "default": 34,   "min": 10,  "max": 60,  "step": 1,   "group": "Indicator Settings", "description": "Slow SMA period for Awesome Oscillator median price"},
+    {"key": "use_saucer",     "label": "Enable Saucer Signal", "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade the AO saucer continuation pattern (dip and recovery above/below zero)"},
+    {"key": "use_twin_peaks", "label": "Enable Twin Peaks",    "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade the twin-peaks divergence pattern on the AO"},
+    {"key": "use_zero_cross", "label": "Enable Zero Cross",    "type": "bool",  "default": False,                                      "group": "Entry Rules",        "description": "Trade AO zero-line crossovers (tends to generate many false signals)"},
+    {"key": "atr_period",     "label": "ATR Period",           "type": "int",   "default": 14,   "min": 5,   "max": 50,  "step": 1,   "group": "Risk Management",    "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",    "label": "ATR SL Multiplier",    "type": "float", "default": 2.0,  "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management",    "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",    "label": "ATR TP Multiplier",    "type": "float", "default": 3.0,  "min": 0.5, "max": 8.0, "step": 0.1, "group": "Risk Management",    "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",       "type": "float", "default": 0.01, "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+]
+
+
 def _sma_vals(values, period):
     n = len(values)
     out = [0.0] * n

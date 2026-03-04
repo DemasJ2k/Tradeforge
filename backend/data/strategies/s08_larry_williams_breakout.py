@@ -27,6 +27,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "breakout_factor", "label": "Breakout Factor", "type": "float", "default": 1.0, "min": 0.1, "max": 3.0, "step": 0.05, "group": "Entry Rules", "description": "Multiplier of previous bar range to set breakout levels above/below the open"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 1.5, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 2.5, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "williams_r_period", "label": "Williams %R Period", "type": "int", "default": 10, "min": 5, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Williams %R oscillator"},
+    {"key": "williams_r_ob", "label": "Williams %R Overbought", "type": "int", "default": -20, "min": -10, "max": -30, "step": 1, "group": "Filters", "description": "Overbought threshold for Williams %R (used for exit filter if enabled)"},
+    {"key": "williams_r_os", "label": "Williams %R Oversold", "type": "int", "default": -80, "min": -70, "max": -95, "step": 1, "group": "Filters", "description": "Oversold threshold for Williams %R (used for exit filter if enabled)"},
+    {"key": "use_wr_exit", "label": "Use Williams %R Exit", "type": "bool", "default": False, "group": "Exit Rules", "description": "Enable early exit when Williams %R reaches overbought/oversold levels"},
+    {"key": "cooldown_bars", "label": "Cooldown Bars", "type": "int", "default": 15, "min": 0, "max": 50, "step": 1, "group": "Filters", "description": "Minimum bars to wait between trades to prevent overtrading"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

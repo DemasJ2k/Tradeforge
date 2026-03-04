@@ -28,6 +28,19 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "fast_period",    "label": "MACD Fast Period",     "type": "int",   "default": 12,   "min": 5,   "max": 30,  "step": 1,   "group": "Indicator Settings", "description": "Fast EMA period for MACD line calculation"},
+    {"key": "slow_period",    "label": "MACD Slow Period",     "type": "int",   "default": 26,   "min": 15,  "max": 60,  "step": 1,   "group": "Indicator Settings", "description": "Slow EMA period for MACD line calculation"},
+    {"key": "signal_period",  "label": "Signal Period",        "type": "int",   "default": 9,    "min": 3,   "max": 20,  "step": 1,   "group": "Indicator Settings", "description": "EMA period for the MACD signal line"},
+    {"key": "div_lookback",   "label": "Divergence Lookback",  "type": "int",   "default": 30,   "min": 10,  "max": 80,  "step": 1,   "group": "Entry Rules",        "description": "Maximum bars between divergence pivot points"},
+    {"key": "sma_filter",     "label": "SMA Trend Filter",     "type": "int",   "default": 50,   "min": 10,  "max": 200, "step": 1,   "group": "Filters",            "description": "SMA period used as a trend filter (long above, short below)"},
+    {"key": "atr_period",     "label": "ATR Period",           "type": "int",   "default": 14,   "min": 5,   "max": 50,  "step": 1,   "group": "Risk Management",    "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",    "label": "ATR SL Multiplier",    "type": "float", "default": 2.0,  "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management",    "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",    "label": "ATR TP Multiplier",    "type": "float", "default": 3.0,  "min": 0.5, "max": 8.0, "step": 0.1, "group": "Risk Management",    "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",       "type": "float", "default": 0.01, "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+]
+
+
 def _ema(values, period):
     n = len(values)
     out = [0.0] * n

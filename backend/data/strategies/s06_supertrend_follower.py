@@ -21,6 +21,14 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "atr_period",     "label": "ATR Period",          "type": "int",   "default": 10,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range used by Supertrend"},
+    {"key": "multiplier",     "label": "Supertrend Multiplier", "type": "float", "default": 3.0, "min": 1.0,  "max": 10.0, "step": 0.1,  "group": "Indicator Settings", "description": "ATR multiplier for the Supertrend band width"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",      "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+    {"key": "flat_filter",    "label": "Whipsaw Filter Bars", "type": "int",   "default": 5,    "min": 2,     "max": 20,   "step": 1,    "group": "Filters",            "description": "Number of bars to check for excessive direction flips (whipsaw filter)"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

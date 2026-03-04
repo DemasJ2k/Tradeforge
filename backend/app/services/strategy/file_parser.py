@@ -67,8 +67,19 @@ def parse_python_strategy(content: str) -> dict:
                 description = val.value if isinstance(val, ast.Constant) else getattr(val, "s", "")  # type: ignore
             break
 
+    # Pattern 0: Look for explicit SETTINGS list (TradingView-style declarations)
+    # Format: SETTINGS = [{"key": ..., "label": ..., "type": ..., "default": ..., ...}, ...]
+    settings_list = _extract_list_assignment(tree, "SETTINGS")
+    if settings_list:
+        for item in settings_list:
+            if isinstance(item, dict) and "key" in item:
+                settings_schema.append(item)
+                if "default" in item:
+                    settings_values[item["key"]] = item["default"]
+        return {"name": name, "description": description, "settings_schema": settings_schema, "settings_values": settings_values}
+
     # Pattern 1: Look for SETTINGS or PARAMS dict literal at class or module level
-    found = _extract_dict_assignment(tree, {"SETTINGS", "PARAMS", "PARAMETERS", "CONFIG", "DEFAULTS"})
+    found = _extract_dict_assignment(tree, {"PARAMS", "PARAMETERS", "CONFIG", "DEFAULTS"})
     if found:
         for key, val in found.items():
             schema_entry, value = _infer_schema_from_value(key, val)
@@ -99,6 +110,25 @@ def _camel_to_title(name: str) -> str:
     """Convert CamelCase to Title Case."""
     s = re.sub(r"([A-Z])", r" \1", name).strip()
     return s.title() if s == s.upper() else s
+
+
+def _extract_list_assignment(tree: ast.Module, name: str) -> list | None:
+    """Find a list assignment like SETTINGS = [...] in the AST.
+
+    Used for explicit TradingView-style settings declarations where each
+    entry is a dict with key, label, type, default, min, max, step, group, etc.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id == name:
+                try:
+                    value = ast.literal_eval(node.value)
+                    if isinstance(value, list):
+                        return value
+                except (ValueError, TypeError):
+                    pass
+    return None
 
 
 def _extract_dict_assignment(tree: ast.Module, names: set[str]) -> dict[str, Any] | None:

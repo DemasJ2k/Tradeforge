@@ -32,6 +32,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "swing_length",   "label": "Swing Length",           "type": "int",    "default": 22,      "min": 5,    "max": 50,  "step": 1,    "group": "Indicator Settings", "description": "Number of bars on each side to confirm a swing high or low pivot"},
+    {"key": "bos_confirm",    "label": "BOS Confirmation",       "type": "select", "default": "close",  "options": ["close", "wick"],                "group": "Entry Rules",        "description": "Whether breakout must occur on close price or candle wick"},
+    {"key": "choch_only",     "label": "CHoCH Only",             "type": "bool",   "default": False,                                               "group": "Entry Rules",        "description": "Only trade Change of Character (reversal) signals, skip plain BOS"},
+    {"key": "atr_period",     "label": "ATR Period",             "type": "int",    "default": 14,       "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management",    "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",    "label": "ATR SL Multiplier",      "type": "float",  "default": 3.0,      "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Risk Management",    "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",    "label": "ATR TP Multiplier",      "type": "float",  "default": 5.0,      "min": 0.5,  "max": 12.0,"step": 0.1,  "group": "Risk Management",    "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "ema_period",     "label": "EMA Period",             "type": "int",    "default": 50,       "min": 10,   "max": 200, "step": 1,    "group": "Filters",            "description": "EMA period for optional trend filter"},
+    {"key": "use_ema_filter", "label": "Use EMA Filter",         "type": "bool",   "default": False,                                               "group": "Filters",            "description": "Only take longs above EMA and shorts below EMA"},
+    {"key": "cooldown_bars",  "label": "Cooldown Bars",          "type": "int",    "default": 3,        "min": 0,    "max": 20,  "step": 1,    "group": "Risk Management",    "description": "Minimum number of bars between consecutive trades"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",         "type": "float",  "default": 0.01,     "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",    "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+]
+
+
 def _atr(bars, period):
     """Average True Range."""
     n = len(bars)

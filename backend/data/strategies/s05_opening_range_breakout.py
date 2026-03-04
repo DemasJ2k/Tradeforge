@@ -25,6 +25,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "orb_bars",        "label": "ORB Bars",                "type": "int",   "default": 3,    "min": 1,     "max": 10,   "step": 1,    "group": "Indicator Settings", "description": "Number of bars that define the opening range"},
+    {"key": "atr_period",      "label": "ATR Period",              "type": "int",   "default": 14,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_filter_mult", "label": "ATR Filter Multiple",     "type": "float", "default": 0.5,  "min": 0.1,   "max": 2.0,  "step": 0.1,  "group": "Filters",            "description": "ORB range must exceed this ATR multiple to qualify as tradeable"},
+    {"key": "rr_ratio",        "label": "Risk:Reward Ratio",       "type": "float", "default": 2.0,  "min": 1.0,   "max": 5.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Take-profit as a multiple of the risk (stop-loss distance)"},
+    {"key": "use_atr_stop",    "label": "Use ATR Stop",            "type": "bool",  "default": False,                                          "group": "Exit Rules",         "description": "Use ATR-based stop-loss instead of ORB range as risk"},
+    {"key": "atr_sl_mult",     "label": "ATR Stop-Loss Multiple",  "type": "float", "default": 1.5,  "min": 0.5,   "max": 4.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Stop-loss distance as a multiple of ATR (when ATR stop enabled)"},
+    {"key": "risk_per_trade",  "label": "Risk Per Trade",          "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+    {"key": "max_trades_day",  "label": "Max Trades Per Day",      "type": "int",   "default": 2,    "min": 1,     "max": 10,   "step": 1,    "group": "Risk Management",    "description": "Maximum number of trades allowed per ORB session"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

@@ -26,6 +26,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "short_emas",       "label": "Short EMA Periods",     "type": "text",  "default": "[8, 13, 21]",                                  "group": "Indicator Settings", "description": "List of short EMA periods forming the fast ribbon"},
+    {"key": "long_emas",        "label": "Long EMA Periods",      "type": "text",  "default": "[34, 55, 89]",                                 "group": "Indicator Settings", "description": "List of long EMA periods forming the slow ribbon"},
+    {"key": "expansion_bars",   "label": "Expansion Bars",        "type": "int",   "default": 3,    "min": 1,    "max": 20,   "step": 1,   "group": "Entry Rules",        "description": "Minimum consecutive bars of ribbon expansion to confirm trend"},
+    {"key": "atr_period",       "label": "ATR Period",            "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR lookback period for stop/target sizing"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",   "type": "float", "default": 2.0,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult", "type": "float", "default": 3.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "trail_ema",        "label": "Trailing Exit EMA",    "type": "int",   "default": 21,   "min": 5,    "max": 100,  "step": 1,   "group": "Exit Rules",         "description": "EMA period used for trailing exit (close below = exit long)"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",        "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _ema(values, period):
     n = len(values)
     out = [0.0] * n

@@ -36,6 +36,26 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "rsi_period", "label": "RSI Period", "type": "int", "default": 2, "min": 2, "max": 10, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ultra-short RSI (Connors uses 2)"},
+    {"key": "rsi_buy_thresh", "label": "RSI Buy Threshold", "type": "int", "default": 10, "min": 1, "max": 30, "step": 1, "group": "Entry Rules", "description": "Buy when RSI falls below this level (oversold)"},
+    {"key": "rsi_sell_thresh", "label": "RSI Sell Threshold", "type": "int", "default": 90, "min": 70, "max": 99, "step": 1, "group": "Entry Rules", "description": "Sell/short when RSI rises above this level (overbought)"},
+    {"key": "cum_rsi_bars", "label": "Cumulative RSI Bars", "type": "int", "default": 2, "min": 1, "max": 5, "step": 1, "group": "Entry Rules", "description": "Number of bars to sum RSI over for cumulative RSI signal"},
+    {"key": "cum_rsi_buy", "label": "Cumulative RSI Buy", "type": "int", "default": 50, "min": 10, "max": 100, "step": 5, "group": "Entry Rules", "description": "Cumulative RSI must be below this value for a long entry"},
+    {"key": "cum_rsi_sell", "label": "Cumulative RSI Sell", "type": "int", "default": 150, "min": 100, "max": 200, "step": 5, "group": "Entry Rules", "description": "Cumulative RSI must be above this value for a short entry"},
+    {"key": "sma_period", "label": "Trend SMA Period", "type": "int", "default": 200, "min": 50, "max": 300, "step": 10, "group": "Filters", "description": "SMA period for trend filter (long only above, short only below)"},
+    {"key": "use_rsi_exit", "label": "Use RSI Exit", "type": "bool", "default": False, "group": "Exit Rules", "description": "Enable early exit when RSI reverts to normal levels"},
+    {"key": "exit_rsi_long", "label": "Exit RSI Long", "type": "int", "default": 70, "min": 50, "max": 90, "step": 5, "group": "Exit Rules", "description": "Exit long position when RSI rises above this level (if RSI exit enabled)"},
+    {"key": "exit_rsi_short", "label": "Exit RSI Short", "type": "int", "default": 30, "min": 10, "max": 50, "step": 5, "group": "Exit Rules", "description": "Exit short position when RSI drops below this level (if RSI exit enabled)"},
+    {"key": "adx_period", "label": "ADX Period", "type": "int", "default": 14, "min": 7, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ADX trend strength indicator"},
+    {"key": "adx_max", "label": "ADX Maximum", "type": "int", "default": 25, "min": 15, "max": 50, "step": 1, "group": "Filters", "description": "Skip trades when ADX exceeds this value (strong trend = mean reversion fails)"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 1.5, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _sma(bars, period, key="close"):
     n = len(bars)
     out = [0.0] * n

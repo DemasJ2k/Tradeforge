@@ -25,6 +25,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "entry_period",     "label": "Entry Channel Period",    "type": "int",   "default": 20,   "min": 10,    "max": 50,   "step": 1,    "group": "Entry Rules",        "description": "Donchian channel lookback period for breakout entries"},
+    {"key": "exit_period",      "label": "Exit Channel Period",     "type": "int",   "default": 10,   "min": 5,     "max": 30,   "step": 1,    "group": "Exit Rules",         "description": "Donchian channel lookback period for breakout exits"},
+    {"key": "atr_period",       "label": "ATR Period",              "type": "int",   "default": 20,   "min": 10,    "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for ATR (N-value) calculation"},
+    {"key": "ma_fast",          "label": "Fast MA Period",          "type": "int",   "default": 40,   "min": 20,    "max": 100,  "step": 1,    "group": "Filters",            "description": "Fast moving average period for trend filter"},
+    {"key": "ma_slow",          "label": "Slow MA Period",          "type": "int",   "default": 200,  "min": 100,   "max": 500,  "step": 1,    "group": "Filters",            "description": "Slow moving average period for trend filter"},
+    {"key": "use_trend_filter", "label": "Use Trend Filter",        "type": "bool",  "default": True,                                          "group": "Filters",            "description": "Enable Curtis Faith MA crossover filter (fast MA > slow MA for longs)"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",          "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+    {"key": "atr_stop_mult",    "label": "ATR Stop Multiple",       "type": "float", "default": 2.0,  "min": 0.5,   "max": 5.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Initial stop-loss distance as a multiple of ATR (N-value)"},
+]
+
+
 def _sma(data, period):
     out = [0.0] * len(data)
     if period > len(data):

@@ -27,6 +27,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "vp_lookback",     "label": "VP Lookback",            "type": "int",   "default": 100,  "min": 20,    "max": 500,  "step": 1,    "group": "Indicator Settings", "description": "Number of bars used to calculate the volume profile"},
+    {"key": "vp_value_pct",    "label": "Value Area %",           "type": "float", "default": 70.0, "min": 50.0,  "max": 90.0, "step": 1.0,  "group": "Indicator Settings", "description": "Percentage of total volume that defines the value area around POC"},
+    {"key": "atr_period",      "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",     "label": "ATR Stop-Loss Multiple", "type": "float", "default": 1.5,  "min": 0.5,   "max": 4.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",     "label": "ATR Take-Profit Multiple", "type": "float", "default": 2.5, "min": 1.0,  "max": 6.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Take-profit distance as a multiple of ATR (trend model)"},
+    {"key": "mean_rev_tp_pct", "label": "Mean Reversion TP %",    "type": "float", "default": 0.5,  "min": 0.1,   "max": 1.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Take-profit as percentage of distance to POC (mean-reversion model)"},
+    {"key": "risk_per_trade",  "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+    {"key": "adx_threshold",   "label": "ADX Threshold",          "type": "int",   "default": 20,   "min": 10,    "max": 50,   "step": 1,    "group": "Filters",            "description": "ADX value above which the trend model is used; below uses mean-reversion"},
+]
+
+
 # ── Helpers ──────────────────────────────────────────────────────
 def _sma(data, period):
     out = [0.0] * len(data)

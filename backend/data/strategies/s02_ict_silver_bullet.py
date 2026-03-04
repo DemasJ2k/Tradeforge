@@ -31,6 +31,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "atr_period",       "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Multiple", "type": "float", "default": 1.5,  "min": 0.5,   "max": 4.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "min_rr",           "label": "Minimum Risk:Reward",    "type": "float", "default": 2.0,  "min": 1.0,   "max": 5.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Minimum risk-to-reward ratio for trade entries"},
+    {"key": "fvg_min_size_atr", "label": "FVG Min Size (ATR)",     "type": "float", "default": 0.15, "min": 0.05,  "max": 1.0,  "step": 0.01, "group": "Entry Rules",        "description": "Minimum Fair Value Gap size as a fraction of ATR"},
+    {"key": "lookback_swing",   "label": "Swing Lookback",         "type": "int",   "default": 20,   "min": 10,    "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Number of bars to identify swing highs/lows for liquidity levels"},
+    {"key": "sweep_lookback",   "label": "Sweep Lookback",         "type": "int",   "default": 5,    "min": 3,     "max": 20,   "step": 1,    "group": "Entry Rules",        "description": "Number of bars a liquidity sweep remains valid for FVG entry"},
+    {"key": "session_filter",   "label": "Session Filter",         "type": "bool",  "default": True,                                           "group": "Session",            "description": "Only trade during ICT kill zone windows (London Open, NY AM, NY PM)"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

@@ -24,6 +24,18 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "ema_fast",       "label": "Fast EMA Period",          "type": "int",   "default": 9,    "min": 5,     "max": 30,   "step": 1,    "group": "Indicator Settings", "description": "Period for the fast exponential moving average"},
+    {"key": "ema_mid",        "label": "Mid EMA Period",           "type": "int",   "default": 21,   "min": 10,    "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Period for the mid exponential moving average"},
+    {"key": "ema_slow",       "label": "Slow EMA Period",          "type": "int",   "default": 55,   "min": 30,    "max": 200,  "step": 1,    "group": "Indicator Settings", "description": "Period for the slow exponential moving average"},
+    {"key": "atr_period",     "label": "ATR Period",               "type": "int",   "default": 14,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",    "label": "ATR Stop-Loss Multiple",   "type": "float", "default": 1.2,  "min": 0.5,   "max": 4.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",    "label": "ATR Take-Profit Multiple", "type": "float", "default": 1.8,  "min": 1.0,   "max": 6.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "pullback_pct",   "label": "Pullback Distance %",      "type": "float", "default": 0.3,  "min": 0.1,   "max": 1.0,  "step": 0.1,  "group": "Entry Rules",        "description": "Maximum distance to mid EMA as a fraction of ATR for pullback entry"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",           "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+]
+
+
 def _ema(data, period):
     out = [0.0] * len(data)
     if period > len(data):

@@ -33,6 +33,21 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "rsi_period",       "label": "RSI Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "RSI lookback period (input to Stochastic calculation)"},
+    {"key": "stoch_period",     "label": "Stochastic Period",      "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "Lookback period for Stochastic RSI calculation"},
+    {"key": "k_smooth",         "label": "%K Smoothing",           "type": "int",   "default": 3,    "min": 1,    "max": 10,   "step": 1,   "group": "Indicator Settings", "description": "SMA smoothing period for %K line"},
+    {"key": "d_smooth",         "label": "%D Smoothing",           "type": "int",   "default": 3,    "min": 1,    "max": 10,   "step": 1,   "group": "Indicator Settings", "description": "SMA smoothing period for %D signal line"},
+    {"key": "ob_level",         "label": "Overbought Level",       "type": "int",   "default": 80,   "min": 60,   "max": 95,   "step": 1,   "group": "Entry Rules",        "description": "Stochastic RSI level considered overbought (short zone)"},
+    {"key": "os_level",         "label": "Oversold Level",         "type": "int",   "default": 20,   "min": 5,    "max": 40,   "step": 1,   "group": "Entry Rules",        "description": "Stochastic RSI level considered oversold (long zone)"},
+    {"key": "ema_trend_period", "label": "EMA Trend Period",       "type": "int",   "default": 50,   "min": 10,   "max": 200,  "step": 1,   "group": "Filters",            "description": "EMA period for trend direction filter"},
+    {"key": "atr_period",       "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR lookback period for stop/target sizing"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",    "type": "float", "default": 1.5,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult",  "type": "float", "default": 2.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _rsi(bars, period):
     n = len(bars)
     out = [50.0] * n

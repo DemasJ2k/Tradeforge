@@ -288,10 +288,19 @@ def update_strategy_settings(
     )
     if not strat:
         raise HTTPException(status_code=404, detail="Strategy not found")
-    if strat.is_system:
-        raise HTTPException(status_code=403, detail="System strategies cannot be modified")
 
-    strat.settings_values = payload.settings_values
+    # Allow updating settings_values for system strategies (user-tunable params)
+    # but merge with defaults so missing keys are preserved
+    if strat.settings_schema and isinstance(strat.settings_schema, list):
+        defaults = {
+            item["key"]: item["default"]
+            for item in strat.settings_schema
+            if isinstance(item, dict) and "key" in item and "default" in item
+        }
+        merged = {**defaults, **(payload.settings_values or {})}
+        strat.settings_values = merged
+    else:
+        strat.settings_values = payload.settings_values
     db.commit()
     db.refresh(strat)
     return JSONResponse(content=_to_response(strat))

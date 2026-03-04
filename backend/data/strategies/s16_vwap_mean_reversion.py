@@ -28,6 +28,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "vwap_period",      "label": "VWAP Period",            "type": "int",   "default": 100,  "min": 20,   "max": 500,  "step": 1,   "group": "Indicator Settings", "description": "Rolling VWAP lookback window (bars)"},
+    {"key": "band_mult_entry",  "label": "Entry Band Multiplier",  "type": "float", "default": 2.0,  "min": 0.5,  "max": 4.0,  "step": 0.1, "group": "Entry Rules",        "description": "Std-dev multiplier for entry bands (e.g. 2.0 = +/-2 sigma)"},
+    {"key": "band_mult_exit",   "label": "Exit Band Multiplier",   "type": "float", "default": 0.5,  "min": 0.1,  "max": 2.0,  "step": 0.1, "group": "Exit Rules",         "description": "Std-dev multiplier for exit zone near VWAP"},
+    {"key": "vol_spike_mult",   "label": "Volume Spike Multiplier","type": "float", "default": 1.0,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Filters",            "description": "Minimum volume as multiple of average (1.0 = no filter)"},
+    {"key": "vol_avg_period",   "label": "Volume Average Period",  "type": "int",   "default": 20,   "min": 5,    "max": 100,  "step": 1,   "group": "Filters",            "description": "Lookback period for average volume calculation"},
+    {"key": "reversal_confirm", "label": "Require Reversal Candle","type": "bool",  "default": True,                                          "group": "Entry Rules",        "description": "Require a reversal candle pattern before entering"},
+    {"key": "atr_period",       "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR lookback period for stop/target sizing"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",    "type": "float", "default": 1.5,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult",  "type": "float", "default": 2.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance (fallback if VWAP target invalid)"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

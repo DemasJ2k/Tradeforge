@@ -37,6 +37,25 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "adx_period",           "label": "ADX Period",              "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "ADX lookback period for regime detection"},
+    {"key": "adx_trend_threshold",  "label": "ADX Trend Threshold",    "type": "int",   "default": 25,   "min": 15,   "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "ADX level above which market is classified as trending"},
+    {"key": "atr_period",           "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "ATR lookback period for volatility and stop sizing"},
+    {"key": "atr_vol_period",       "label": "ATR Volatility MA",      "type": "int",   "default": 20,   "min": 5,    "max": 100,  "step": 1,   "group": "Indicator Settings", "description": "SMA period of ATR for volatility regime comparison"},
+    {"key": "donchian_period",      "label": "Donchian Period",        "type": "int",   "default": 20,   "min": 5,    "max": 100,  "step": 1,   "group": "Entry Rules",        "description": "Lookback period for Donchian Channel breakout (trend mode)"},
+    {"key": "trend_atr_sl_mult",    "label": "Trend SL Mult",         "type": "float", "default": 2.0,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss in trend-following mode"},
+    {"key": "trend_atr_tp_mult",    "label": "Trend TP Mult",         "type": "float", "default": 3.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit in trend-following mode"},
+    {"key": "rsi_period",           "label": "RSI Period",             "type": "int",   "default": 7,    "min": 2,    "max": 30,   "step": 1,   "group": "Indicator Settings", "description": "RSI lookback period for mean-reversion signals"},
+    {"key": "rsi_os",               "label": "RSI Oversold",           "type": "int",   "default": 35,   "min": 10,   "max": 45,   "step": 1,   "group": "Entry Rules",        "description": "RSI level below which market is oversold (mean-reversion long)"},
+    {"key": "rsi_ob",               "label": "RSI Overbought",         "type": "int",   "default": 65,   "min": 55,   "max": 90,   "step": 1,   "group": "Entry Rules",        "description": "RSI level above which market is overbought (mean-reversion short)"},
+    {"key": "bb_period",            "label": "Bollinger Period",       "type": "int",   "default": 20,   "min": 5,    "max": 100,  "step": 1,   "group": "Indicator Settings", "description": "SMA period for Bollinger Bands (mean-reversion mode)"},
+    {"key": "bb_mult",              "label": "Bollinger Multiplier",   "type": "float", "default": 2.0,  "min": 0.5,  "max": 4.0,  "step": 0.1, "group": "Indicator Settings", "description": "Std-dev multiplier for Bollinger Band width"},
+    {"key": "mr_atr_sl_mult",       "label": "MR SL Mult",            "type": "float", "default": 1.5,  "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss in mean-reversion mode"},
+    {"key": "mr_atr_tp_mult",       "label": "MR TP Mult",            "type": "float", "default": 2.5,  "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit in mean-reversion mode"},
+    {"key": "risk_per_trade",       "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _ema(values, period):
     n = len(values)
     out = [0.0] * n

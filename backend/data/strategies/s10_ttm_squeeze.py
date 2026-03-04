@@ -33,6 +33,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "bb_period", "label": "Bollinger Band Period", "type": "int", "default": 20, "min": 10, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Bollinger Bands moving average and standard deviation"},
+    {"key": "bb_mult", "label": "Bollinger Band Multiplier", "type": "float", "default": 2.0, "min": 1.0, "max": 3.5, "step": 0.1, "group": "Indicator Settings", "description": "Standard deviation multiplier for Bollinger Band width"},
+    {"key": "kc_period", "label": "Keltner Channel Period", "type": "int", "default": 20, "min": 10, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Keltner Channel EMA and ATR"},
+    {"key": "kc_mult", "label": "Keltner Channel Multiplier", "type": "float", "default": 1.5, "min": 0.5, "max": 3.0, "step": 0.1, "group": "Indicator Settings", "description": "ATR multiplier for Keltner Channel width"},
+    {"key": "mom_period", "label": "Momentum Period", "type": "int", "default": 12, "min": 5, "max": 30, "step": 1, "group": "Indicator Settings", "description": "SMA smoothing period for the momentum oscillator"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "min_squeeze_bars", "label": "Min Squeeze Bars", "type": "int", "default": 4, "min": 1, "max": 20, "step": 1, "group": "Entry Rules", "description": "Minimum consecutive bars BB must be inside KC before breakout is valid"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _sma(values, period, start=0):
     n = len(values)
     out = [0.0] * n

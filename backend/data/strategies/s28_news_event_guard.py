@@ -88,6 +88,53 @@ DEFAULTS = {
     "use_ema_filter": True,
 }
 
+
+SETTINGS = [
+    # Mode
+    {"key": "mode",                    "label": "Operating Mode",              "type": "select", "default": "defensive", "options": ["defensive", "reactive", "straddle"],   "group": "Mode",                 "description": "Strategy mode: defensive (close before news), reactive (trade after news), or straddle (bracket orders)"},
+
+    # Timing
+    {"key": "pre_event_minutes",       "label": "Pre-Event Minutes",           "type": "int",   "default": 30,    "min": 5,    "max": 120, "step": 1,    "group": "Timing",               "description": "Minutes before a news event to activate the guard"},
+    {"key": "post_event_minutes",      "label": "Post-Event Minutes",          "type": "int",   "default": 15,    "min": 5,    "max": 60,  "step": 1,    "group": "Timing",               "description": "Minutes after a news event to maintain lockout"},
+    {"key": "reactive_window_min",     "label": "Reactive Window Min (min)",   "type": "int",   "default": 5,     "min": 1,    "max": 30,  "step": 1,    "group": "Timing",               "description": "Earliest minute after release to enter a reactive trade"},
+    {"key": "reactive_window_max",     "label": "Reactive Window Max (min)",   "type": "int",   "default": 15,    "min": 5,    "max": 60,  "step": 1,    "group": "Timing",               "description": "Latest minute after release to enter a reactive trade"},
+
+    # Event Classification
+    {"key": "tier1_lockout",           "label": "Tier 1 Full Lockout",         "type": "bool",  "default": True,                                                "group": "Event Classification", "description": "Full position close and entry lockout for Tier 1 (NFP, FOMC, CPI) events"},
+    {"key": "tier2_widen_stops",       "label": "Tier 2 Widen Stops",          "type": "bool",  "default": True,                                                "group": "Event Classification", "description": "Widen stop-losses during Tier 2 (GDP, PMI) events"},
+    {"key": "tier3_warning_only",      "label": "Tier 3 Warning Only",         "type": "bool",  "default": True,                                                "group": "Event Classification", "description": "Only log warnings for Tier 3 (minor) events without action"},
+
+    # Defensive
+    {"key": "close_before_tier1",      "label": "Close Before Tier 1",         "type": "bool",  "default": True,                                                "group": "Defensive",            "description": "Close all open positions before Tier 1 news events"},
+    {"key": "widen_stop_factor",       "label": "Widen Stop Factor",           "type": "float", "default": 2.0,   "min": 1.0,  "max": 5.0, "step": 0.1,  "group": "Defensive",            "description": "Multiply existing SL distance by this factor during Tier 2 danger zone"},
+    {"key": "reject_entries_in_lockout","label": "Reject Entries in Lockout",  "type": "bool",  "default": True,                                                "group": "Defensive",            "description": "Block all new trade entries during the lockout period"},
+
+    # Reactive
+    {"key": "reactive_atr_mult_sl",    "label": "Reactive SL (ATR)",           "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Reactive",             "description": "ATR multiplier for stop-loss on post-news reactive trades"},
+    {"key": "reactive_atr_mult_tp",    "label": "Reactive TP (ATR)",           "type": "float", "default": 2.0,   "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Reactive",             "description": "ATR multiplier for take-profit on post-news reactive trades"},
+    {"key": "min_spike_atr",           "label": "Min Spike Size (ATR)",        "type": "float", "default": 0.5,   "min": 0.1,  "max": 3.0, "step": 0.1,  "group": "Reactive",             "description": "Minimum price spike in ATR multiples to confirm news direction"},
+    {"key": "momentum_confirm_bars",   "label": "Momentum Confirm Bars",      "type": "int",   "default": 3,     "min": 1,    "max": 10,  "step": 1,    "group": "Reactive",             "description": "Consecutive bars in one direction needed to confirm momentum"},
+
+    # Straddle
+    {"key": "straddle_range_atr",      "label": "Straddle Range (ATR)",        "type": "float", "default": 0.75,  "min": 0.2,  "max": 3.0, "step": 0.05, "group": "Straddle",             "description": "Distance from current price (in ATR) for pending buy/sell stop orders"},
+    {"key": "straddle_sl_atr",         "label": "Straddle SL (ATR)",           "type": "float", "default": 2.0,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Straddle",             "description": "Stop-loss distance in ATR for straddle orders"},
+    {"key": "straddle_tp_atr",         "label": "Straddle TP (ATR)",           "type": "float", "default": 2.0,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Straddle",             "description": "Take-profit distance in ATR for straddle orders"},
+    {"key": "straddle_pre_minutes",    "label": "Straddle Pre-Minutes",        "type": "int",   "default": 5,     "min": 1,    "max": 30,  "step": 1,    "group": "Straddle",             "description": "Minutes before event to place straddle pending orders"},
+
+    # Risk Management
+    {"key": "atr_period",              "label": "ATR Period",                  "type": "int",   "default": 14,    "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management",      "description": "Lookback period for Average True Range calculation"},
+    {"key": "risk_per_trade",          "label": "Risk Per Trade",              "type": "float", "default": 0.005, "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",      "description": "Fraction of account equity risked per trade (0.005 = 0.5%)"},
+    {"key": "max_concurrent",          "label": "Max Concurrent Trades",       "type": "int",   "default": 2,     "min": 1,    "max": 10,  "step": 1,    "group": "Risk Management",      "description": "Maximum number of simultaneously open positions"},
+    {"key": "cooldown_bars",           "label": "Cooldown Bars",               "type": "int",   "default": 5,     "min": 0,    "max": 20,  "step": 1,    "group": "Risk Management",      "description": "Minimum bars between consecutive trades"},
+    {"key": "atr_sl_mult",             "label": "ATR SL Multiplier",           "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Risk Management",      "description": "Default stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",             "label": "ATR TP Multiplier",           "type": "float", "default": 3.0,   "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Risk Management",      "description": "Default take-profit distance as a multiple of ATR"},
+
+    # Filters
+    {"key": "ema_period",              "label": "EMA Period",                  "type": "int",   "default": 50,    "min": 10,   "max": 200, "step": 1,    "group": "Filters",              "description": "EMA period for trend filter"},
+    {"key": "use_ema_filter",          "label": "Use EMA Filter",              "type": "bool",  "default": True,                                                "group": "Filters",              "description": "Only enter trades in the direction of the EMA trend"},
+]
+
+
 # ── Known high-impact events and affected pairs ──────────────────────────
 
 TIER1_EVENTS = {

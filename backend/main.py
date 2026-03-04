@@ -852,17 +852,19 @@ def _seed_all_strategies():
                 Strategy.is_system == True, Strategy.name == name
             ).first()
             if existing:
-                # Back-fill settings_schema if it was previously empty
-                cur_schema = existing.settings_schema
-                is_empty = (
-                    not cur_schema
-                    or cur_schema == "[]" or cur_schema == []
-                    or cur_schema == "null"
-                    or (isinstance(cur_schema, str) and cur_schema.strip() in ("[]", "", "null"))
-                )
-                if is_empty and schema_list:
+                # Always sync settings_schema from strategy file (picks up explicit
+                # SETTINGS list with groups, descriptions, proper ranges, etc.)
+                if schema_list:
                     existing.settings_schema = schema_list
-                    existing.settings_values = values_dict
+                    # Merge: keep user's current values, fill missing with defaults
+                    cur_vals = existing.settings_values or {}
+                    if isinstance(cur_vals, str):
+                        try:
+                            cur_vals = _json.loads(cur_vals)
+                        except (ValueError, TypeError):
+                            cur_vals = {}
+                    merged = {**values_dict, **cur_vals}
+                    existing.settings_values = merged
                     updated += 1
                 # Always update verified_performance and optimized settings
                 if opt_perf:

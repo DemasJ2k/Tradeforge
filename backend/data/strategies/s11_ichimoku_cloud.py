@@ -30,6 +30,20 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "tenkan_period", "label": "Tenkan-sen Period", "type": "int", "default": 9, "min": 5, "max": 20, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Tenkan-sen (conversion line) Donchian midpoint"},
+    {"key": "kijun_period", "label": "Kijun-sen Period", "type": "int", "default": 26, "min": 10, "max": 60, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Kijun-sen (base line) Donchian midpoint"},
+    {"key": "senkou_b_period", "label": "Senkou Span B Period", "type": "int", "default": 52, "min": 20, "max": 120, "step": 1, "group": "Indicator Settings", "description": "Lookback period for Senkou Span B (cloud boundary) Donchian midpoint"},
+    {"key": "displacement", "label": "Cloud Displacement", "type": "int", "default": 26, "min": 10, "max": 60, "step": 1, "group": "Indicator Settings", "description": "Number of bars to shift Senkou spans forward (Kumo displacement)"},
+    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
+    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.5, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
+    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 4.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
+    {"key": "require_chikou", "label": "Require Chikou Confirmation", "type": "bool", "default": True, "group": "Filters", "description": "Require Chikou Span to confirm direction (close vs price 26 bars ago)"},
+    {"key": "require_kumo_twist", "label": "Require Kumo Twist", "type": "bool", "default": True, "group": "Filters", "description": "Require cloud color to align with trade direction (Senkou A vs B)"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _donchian_mid(bars, period, i):
     start = max(0, i - period + 1)
     hh = max(bars[j]["high"] for j in range(start, i + 1))

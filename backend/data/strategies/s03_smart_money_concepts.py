@@ -22,6 +22,16 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "atr_period",     "label": "ATR Period",             "type": "int",   "default": 14,   "min": 5,     "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Lookback period for Average True Range calculation"},
+    {"key": "atr_sl_mult",    "label": "ATR Stop-Loss Multiple", "type": "float", "default": 1.5,  "min": 0.5,   "max": 4.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",    "label": "ATR Take-Profit Multiple", "type": "float", "default": 3.0, "min": 1.0,  "max": 6.0,  "step": 0.1,  "group": "Exit Rules",         "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "swing_lookback", "label": "Swing Lookback",         "type": "int",   "default": 15,   "min": 10,    "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Number of bars to identify swing high/low points"},
+    {"key": "ob_lookback",    "label": "Order Block Lookback",   "type": "int",   "default": 5,    "min": 3,     "max": 20,   "step": 1,    "group": "Entry Rules",        "description": "Number of bars to search back for order blocks after MSS"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",         "type": "float", "default": 0.01, "min": 0.001, "max": 0.1,  "step": 0.001, "group": "Risk Management",   "description": "Fraction of account balance risked per trade"},
+]
+
+
 def _atr(bars, period):
     n = len(bars)
     trs = [0.0] * n

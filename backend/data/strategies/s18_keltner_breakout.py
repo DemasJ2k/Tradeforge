@@ -28,6 +28,21 @@ DEFAULTS = {
 }
 
 
+SETTINGS = [
+    {"key": "kc_ema_period",    "label": "KC EMA Period",          "type": "int",   "default": 20,    "min": 5,    "max": 100,  "step": 1,   "group": "Indicator Settings", "description": "EMA period for Keltner Channel midline"},
+    {"key": "kc_atr_period",    "label": "KC ATR Period",          "type": "int",   "default": 10,    "min": 5,    "max": 50,   "step": 1,   "group": "Indicator Settings", "description": "ATR period used for Keltner Channel width"},
+    {"key": "kc_mult",          "label": "KC ATR Multiplier",      "type": "float", "default": 1.8,   "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Indicator Settings", "description": "ATR multiplier for channel width (lower = more signals)"},
+    {"key": "adx_period",       "label": "ADX Period",             "type": "int",   "default": 14,    "min": 5,    "max": 50,   "step": 1,   "group": "Filters",            "description": "ADX lookback period for trend strength filter"},
+    {"key": "adx_threshold",    "label": "ADX Threshold",          "type": "int",   "default": 20,    "min": 10,   "max": 50,   "step": 1,   "group": "Filters",            "description": "Minimum ADX value to allow breakout entries"},
+    {"key": "atr_sl_period",    "label": "ATR SL Period",          "type": "int",   "default": 14,    "min": 5,    "max": 50,   "step": 1,   "group": "Risk Management",    "description": "ATR period used for stop-loss/take-profit calculation"},
+    {"key": "atr_sl_mult",      "label": "ATR Stop-Loss Mult",    "type": "float", "default": 2.0,   "min": 0.5,  "max": 5.0,  "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",      "label": "ATR Take-Profit Mult",  "type": "float", "default": 4.0,   "min": 0.5,  "max": 10.0, "step": 0.1, "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "exit_on_reenter",  "label": "Exit on Channel Re-entry","type": "bool", "default": False,                                         "group": "Exit Rules",         "description": "Close trade when price re-enters the Keltner Channel"},
+    {"key": "require_momentum", "label": "Require Momentum Confirm","type": "bool", "default": True,                                          "group": "Entry Rules",        "description": "Require close to confirm direction (close > prev close for long)"},
+    {"key": "risk_per_trade",   "label": "Risk Per Trade",         "type": "float", "default": 0.01,  "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade"},
+]
+
+
 def _ema(values, period):
     n = len(values)
     out = [0.0] * n
