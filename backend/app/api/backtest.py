@@ -219,6 +219,10 @@ def run_backtest(
             "risk_params": strategy.risk_params or {},
             "filters": {k: v for k, v in filters.items()
                         if k not in ("mss_config", "gold_bt_config")},
+            # Python strategy support — pass type, file path, and settings
+            "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
+            "file_path": getattr(strategy, "file_path", "") or "",
+            "settings_values": getattr(strategy, "settings_values", {}) or {},
         }
 
         # If MSS/Gold BT, merge their config into risk_params/filters
@@ -455,6 +459,10 @@ def run_backtest_v3(
         "exit_rules": strategy.exit_rules or [],
         "risk_params": strategy.risk_params or {},
         "filters": filters,
+        # Python strategy support — pass type, file path, and settings
+        "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
+        "file_path": getattr(strategy, "file_path", "") or "",
+        "settings_values": getattr(strategy, "settings_values", {}) or {},
     }
 
     symbol = datasource.symbol or "ASSET"

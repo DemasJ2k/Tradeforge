@@ -23,6 +23,7 @@ from app.services.backtest_engine.instrument import get_instrument
 from app.services.backtest_engine.fill_engine import TickMode
 from app.services.backtest_engine.position_sizer import SizingMethod
 from app.services.backtest_engine.builder_strategy import BuilderStrategy
+from app.services.backtest_engine.python_strategy import LegacyPythonStrategy
 from app.services.backtest_engine.walk_forward import (
     walk_forward_backtest as v3_walk_forward,
     WFResult,
@@ -226,8 +227,31 @@ def run_v3_backtest(
         list(strategy_config.get("risk_params", {}).keys()),
     )
 
-    # Build strategy
-    strategy = BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
+    # Build strategy — detect Python vs Builder type
+    strategy_type = strategy_config.get("strategy_type", "builder")
+    file_path = strategy_config.get("file_path", "")
+
+    if strategy_type == "python" and file_path:
+        import os
+        if not os.path.isfile(file_path):
+            logger.warning("Python strategy file not found: %s", file_path)
+            # Fall back to builder strategy
+            strategy = BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
+        else:
+            # Convert bars to dicts for legacy strategy compatibility
+            bar_dicts = [b.to_dict() for b in v3_bars]
+            settings = strategy_config.get("settings_values", {})
+            strategy = LegacyPythonStrategy(
+                file_path=file_path,
+                settings=settings,
+                all_bars=bar_dicts,
+            )
+            logger.info(
+                "Using LegacyPythonStrategy for %s (%s), %d settings keys",
+                symbol, os.path.basename(file_path), len(settings),
+            )
+    else:
+        strategy = BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
 
     # Run engine
     engine = Engine(
