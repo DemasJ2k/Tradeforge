@@ -75,7 +75,7 @@ def list_articles(
     db: Session = Depends(get_db),
 ):
     """List all articles with optional filters."""
-    q = db.query(KnowledgeArticle)
+    q = db.query(KnowledgeArticle).filter(KnowledgeArticle.deleted_at.is_(None))
 
     if category:
         q = q.filter(KnowledgeArticle.category == category)
@@ -170,16 +170,17 @@ def delete_article(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete an article and associated quiz attempts."""
+    """Soft-delete an article (move to recycle bin)."""
+    from datetime import datetime, timezone
+
     article = db.query(KnowledgeArticle).filter(KnowledgeArticle.id == article_id).first()
     if not article:
         raise HTTPException(404, "Article not found")
     if article.author_id and article.author_id != user.id and not getattr(user, "is_admin", False):
         raise HTTPException(403, "Only the author or an admin can delete this article")
 
-    # Delete quiz attempts for this article
-    db.query(QuizAttempt).filter(QuizAttempt.article_id == article_id).delete()
-    db.delete(article)
+    # Soft-delete: mark as deleted, don't remove quiz attempts yet
+    article.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "deleted", "id": article_id}
 
@@ -197,6 +198,7 @@ def list_categories(
             KnowledgeArticle.category,
             func.count(KnowledgeArticle.id).label("count"),
         )
+        .filter(KnowledgeArticle.deleted_at.is_(None))
         .group_by(KnowledgeArticle.category)
         .all()
     )
@@ -313,7 +315,7 @@ def get_progress(
     db: Session = Depends(get_db),
 ):
     """Get user's overall knowledge progress."""
-    total_articles = db.query(KnowledgeArticle).count()
+    total_articles = db.query(KnowledgeArticle).filter(KnowledgeArticle.deleted_at.is_(None)).count()
 
     # Quiz stats
     attempts = db.query(QuizAttempt).filter(QuizAttempt.user_id == user.id).all()
@@ -326,7 +328,7 @@ def get_progress(
     # Per-category progress
     categories = []
     for cat in VALID_CATEGORIES:
-        cat_articles = db.query(KnowledgeArticle).filter(KnowledgeArticle.category == cat).all()
+        cat_articles = db.query(KnowledgeArticle).filter(KnowledgeArticle.category == cat, KnowledgeArticle.deleted_at.is_(None)).all()
         cat_article_ids = [a.id for a in cat_articles]
         cat_attempts = [a for a in attempts if a.article_id in cat_article_ids]
 

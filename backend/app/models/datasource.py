@@ -32,3 +32,4 @@ class DataSource(Base):
     creator_id = Column(Integer, default=1)              # FK to users.id
     is_public = Column(Boolean, default=True)             # visible to all users
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    deleted_at = Column(DateTime, nullable=True, default=None)

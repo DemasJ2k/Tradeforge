@@ -96,6 +96,7 @@ def list_conversations(
     convos = (
         db.query(LLMConversation)
         .filter(LLMConversation.user_id == current_user.id)
+        .filter(LLMConversation.deleted_at.is_(None))
         .order_by(LLMConversation.updated_at.desc())
         .all()
     )
@@ -143,7 +144,9 @@ def delete_conversation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a conversation and its usage records."""
+    """Soft-delete a conversation (move to recycle bin)."""
+    from datetime import datetime, timezone
+
     convo = db.query(LLMConversation).filter(
         LLMConversation.id == conv_id,
         LLMConversation.user_id == current_user.id,
@@ -151,8 +154,8 @@ def delete_conversation(
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    db.query(LLMUsage).filter(LLMUsage.conversation_id == conv_id).delete()
-    db.delete(convo)
+    # Soft-delete: mark as deleted, don't remove usage records yet
+    convo.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "ok"}
 

@@ -29,6 +29,7 @@ class Strategy(Base):
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     creator = relationship("User", back_populates="strategies")
     backtests = relationship("Backtest", back_populates="strategy")

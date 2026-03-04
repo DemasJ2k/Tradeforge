@@ -21,5 +21,6 @@ class Backtest(Base):
     status = Column(String(20), default="pending")  # pending, running, completed, failed
     results = Column(JSON, default=dict)  # Full results blob (stats, elapsed_seconds)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     strategy = relationship("Strategy", back_populates="backtests")

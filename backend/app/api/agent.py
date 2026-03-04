@@ -52,6 +52,7 @@ def list_agents(
     agents = (
         db.query(TradingAgent)
         .filter(TradingAgent.created_by == user.id)
+        .filter(TradingAgent.deleted_at.is_(None))
         .order_by(TradingAgent.created_at.desc())
         .all()
     )
@@ -123,6 +124,8 @@ async def delete_agent(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from datetime import datetime, timezone
+
     agent = db.query(TradingAgent).filter(
         TradingAgent.id == agent_id, TradingAgent.created_by == user.id
     ).first()
@@ -133,9 +136,10 @@ async def delete_agent(
     if algo_engine.is_running(agent_id):
         await algo_engine.stop_agent(agent_id)
 
-    db.delete(agent)
+    # Soft-delete: mark as deleted, don't cascade-delete logs/trades
+    agent.deleted_at = datetime.now(timezone.utc)
     db.commit()
-    return {"detail": "Agent deleted"}
+    return {"detail": "Agent moved to recycle bin"}
 
 
 # ── Controls ─────────────────────────────────────────

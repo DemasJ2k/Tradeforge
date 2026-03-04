@@ -835,6 +835,7 @@ def list_backtests(
     backtests = (
         db.query(Backtest)
         .filter(Backtest.creator_id == current_user.id)
+        .filter(Backtest.deleted_at.is_(None))
         .order_by(Backtest.created_at.desc())
         .limit(50)
         .all()
@@ -886,16 +887,16 @@ def delete_backtest(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a single backtest run."""
+    """Soft-delete a single backtest run (move to recycle bin)."""
     bt = db.query(Backtest).filter(
         Backtest.id == backtest_id,
         Backtest.creator_id == current_user.id,
     ).first()
     if not bt:
         raise HTTPException(404, "Backtest not found")
-    db.delete(bt)
+    bt.deleted_at = datetime.now(timezone.utc)
     db.commit()
-    return {"message": "Deleted"}
+    return {"message": "Moved to recycle bin"}
 
 
 # ── Phase 2C: Indicator Compute API ─────────────────────────────────

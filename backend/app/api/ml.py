@@ -74,7 +74,7 @@ async def list_models(
     from sqlalchemy import or_
     q = db.query(MLModel).filter(
         or_(MLModel.creator_id == user.id, MLModel.creator_id == None)  # noqa: E711
-    )
+    ).filter(MLModel.deleted_at.is_(None))
     if level:
         q = q.filter(MLModel.level == level)
     if status:
@@ -137,19 +137,15 @@ async def delete_model(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete an ML model."""
+    """Soft-delete an ML model (move to recycle bin)."""
     m = db.query(MLModel).filter(MLModel.id == model_id).first()
     if not m:
         raise HTTPException(404, "Model not found")
     if m.creator_id and m.creator_id != user.id:
         raise HTTPException(403, "Not your model")
 
-    # Delete model file
-    if m.model_path:
-        from app.services.ml.trainer import MLTrainer
-        MLTrainer.delete_model(m.model_path)
-
-    db.delete(m)
+    # Soft-delete: mark as deleted, don't delete the model file yet
+    m.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "deleted", "model_id": model_id}
 

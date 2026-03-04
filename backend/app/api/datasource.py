@@ -247,6 +247,7 @@ def list_sources(
     sources = (
         db.query(DataSource)
         .filter(or_(DataSource.creator_id == user.id, DataSource.is_public == True))  # noqa: E712
+        .filter(DataSource.deleted_at.is_(None))
         .order_by(DataSource.created_at.desc())
         .all()
     )
@@ -313,20 +314,16 @@ def delete_source(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from datetime import datetime, timezone
+
     ds = db.query(DataSource).filter(DataSource.id == source_id).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
     if ds.creator_id and ds.creator_id != user.id:
         raise HTTPException(status_code=403, detail="Not your data source")
 
-    # Delete file from disk
-    try:
-        if os.path.exists(ds.filepath):
-            os.remove(ds.filepath)
-    except OSError:
-        pass
-
-    db.delete(ds)
+    # Soft-delete: mark as deleted but keep the file on disk
+    ds.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "deleted", "id": source_id}
 

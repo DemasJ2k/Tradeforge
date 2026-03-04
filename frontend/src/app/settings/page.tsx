@@ -34,6 +34,144 @@ const btnPrimary = "px-4 py-2 rounded-lg bg-fa-accent hover:bg-fa-accent/80 text
 const btnDanger = "px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 text-foreground text-sm font-medium transition-colors";
 const btnSecondary = "px-4 py-2 rounded-lg bg-input-bg hover:bg-input-bg text-foreground/90 text-sm font-medium transition-colors";
 
+// ─── Entity type display config ───
+const ENTITY_LABELS: Record<string, { label: string; icon: string }> = {
+  strategy: { label: 'Strategy', icon: '📋' },
+  datasource: { label: 'Data Source', icon: '📁' },
+  backtest: { label: 'Backtest', icon: '📊' },
+  agent: { label: 'Agent', icon: '🤖' },
+  ml_model: { label: 'ML Model', icon: '🧠' },
+  knowledge: { label: 'Article', icon: '📚' },
+  conversation: { label: 'Conversation', icon: '💬' },
+};
+
+function RecycleBinSection() {
+  const [items, setItems] = React.useState<{id: number; name: string; entity_type: string; deleted_at: string}[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [actionLoading, setActionLoading] = React.useState<string | null>(null);
+
+  const loadBin = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/recycle-bin`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data.items || []);
+      }
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  React.useEffect(() => { loadBin(); }, [loadBin]);
+
+  const handleRestore = async (type: string, id: number) => {
+    const key = `restore-${type}-${id}`;
+    setActionLoading(key);
+    try {
+      await fetch(`${API}/api/recycle-bin/${type}/${id}/restore`, { method: 'POST', headers: authHeaders() });
+      await loadBin();
+    } catch { /* ignore */ }
+    finally { setActionLoading(null); }
+  };
+
+  const handlePermanentDelete = async (type: string, id: number, name: string) => {
+    if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return;
+    const key = `delete-${type}-${id}`;
+    setActionLoading(key);
+    try {
+      await fetch(`${API}/api/recycle-bin/${type}/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await loadBin();
+    } catch { /* ignore */ }
+    finally { setActionLoading(null); }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('Permanently delete ALL items in the recycle bin? This cannot be undone.')) return;
+    setActionLoading('clear-all');
+    try {
+      await fetch(`${API}/api/recycle-bin/clear`, { method: 'DELETE', headers: authHeaders() });
+      await loadBin();
+    } catch { /* ignore */ }
+    finally { setActionLoading(null); }
+  };
+
+  const formatDate = (iso: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-md font-semibold text-foreground">Recently Deleted</h3>
+        {items.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            disabled={actionLoading === 'clear-all'}
+            className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+          >
+            {actionLoading === 'clear-all' ? 'Clearing...' : `Clear All (${items.length})`}
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : items.length === 0 ? (
+        <div className="bg-input-bg rounded-lg p-4 border border-card-border text-center">
+          <p className="text-sm text-muted-foreground">Recycle bin is empty</p>
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {items.map((item) => {
+            const cfg = ENTITY_LABELS[item.entity_type] || { label: item.entity_type, icon: '📄' };
+            const restoreKey = `restore-${item.entity_type}-${item.id}`;
+            const deleteKey = `delete-${item.entity_type}-${item.id}`;
+            return (
+              <div
+                key={`${item.entity_type}-${item.id}`}
+                className="flex items-center justify-between bg-input-bg rounded-lg px-3 py-2 border border-card-border group hover:border-card-border/80"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm">{cfg.icon}</span>
+                  <div className="min-w-0">
+                    <span className="text-sm text-foreground truncate block">{item.name || 'Untitled'}</span>
+                    <span className="text-[10px] text-muted-foreground">{cfg.label} &bull; {formatDate(item.deleted_at)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleRestore(item.entity_type, item.id)}
+                    disabled={actionLoading === restoreKey}
+                    className="px-2 py-1 text-[11px] rounded bg-fa-accent/20 text-fa-accent hover:bg-fa-accent/30 transition-colors disabled:opacity-40"
+                  >
+                    {actionLoading === restoreKey ? '...' : 'Restore'}
+                  </button>
+                  <button
+                    onClick={() => handlePermanentDelete(item.entity_type, item.id, item.name)}
+                    disabled={actionLoading === deleteKey}
+                    className="px-2 py-1 text-[11px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-40"
+                  >
+                    {actionLoading === deleteKey ? '...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Theme presets with preview colors
 const THEME_PRESETS = [
   { id: 'midnight-teal', label: 'Midnight Teal', accent: '#06b6d4', bg: '#0c1425', desc: 'Default dark theme' },
@@ -1323,6 +1461,9 @@ export default function SettingsPage() {
                   Download Backup
                 </button>
               </div>
+
+              <hr className="border-card-border" />
+              <RecycleBinSection />
 
               <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-red-400">Danger Zone</h3>

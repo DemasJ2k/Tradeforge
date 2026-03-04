@@ -51,6 +51,7 @@ def list_strategies(
     strategies = (
         db.query(Strategy)
         .filter(or_(Strategy.creator_id == current_user.id, Strategy.is_system == True))
+        .filter(Strategy.deleted_at.is_(None))
         .order_by(Strategy.is_system.desc(), Strategy.updated_at.desc())
         .all()
     )
@@ -139,11 +140,7 @@ def delete_strategy(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.models.backtest import Backtest
-    from app.models.optimization import Optimization
-    from app.models.trade import Trade
-    from app.models.agent import TradingAgent, AgentLog, AgentTrade
-    from app.models.ml import MLModel
+    from datetime import datetime, timezone
 
     strat = db.query(Strategy).filter(Strategy.id == strategy_id).first()
     if not strat:
@@ -152,23 +149,10 @@ def delete_strategy(
     if not strat.is_system and strat.creator_id != current_user.id:
         raise HTTPException(status_code=404, detail="Strategy not found")
 
-    # Clean up all related records to avoid FK constraint errors
-    # 1. Agent logs and trades (FK → agents), then agents
-    agent_ids = [a.id for a in db.query(TradingAgent.id).filter(TradingAgent.strategy_id == strategy_id).all()]
-    if agent_ids:
-        db.query(AgentLog).filter(AgentLog.agent_id.in_(agent_ids)).delete(synchronize_session=False)
-        db.query(AgentTrade).filter(AgentTrade.agent_id.in_(agent_ids)).delete(synchronize_session=False)
-        db.query(TradingAgent).filter(TradingAgent.id.in_(agent_ids)).delete(synchronize_session=False)
-
-    # 2. Backtests, optimizations, trades, ML models
-    db.query(Backtest).filter(Backtest.strategy_id == strategy_id).delete(synchronize_session=False)
-    db.query(Optimization).filter(Optimization.strategy_id == strategy_id).delete(synchronize_session=False)
-    db.query(Trade).filter(Trade.strategy_id == strategy_id).delete(synchronize_session=False)
-    db.query(MLModel).filter(MLModel.strategy_id == strategy_id).delete(synchronize_session=False)
-
-    db.delete(strat)
+    # Soft-delete: just mark as deleted, don't cascade-delete related records
+    strat.deleted_at = datetime.now(timezone.utc)
     db.commit()
-    return {"detail": "Strategy deleted"}
+    return {"detail": "Strategy moved to recycle bin"}
 
 
 @router.post("/{strategy_id}/duplicate", status_code=status.HTTP_201_CREATED)

@@ -35,6 +35,7 @@ class MLModel(Base):
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     trained_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     predictions = relationship("MLPrediction", back_populates="model", cascade="all, delete-orphan")
 

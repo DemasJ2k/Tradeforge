@@ -29,6 +29,7 @@ from app.api import market as market_api
 from app.api import websocket as ws_api
 from app.api import agent as agent_api
 from app.api import dashboard as dashboard_api
+from app.api import recycle_bin as recycle_bin_api
 from app.api import optimization_phase as optimization_phase_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
@@ -94,6 +95,14 @@ def _run_schema_migrations():
         ("trades", "user_id", "INTEGER"),
         # Strategy folder grouping
         ("strategies", "folder", "VARCHAR(100)"),
+        # Soft-delete (recycle bin) columns
+        ("strategies",           "deleted_at", "TIMESTAMP"),
+        ("datasources",          "deleted_at", "TIMESTAMP"),
+        ("backtests",            "deleted_at", "TIMESTAMP"),
+        ("trading_agents",       "deleted_at", "TIMESTAMP"),
+        ("ml_models",            "deleted_at", "TIMESTAMP"),
+        ("knowledge_articles",   "deleted_at", "TIMESTAMP"),
+        ("llm_conversations",    "deleted_at", "TIMESTAMP"),
     ]
 
     insp = inspect(engine)
@@ -320,6 +329,7 @@ app.include_router(market_api.router)
 app.include_router(ws_api.router)
 app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
+app.include_router(recycle_bin_api.router)
 
 
 def _seed_admin_user():
