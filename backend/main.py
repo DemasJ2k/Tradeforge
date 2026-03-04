@@ -110,7 +110,7 @@ def _run_schema_migrations():
         # AI Copilot settings
         ("user_settings", "copilot_enabled",     "INTEGER DEFAULT 1"),
         ("user_settings", "copilot_autonomy",    "VARCHAR(20) DEFAULT 'assisted'"),
-        ("user_settings", "copilot_permissions", "TEXT DEFAULT '{}'"),
+        ("user_settings", "copilot_permissions", "TEXT"),
     ]
 
     insp = inspect(engine)

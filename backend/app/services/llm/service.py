@@ -312,7 +312,13 @@ class LLMService:
             return
 
         autonomy = getattr(settings, "copilot_autonomy", "assisted") or "assisted"
-        user_overrides = getattr(settings, "copilot_permissions", {}) or {}
+        raw_perms = getattr(settings, "copilot_permissions", {}) or {}
+        if isinstance(raw_perms, str):
+            try:
+                raw_perms = json.loads(raw_perms)
+            except (ValueError, TypeError):
+                raw_perms = {}
+        user_overrides = raw_perms or {}
 
         memories = db.query(LLMMemory).filter(LLMMemory.user_id == user_id).all()
 

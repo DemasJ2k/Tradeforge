@@ -1,3 +1,4 @@
+import json as _json
 import os
 import shutil
 from pathlib import Path
@@ -38,6 +39,19 @@ def _get_or_create_settings(db: Session, user: User) -> UserSettings:
         db.commit()
         db.refresh(s)
     return s
+
+
+def _ensure_dict(val) -> dict:
+    """Ensure a value is a dict (handles TEXT columns that store JSON)."""
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = _json.loads(val)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
 
 
 def _settings_to_response(s: UserSettings) -> SettingsResponse:
@@ -82,7 +96,7 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         notification_telegram_chat_id=s.notification_telegram_chat_id or "",
         copilot_enabled=bool(getattr(s, "copilot_enabled", 1)),
         copilot_autonomy=getattr(s, "copilot_autonomy", "assisted") or "assisted",
-        copilot_permissions=getattr(s, "copilot_permissions", {}) or {},
+        copilot_permissions=_ensure_dict(getattr(s, "copilot_permissions", {}) or {}),
     )
 
 

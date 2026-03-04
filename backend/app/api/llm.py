@@ -401,8 +401,14 @@ def list_copilot_tools(
     ).first()
 
     autonomy = getattr(settings, "copilot_autonomy", "assisted") if settings else "assisted"
-    user_overrides = getattr(settings, "copilot_permissions", {}) if settings else {}
-    user_overrides = user_overrides or {}
+    raw_perms = getattr(settings, "copilot_permissions", {}) if settings else {}
+    if isinstance(raw_perms, str):
+        import json as _json
+        try:
+            raw_perms = _json.loads(raw_perms)
+        except (ValueError, TypeError):
+            raw_perms = {}
+    user_overrides = raw_perms or {}
 
     tools = []
     for name, tool in TOOL_REGISTRY.items():
