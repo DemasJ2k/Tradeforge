@@ -291,27 +291,35 @@ export default function StrategiesPage() {
             <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{s.description}</p>
           )}
           {/* Verified performance badges */}
-          {s.verified_performance && (
+          {s.verified_performance && s.verified_performance.profit_factor != null && (
             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
               <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[10px] flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3" />
-                {s.verified_performance.robustness === "GOOD" ? "Verified" : s.verified_performance.robustness}
+                {s.verified_performance.robustness === "GOOD" ? "Verified" : (s.verified_performance.robustness || "Tested")}
               </Badge>
               <Badge className="bg-blue-500/10 text-blue-400 border-0 text-[10px]">
-                PF {s.verified_performance.profit_factor.toFixed(2)}
+                PF {Number(s.verified_performance.profit_factor).toFixed(2)}
               </Badge>
-              <Badge className="bg-green-500/10 text-green-400 border-0 text-[10px]">
-                WR {s.verified_performance.win_rate.toFixed(0)}%
-              </Badge>
-              <Badge className="bg-amber-500/10 text-amber-400 border-0 text-[10px]">
-                DD {s.verified_performance.max_dd_pct.toFixed(1)}%
-              </Badge>
-              <Badge className="bg-purple-500/10 text-purple-300 border-0 text-[10px]">
-                {s.verified_performance.symbol} {s.verified_performance.tf}
-              </Badge>
-              <Badge className="bg-cyan-500/10 text-cyan-400 border-0 text-[10px]">
-                WF {s.verified_performance.wf_score}%
-              </Badge>
+              {s.verified_performance.win_rate != null && (
+                <Badge className="bg-green-500/10 text-green-400 border-0 text-[10px]">
+                  WR {Number(s.verified_performance.win_rate).toFixed(0)}%
+                </Badge>
+              )}
+              {s.verified_performance.max_dd_pct != null && (
+                <Badge className="bg-amber-500/10 text-amber-400 border-0 text-[10px]">
+                  DD {Number(s.verified_performance.max_dd_pct).toFixed(1)}%
+                </Badge>
+              )}
+              {s.verified_performance.symbol && (
+                <Badge className="bg-purple-500/10 text-purple-300 border-0 text-[10px]">
+                  {s.verified_performance.symbol} {s.verified_performance.tf || ""}
+                </Badge>
+              )}
+              {s.verified_performance.wf_score != null && (
+                <Badge className="bg-cyan-500/10 text-cyan-400 border-0 text-[10px]">
+                  WF {s.verified_performance.wf_score}%
+                </Badge>
+              )}
             </div>
           )}
           <div className="flex flex-wrap gap-1.5 mt-1.5">
