@@ -44,6 +44,7 @@ class MLSignalFilter:
         self.target_config = target_config or {}
         self.mode = mode  # filter | enhance | veto
         self._model = None
+        self._scaler = None
         self._feature_names: list[str] = []
         self._loaded = False
 
@@ -61,6 +62,7 @@ class MLSignalFilter:
             saved = joblib.load(self.model_path)
             self._model = saved["model"]
             self._feature_names = saved["feature_names"]
+            self._scaler = saved.get("scaler")  # Level 3 models have a scaler
             self._loaded = True
             logger.info(
                 "[MLFilter] Loaded model from %s (%d features)",
@@ -110,6 +112,10 @@ class MLSignalFilter:
             # Check for NaN
             if any(math.isnan(v) for v in last_row):
                 return None
+
+            # Apply scaler if model was trained with one (Level 3 models)
+            if self._scaler is not None:
+                last_row = list(self._scaler.transform([last_row])[0])
 
             # Make prediction
             raw_pred = float(self._model.predict([last_row])[0])

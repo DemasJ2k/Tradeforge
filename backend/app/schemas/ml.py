@@ -1,16 +1,28 @@
 """Pydantic schemas for ML Lab endpoints."""
 
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # ── Training ──────────────────────────────────────────
 
+_ALLOWED_MODEL_TYPES = {
+    "random_forest", "xgboost", "gradient_boosting", "lightgbm", "catboost",
+}
+
+
 class MLTrainRequest(BaseModel):
     name: str
     level: int = 1                           # 1, 2, 3
-    model_type: str = "random_forest"        # random_forest, xgboost, gradient_boosting
+    model_type: str = "random_forest"        # random_forest, xgboost, gradient_boosting, lightgbm, catboost
     datasource_id: int                       # CSV data source ID
+
+    @field_validator("model_type")
+    @classmethod
+    def validate_model_type(cls, v):
+        if v not in _ALLOWED_MODEL_TYPES:
+            raise ValueError(f"model_type must be one of {_ALLOWED_MODEL_TYPES}")
+        return v
     strategy_id: Optional[int] = None
     symbol: str = ""
     timeframe: str = "H1"

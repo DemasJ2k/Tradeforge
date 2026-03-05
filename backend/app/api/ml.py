@@ -174,7 +174,7 @@ async def train_model(
     target_config = {"type": payload.target_type, "horizon": payload.target_horizon}
     if payload.level == 3:
         hyperparams = {
-            "sub_type": payload.sub_type or "lstm",
+            "sub_type": payload.sub_type or "ensemble",
             "seq_len": payload.seq_len or 20,
             "hidden_units": payload.hidden_units or 64,
         }
@@ -221,7 +221,7 @@ async def train_model(
         if payload.level == 3:
             result = MLTrainer.train_level3(
                 ohlcv_data=ohlcv_data,
-                sub_type=payload.sub_type or "lstm",
+                sub_type=payload.sub_type or "ensemble",
                 seq_len=payload.seq_len or 20,
                 hidden_units=payload.hidden_units or 64,
                 features_config=features_config,
@@ -474,14 +474,16 @@ async def predict(
     if payload.last_n_bars:
         predictions = predictions[-payload.last_n_bars:]
 
-    # Store predictions
+    # Store predictions (include bar_index for accuracy tracking)
     for p in predictions[-20:]:  # Store last 20 in DB
+        snap = p.get("features", {})
+        snap["_bar_index"] = p.get("bar_index")  # For update-actuals tracking
         db.add(MLPrediction(
             model_id=model_record.id,
             symbol=model_record.symbol,
             prediction=p["prediction"],
             confidence=p["confidence"],
-            features_snapshot=p.get("features", {}),
+            features_snapshot=snap,
         ))
     db.commit()
 
@@ -554,6 +556,81 @@ async def get_predictions(
         }
         for p in preds
     ]
+
+
+# ── Prediction accuracy tracking ─────────────────────
+
+@router.post("/predictions/update-actuals")
+async def update_prediction_actuals(
+    model_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update prediction actual values from latest datasource data.
+    Compares stored predictions against actual price movement
+    and populates the 'actual' and 'correct' fields.
+    """
+    model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+    if not model_record:
+        raise HTTPException(404, "Model not found")
+
+    target_config = model_record.target_config or {}
+    target_type = target_config.get("type", "direction")
+    horizon = target_config.get("horizon", 1)
+
+    # Find datasource
+    ds = None
+    if model_record.symbol and model_record.timeframe:
+        ds = db.query(DataSource).filter(
+            DataSource.symbol == model_record.symbol,
+            DataSource.timeframe == model_record.timeframe,
+        ).first()
+    if not ds:
+        ds = db.query(DataSource).filter(DataSource.symbol == model_record.symbol).first()
+    if not ds:
+        raise HTTPException(404, "No data source found for this model")
+
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
+    if len(ohlcv_data) < horizon + 1:
+        raise HTTPException(400, "Not enough data to compute actuals")
+
+    closes = [d["close"] for d in ohlcv_data]
+
+    # Get predictions that haven't been evaluated yet
+    pending = (
+        db.query(MLPrediction)
+        .filter(MLPrediction.model_id == model_id, MLPrediction.actual.is_(None))
+        .all()
+    )
+
+    updated = 0
+    for pred in pending:
+        # Use features_snapshot to find the bar index if available
+        snap = pred.features_snapshot or {}
+        bar_idx = snap.get("_bar_index")
+        if bar_idx is None:
+            continue
+        if bar_idx + horizon >= len(closes):
+            continue  # Not enough future data yet
+
+        if target_type == "direction":
+            actual_ret = (closes[bar_idx + horizon] - closes[bar_idx]) / closes[bar_idx] if closes[bar_idx] > 0 else 0
+            actual_dir = 1.0 if actual_ret > 0 else 0.0
+            pred.actual = actual_dir
+            pred.correct = 1 if pred.prediction == actual_dir else 0
+        elif target_type == "return":
+            actual_ret = (closes[bar_idx + horizon] - closes[bar_idx]) / closes[bar_idx] if closes[bar_idx] > 0 else 0
+            pred.actual = actual_ret
+            # For regression, "correct" means same direction
+            pred.correct = 1 if (pred.prediction > 0) == (actual_ret > 0) else 0
+        else:
+            continue
+
+        updated += 1
+
+    db.commit()
+    return {"model_id": model_id, "updated": updated, "total_pending": len(pending)}
 
 
 # ── Helpers ───────────────────────────────────────────

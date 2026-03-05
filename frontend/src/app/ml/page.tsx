@@ -54,7 +54,7 @@ export default function MLPage() {
   // Train form state
   const [tName, setTName] = useState("");
   const [tLevel, setTLevel] = useState(2);
-  const [tModelType, setTModelType] = useState("random_forest");
+  const [tModelType, setTModelType] = useState("lightgbm");
   const [tDsId, setTDsId] = useState<number>(0);
   const [tSymbol, setTSymbol] = useState("");
   const [tTimeframe, setTTimeframe] = useState("H1");
@@ -66,7 +66,7 @@ export default function MLPage() {
   const [tFeatures, setTFeatures] = useState<string[]>([]);
 
   // Level 3 config
-  const [l3SubType, setL3SubType] = useState('lstm');
+  const [l3SubType, setL3SubType] = useState('ensemble');
   const [l3SeqLen, setL3SeqLen] = useState(20);
   const [l3Units, setL3Units] = useState(64);
 
@@ -474,7 +474,7 @@ export default function MLPage() {
                 <p className="text-xs text-muted-foreground">
                   {level === 1 && "ML predicts best strategy params for current market regime."}
                   {level === 2 && "Predict next-bar direction/movement using trained classifiers."}
-                  {level === 3 && "LSTM time-series models and stacked ensemble classifiers (RF + XGB + LR)."}
+                  {level === 3 && "Stacked ensemble classifiers (RF + XGB + Logistic Regression meta-learner)."}
                 </p>
                 {ready.length > 0 && (
                   <div className="mt-2 text-xs">
@@ -593,7 +593,7 @@ export default function MLPage() {
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm">
                 <option value={1}>Level 1: Adaptive Params</option>
                 <option value={2}>Level 2: Signal Prediction</option>
-                <option value={3}>Level 3: Advanced ML: LSTM &amp; Stacked Ensemble</option>
+                <option value={3}>Level 3: Advanced ML: Stacked Ensemble</option>
               </select>
             </div>
           </div>
@@ -603,8 +603,10 @@ export default function MLPage() {
               <Label className="text-xs text-muted-foreground mb-1">Model Type</Label>
               <select value={tModelType} onChange={e => setTModelType(e.target.value)}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm">
-                <option value="random_forest">Random Forest</option>
+                <option value="lightgbm">LightGBM (recommended)</option>
+                <option value="catboost">CatBoost</option>
                 <option value="xgboost">XGBoost</option>
+                <option value="random_forest">Random Forest</option>
                 <option value="gradient_boosting">Gradient Boosting</option>
               </select>
             </div>
@@ -665,28 +667,10 @@ export default function MLPage() {
           {/* Level 3 Advanced ML config */}
           {tLevel === 3 && (
             <div className="space-y-3 p-3 rounded-lg border border-card-border bg-background/40">
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1">Model Architecture</Label>
-                <select value={l3SubType} onChange={e => setL3SubType(e.target.value)}
-                  className="w-full rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm">
-                  <option value="lstm">LSTM (time-series sequence model)</option>
-                  <option value="ensemble">Stacked Ensemble (RF + XGB + Logistic)</option>
-                </select>
-              </div>
-              {l3SubType === 'lstm' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1">Sequence Length</Label>
-                    <Input type="number" min={5} max={100} value={l3SeqLen}
-                      onChange={e => setL3SeqLen(Number(e.target.value))} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1">Hidden Units</Label>
-                    <Input type="number" min={16} max={256} step={16} value={l3Units}
-                      onChange={e => setL3Units(Number(e.target.value))} />
-                  </div>
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Level 3 trains a Stacked Ensemble: Random Forest + XGBoost as base models with Logistic Regression as the meta-learner.
+                Features are auto-scaled. This combines the strengths of multiple models for better generalization.
+              </p>
             </div>
           )}
 

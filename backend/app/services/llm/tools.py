@@ -104,7 +104,7 @@ You must return ONLY valid JSON with this structure:
   "action": "train",
   "name": "<descriptive model name>",
   "level": <1|2|3>,
-  "model_type": "<random_forest|xgboost|gradient_boosting>",
+  "model_type": "<lightgbm|catboost|xgboost|random_forest|gradient_boosting>",
   "datasource_id": <int>,
   "symbol": "<auto-detected or specified>",
   "timeframe": "<M1|M5|M15|M30|H1|H4|D1>",
@@ -121,7 +121,8 @@ RULES:
 - Return ONLY the JSON object. No markdown, no code fences, no extra text.
 - If the user mentions a specific dataset, match it by symbol, filename, or ID.
 - If no dataset is specified, pick the most appropriate one from available data.
-- If no model type is specified, use "xgboost" as default (best general performance).
+- If no model type is specified, use "lightgbm" as default (fastest, lowest memory, best for tabular financial data).
+- LightGBM is recommended for most use cases. CatBoost is best for minimal tuning. XGBoost is the industry standard.
 - Level 2 (Signal Prediction) is the default if not specified.
 - Default features: use all available features unless the user wants specific ones.
 - If the user asks for something impossible or unclear, set action to "clarify" and
@@ -194,9 +195,9 @@ def _validate_plan(plan: dict, datasources: list[DataSource]) -> dict:
             plan["explanation"] = "No data sources available. Please upload a CSV dataset first."
 
     # Validate model type
-    valid_types = {"random_forest", "xgboost", "gradient_boosting"}
+    valid_types = {"random_forest", "xgboost", "gradient_boosting", "lightgbm", "catboost"}
     if plan["model_type"] not in valid_types:
-        plan["model_type"] = "xgboost"
+        plan["model_type"] = "lightgbm"
 
     # Validate level
     if plan["level"] not in (1, 2, 3):
@@ -314,6 +315,6 @@ def get_ml_context_for_chat(db: Session, user_id: int) -> dict:
         "data_sources": source_list,
         "trained_models": model_list,
         "available_features": _DEFAULT_FEATURES,
-        "model_types": ["random_forest", "xgboost", "gradient_boosting"],
+        "model_types": ["lightgbm", "catboost", "xgboost", "random_forest", "gradient_boosting"],
         "target_types": ["direction", "return", "volatility"],
     }

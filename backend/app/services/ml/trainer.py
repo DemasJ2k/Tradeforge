@@ -95,13 +95,23 @@ class MLTrainer:
         # Build and train model
         model = _build_model(model_type, hp, target_config)
 
-        # Early stopping for XGBoost
+        # Early stopping for gradient boosting models
         early_rounds = hp.get("early_stopping_rounds", 0)
-        if early_rounds > 0 and model_type == "xgboost":
+        if early_rounds > 0 and model_type in ("xgboost", "lightgbm"):
             try:
                 model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
+                    verbose=False,
+                )
+            except Exception:
+                model.fit(X_train, y_train)
+        elif early_rounds > 0 and model_type == "catboost":
+            try:
+                model.fit(
+                    X_train, y_train,
+                    eval_set=(X_val, y_val),
+                    early_stopping_rounds=early_rounds,
                     verbose=False,
                 )
             except Exception:
@@ -216,9 +226,14 @@ class MLTrainer:
             model = _build_model(model_type, hp, target_config)
 
             early_rounds = hp.get("early_stopping_rounds", 0)
-            if early_rounds > 0 and model_type == "xgboost":
+            if early_rounds > 0 and model_type in ("xgboost", "lightgbm"):
                 try:
                     model.fit(X_train_f, y_train_f, eval_set=[(X_val_f, y_val_f)], verbose=False)
+                except Exception:
+                    model.fit(X_train_f, y_train_f)
+            elif early_rounds > 0 and model_type == "catboost":
+                try:
+                    model.fit(X_train_f, y_train_f, eval_set=(X_val_f, y_val_f), early_stopping_rounds=early_rounds, verbose=False)
                 except Exception:
                     model.fit(X_train_f, y_train_f)
             else:
@@ -244,9 +259,14 @@ class MLTrainer:
 
         final_model = _build_model(model_type, hp, target_config)
         early_rounds = hp.get("early_stopping_rounds", 0)
-        if early_rounds > 0 and model_type == "xgboost":
+        if early_rounds > 0 and model_type in ("xgboost", "lightgbm"):
             try:
                 final_model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+            except Exception:
+                final_model.fit(X_train, y_train)
+        elif early_rounds > 0 and model_type == "catboost":
+            try:
+                final_model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=early_rounds, verbose=False)
             except Exception:
                 final_model.fit(X_train, y_train)
         else:
@@ -323,6 +343,7 @@ class MLTrainer:
         saved = joblib.load(model_path)
         model = saved["model"]
         feature_names = saved["feature_names"]
+        scaler = saved.get("scaler")  # Level 3 models may have a scaler
 
         opens = [d["open"] for d in ohlcv_data]
         highs = [d["high"] for d in ohlcv_data]
@@ -339,11 +360,16 @@ class MLTrainer:
             if any(math.isnan(v) for v in row):
                 continue
 
-            pred = float(model.predict([row])[0])
+            # Apply scaler if model was trained with one (Level 3 models)
+            pred_row = row
+            if scaler is not None:
+                pred_row = list(scaler.transform([row])[0])
+
+            pred = float(model.predict([pred_row])[0])
             # Get prediction probability if available
             confidence = 0.5
             if hasattr(model, "predict_proba"):
-                proba = model.predict_proba([row])
+                proba = model.predict_proba([pred_row])
                 confidence = float(max(proba[0]))
 
             results.append({
@@ -394,25 +420,11 @@ class MLTrainer:
         logger.info("Level 3 training (%s): %d samples, %d features", sub_type, len(X), len(feature_names))
 
         if sub_type == "lstm":
-            model, scaler, val_accuracy, meta = MLTrainer._train_lstm(
-                X, y, feature_names, seq_len=seq_len, units=hidden_units
-            )
-            # Save model — use joblib wrapper so predict pipeline stays consistent
-            model_path = str(_MODEL_DIR / f"model_{model_id}.joblib")
-            joblib.dump({
-                "model": model,
-                "scaler": scaler,
-                "feature_names": feature_names,
-                "target_name": target_name,
-                "model_type": "lstm",
-                "meta": meta,
-            }, model_path)
+            # LSTM redirects to ensemble (not viable on 2GB server, inferior to trees on tabular data)
+            logger.info("LSTM requested — redirecting to stacked ensemble")
+            sub_type = "ensemble"
 
-            val_metrics = {"accuracy": round(val_accuracy, 4)}
-            train_metrics = {"accuracy": round(val_accuracy, 4)}  # LSTM: use val as proxy
-            feature_importance = {}
-
-        else:
+        if sub_type == "ensemble" or True:  # Always ensemble now
             model, scaler, val_accuracy, train_accuracy, meta = MLTrainer._train_ensemble(
                 X, y, feature_names
             )
@@ -466,58 +478,17 @@ class MLTrainer:
 
     @staticmethod
     def _train_lstm(X, y, feature_names, seq_len: int = 20, units: int = 64):
-        """Train LSTM model using Keras/TensorFlow for time-series prediction."""
-        import numpy as np
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.metrics import accuracy_score
-
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
-        # Create sequences
-        def make_sequences(data, labels, sl):
-            Xs, ys = [], []
-            for i in range(len(data) - sl):
-                Xs.append(data[i:i + sl])
-                ys.append(labels[i + sl])
-            return np.array(Xs), np.array(ys)
-
-        X_seq, y_seq = make_sequences(X_scaled, y.values if hasattr(y, "values") else list(y), seq_len)
-
-        if len(X_seq) < 40:
-            raise ValueError(f"Not enough sequences after windowing (got {len(X_seq)}). Use more data or reduce seq_len.")
-
-        split = int(len(X_seq) * 0.8)
-        X_train, X_val = X_seq[:split], X_seq[split:]
-        y_train, y_val = y_seq[:split], y_seq[split:]
-
-        try:
-            import tensorflow as tf
-            from tensorflow import keras
-
-            model = keras.Sequential([
-                keras.layers.LSTM(units, input_shape=(seq_len, X_scaled.shape[1]), return_sequences=False),
-                keras.layers.Dropout(0.2),
-                keras.layers.Dense(32, activation='relu'),
-                keras.layers.Dense(1, activation='sigmoid'),
-            ])
-            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-            model.fit(X_train, y_train, epochs=20, batch_size=32,
-                      validation_data=(X_val, y_val), verbose=0)
-
-            val_pred = (model.predict(X_val, verbose=0) > 0.5).astype(int).flatten()
-            val_accuracy = float(accuracy_score(y_val, val_pred))
-            meta = {"architecture": f"LSTM({units})", "seq_len": seq_len, "sub_type": "lstm"}
-            return model, scaler, val_accuracy, meta
-
-        except ImportError:
-            logger.warning("TensorFlow not available — falling back to ensemble for Level 3 LSTM")
-            # Re-use ensemble training path
-            model, scaler2, val_accuracy, train_accuracy, meta = MLTrainer._train_ensemble(
-                X, y if hasattr(y, "values") else y, feature_names
-            )
-            meta["sub_type"] = "lstm_fallback_ensemble"
-            return model, scaler2, val_accuracy, meta
+        """
+        LSTM is not viable on 2GB Render — always falls back to ensemble.
+        Kept for backward compatibility but immediately redirects.
+        """
+        logger.warning("LSTM not supported (requires TensorFlow + GPU). Using stacked ensemble instead.")
+        model, scaler, val_accuracy, train_accuracy, meta = MLTrainer._train_ensemble(
+            X, y, feature_names
+        )
+        meta["sub_type"] = "ensemble"
+        meta["note"] = "LSTM requested but redirected to ensemble (no TensorFlow on server)"
+        return model, scaler, val_accuracy, meta
 
     @staticmethod
     def _train_ensemble(X, y, feature_names):
@@ -527,7 +498,6 @@ class MLTrainer:
         from sklearn.linear_model import LogisticRegression
         from sklearn.preprocessing import StandardScaler
         from sklearn.metrics import accuracy_score
-        from sklearn.model_selection import train_test_split
 
         try:
             from xgboost import XGBClassifier
@@ -539,13 +509,17 @@ class MLTrainer:
             from sklearn.ensemble import GradientBoostingClassifier
             xgb_est = GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42)
 
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
         y_arr = y.values if hasattr(y, "values") else list(y)
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_scaled, y_arr, test_size=0.2, random_state=42
-        )
+
+        # Chronological split (time-series aware — no shuffling)
+        split_idx = int(len(X) * 0.8)
+        X_train_raw, X_val_raw = X[:split_idx], X[split_idx:]
+        y_train, y_val = y_arr[:split_idx], y_arr[split_idx:]
+
+        # Fit scaler on training data only, then transform both
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train_raw)
+        X_val = scaler.transform(X_val_raw)
 
         estimators = [
             ('rf', RandomForestClassifier(n_estimators=100, random_state=42)),
@@ -627,6 +601,50 @@ def _build_model(model_type: str, hp: dict, target_config: Optional[dict] = None
                 return xgb.XGBRegressor(**common)
         except ImportError:
             logger.warning("XGBoost not installed, falling back to GradientBoosting")
+            model_type = "gradient_boosting"
+
+    elif model_type == "lightgbm":
+        try:
+            import lightgbm as lgb
+            common = dict(
+                n_estimators=hp.get("n_estimators", 200),
+                max_depth=hp.get("max_depth", 6),
+                learning_rate=hp.get("learning_rate", 0.1),
+                subsample=hp.get("subsample", 0.8),
+                colsample_bytree=hp.get("colsample_bytree", 0.8),
+                reg_alpha=hp.get("reg_alpha", 0.0),
+                reg_lambda=hp.get("reg_lambda", 1.0),
+                min_child_weight=hp.get("min_child_weight", 1),
+                random_state=42,
+                n_jobs=-1,
+                verbose=-1,
+            )
+            if is_classification:
+                return lgb.LGBMClassifier(**common)
+            else:
+                return lgb.LGBMRegressor(**common)
+        except ImportError:
+            logger.warning("LightGBM not installed, falling back to GradientBoosting")
+            model_type = "gradient_boosting"
+
+    elif model_type == "catboost":
+        try:
+            from catboost import CatBoostClassifier, CatBoostRegressor
+            common = dict(
+                iterations=hp.get("n_estimators", 200),
+                depth=hp.get("max_depth", 6),
+                learning_rate=hp.get("learning_rate", 0.1),
+                l2_leaf_reg=hp.get("reg_lambda", 3.0),
+                random_seed=42,
+                verbose=0,
+                thread_count=-1,
+            )
+            if is_classification:
+                return CatBoostClassifier(**common)
+            else:
+                return CatBoostRegressor(**common)
+        except ImportError:
+            logger.warning("CatBoost not installed, falling back to GradientBoosting")
             model_type = "gradient_boosting"
 
     if model_type == "gradient_boosting":
