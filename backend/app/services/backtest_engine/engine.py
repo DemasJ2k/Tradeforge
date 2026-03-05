@@ -36,6 +36,7 @@ class EngineConfig:
     commission: float = 7.0         # Per lot round-trip
     point_value: float = 1.0
     slippage_pct: float = 0.0
+    latency_ms: float = 0.0              # Simulated execution latency (ms)
     margin_rate: float = 0.01
     tick_mode: TickMode = TickMode.OHLC_PESSIMISTIC
     max_positions: int = 1
@@ -119,6 +120,7 @@ class Engine:
             tick_mode=self.config.tick_mode,
             slippage_pct=self.config.slippage_pct,
             spread_points=self.config.spread_points,
+            latency_ms=self.config.latency_ms,
         )
 
         # Strategy context

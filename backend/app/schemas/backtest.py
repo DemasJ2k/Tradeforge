@@ -18,6 +18,7 @@ class BacktestRequest(BaseModel):
     use_fast_core: bool = False           # Use Rust/fallback fast runner
     bars_per_day: float = 1.0             # For annualisation (e.g. 144 for M10)
     tick_mode: str = "ohlc_five"          # Tick synthesis mode
+    latency_ms: float = 0.0              # Simulated execution latency (ms)
     # Phase 4 — Multi-symbol portfolio mode
     datasource_ids: Optional[list[int]] = None  # Multiple datasources (overrides datasource_id)
 

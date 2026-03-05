@@ -36,6 +36,7 @@ interface Props {
     tick_mode: string;
     slippage_pct: number;
     margin_rate: number;
+    latency_ms: number;
   }) => void;
 }
 
@@ -55,6 +56,7 @@ export default function BacktestConfigDialog({
   const [tickMode, setTickMode] = useState('ohlc_pessimistic');
   const [slippage, setSlippage] = useState(0);
   const [marginRate, setMarginRate] = useState(0.01);
+  const [latencyMs, setLatencyMs] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Auto-fill point value from datasource
@@ -75,6 +77,7 @@ export default function BacktestConfigDialog({
       tick_mode: tickMode,
       slippage_pct: slippage,
       margin_rate: marginRate,
+      latency_ms: latencyMs,
     });
   };
 
@@ -185,6 +188,7 @@ export default function BacktestConfigDialog({
                     <SelectItem value="ohlc_four">OHLC 4-Point</SelectItem>
                     <SelectItem value="brownian">Brownian Bridge</SelectItem>
                     <SelectItem value="close_only">Close Only</SelectItem>
+                    <SelectItem value="synthetic">Synthetic (20-tick Bridge)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -207,6 +211,18 @@ export default function BacktestConfigDialog({
                     onChange={e => setMarginRate(Number(e.target.value))}
                   />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Latency (ms)</Label>
+                <Input
+                  type="number"
+                  step="10"
+                  min="0"
+                  max="1000"
+                  value={latencyMs}
+                  onChange={e => setLatencyMs(Number(e.target.value))}
+                />
+                <p className="text-[10px] text-muted-foreground">Simulates execution delay. 0 = instant fills, 100-200ms = realistic.</p>
               </div>
             </div>
           )}

@@ -24,6 +24,7 @@ class TickMode(str, Enum):
     OHLC_PESSIMISTIC = "ohlc_pessimistic"  # Always hit SL before TP
     BROWNIAN = "brownian"             # Random walk between OHLC extremes
     CLOSE_ONLY = "close_only"         # Only check at close (fastest, least accurate)
+    SYNTHETIC = "synthetic"            # ~20 constrained Brownian bridge ticks
 
 
 @dataclass
@@ -45,10 +46,12 @@ class FillEngine:
         tick_mode: TickMode = TickMode.OHLC_PESSIMISTIC,
         slippage_pct: float = 0.0,
         spread_points: float = 0.0,
+        latency_ms: float = 0.0,
     ):
         self.tick_mode = tick_mode
         self.slippage_pct = slippage_pct
         self.spread_points = spread_points
+        self.latency_ms = latency_ms
 
     def fill_market_order(self, order: Order, bar: Bar,
                           instrument: Instrument) -> FillResult:
@@ -70,6 +73,18 @@ class FillEngine:
                 fill_price += slippage
             else:
                 fill_price -= slippage
+
+        # Apply latency-based adverse price movement
+        if self.latency_ms > 0 and bar.range > 0:
+            bar_dur_ms = 300_000.0  # Default 5-min bar
+            frac = min(self.latency_ms / bar_dur_ms, 1.0)
+            rand_factor = 0.3 + random.random() * 0.7
+            lat_slip = frac * bar.range * rand_factor
+            if order.is_buy:
+                fill_price += lat_slip
+            else:
+                fill_price -= lat_slip
+            slippage += lat_slip
 
         fill_price = instrument.round_price(fill_price)
         commission = instrument.compute_commission(order.quantity, fill_price)
@@ -143,6 +158,9 @@ class FillEngine:
         if self.tick_mode == TickMode.CLOSE_ONLY:
             return [bar.close]
 
+        if self.tick_mode == TickMode.SYNTHETIC:
+            return self._synthetic_ticks(bar, n_ticks=20)
+
         if self.tick_mode == TickMode.BROWNIAN:
             return self._brownian_ticks(bar, num_ticks=10)
 
@@ -189,6 +207,49 @@ class FillEngine:
             ticks.append(price)
 
         ticks.append(bar.close)
+        return ticks
+
+    def _synthetic_ticks(self, bar: Bar, n_ticks: int = 20) -> list[float]:
+        """Generate ~20 synthetic ticks via constrained Brownian bridge.
+
+        Properties:
+        - Starts at bar.open, ends at bar.close
+        - All prices clamped to [bar.low, bar.high]
+        - Hits bar.high and bar.low at deterministic random positions
+        - Reproducible per bar via timestamp-based seed
+        """
+        if bar.range <= 0:
+            return [bar.open, bar.close]
+
+        seed = int(bar.timestamp * 1000) & 0xFFFFFFFF
+        rng = random.Random(seed)
+
+        ticks = [0.0] * n_ticks
+        ticks[0] = bar.open
+        ticks[-1] = bar.close
+
+        # Reserve slots for high and low
+        high_idx = rng.randint(1, n_ticks - 2)
+        low_idx = rng.randint(1, n_ticks - 2)
+        while low_idx == high_idx:
+            low_idx = rng.randint(1, n_ticks - 2)
+        ticks[high_idx] = bar.high
+        ticks[low_idx] = bar.low
+
+        # Fill remaining via bridge with noise
+        vol = bar.range / n_ticks
+        price = bar.open
+        for i in range(1, n_ticks - 1):
+            if i == high_idx or i == low_idx:
+                price = ticks[i]
+                continue
+            remaining = n_ticks - 1 - i
+            drift = (bar.close - price) / remaining if remaining > 0 else 0
+            noise = rng.gauss(0, vol * 0.5)
+            price = price + drift + noise
+            price = max(bar.low, min(bar.high, price))
+            ticks[i] = price
+
         return ticks
 
     def _check_trigger(self, order: Order, tick_price: float, bar: Bar) -> bool:
@@ -256,6 +317,14 @@ class FillEngine:
                 fill_price += slip
             else:
                 fill_price -= slip
+
+        # Latency slip on stop fills (small adverse adjustment)
+        if order.order_type == OrderType.STOP and self.latency_ms > 0:
+            lat_slip = fill_price * (self.latency_ms / 1_000_000)
+            if order.is_buy:
+                fill_price += lat_slip
+            else:
+                fill_price -= lat_slip
 
         # For gap fills (price jumps past the order), fill at open
         if order.order_type == OrderType.STOP:

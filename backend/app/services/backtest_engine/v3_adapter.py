@@ -116,6 +116,7 @@ def _resolve_tick_mode(mode_str: str) -> TickMode:
         "ohlc_pessimistic": TickMode.OHLC_PESSIMISTIC,
         "brownian": TickMode.BROWNIAN,
         "close_only": TickMode.CLOSE_ONLY,
+        "synthetic": TickMode.SYNTHETIC,
     }
     return mapping.get(mode_str.lower(), TickMode.OHLC_PESSIMISTIC)
 
@@ -180,6 +181,7 @@ def run_v3_backtest(
         commission=commission_per_lot,
         point_value=point_value,
         slippage_pct=slippage_pct,
+        latency_ms=kwargs.get("latency_ms", 0.0),
         margin_rate=margin_rate,
         tick_mode=_resolve_tick_mode(tick_mode),
         max_positions=risk_params.get("max_positions", 1),

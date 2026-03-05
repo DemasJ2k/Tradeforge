@@ -81,6 +81,7 @@ export default function BacktestPage() {
     tick_mode: string;
     slippage_pct: number;
     margin_rate: number;
+    latency_ms: number;
   }) => {
     setLoading(true);
     setConfigOpen(false);

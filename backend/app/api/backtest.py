@@ -612,6 +612,7 @@ def run_backtest_v3(
             slippage_pct=payload.slippage_pct,
             margin_rate=payload.margin_rate,
             tick_mode=getattr(payload, "tick_mode", "ohlc_pessimistic"),
+            latency_ms=getattr(payload, "latency_ms", 0.0),
         )
     except Exception as e:
         logger.exception("V3 backtest failed")
