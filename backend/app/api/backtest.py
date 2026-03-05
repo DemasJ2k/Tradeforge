@@ -990,10 +990,15 @@ def list_backtests(
         .limit(50)
         .all()
     )
+    # Batch-load strategy names
+    strat_ids = {bt.strategy_id for bt in backtests}
+    strats = db.query(Strategy.id, Strategy.name).filter(Strategy.id.in_(strat_ids)).all() if strat_ids else []
+    strat_map = {s.id: s.name for s in strats}
     return [
         {
             "id": bt.id,
             "strategy_id": bt.strategy_id,
+            "strategy_name": strat_map.get(bt.strategy_id, ""),
             "symbol": bt.symbol,
             "timeframe": bt.timeframe,
             "status": bt.status,

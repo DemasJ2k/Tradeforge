@@ -301,6 +301,7 @@ export interface BacktestResponse {
 export interface BacktestListItem {
   id: number;
   strategy_id: number;
+  strategy_name?: string;
   symbol: string;
   timeframe: string;
   status: string;

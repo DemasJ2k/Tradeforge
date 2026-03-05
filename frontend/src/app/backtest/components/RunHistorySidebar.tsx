@@ -37,6 +37,7 @@ export default function RunHistorySidebar({
     ? history.filter(h =>
         h.symbol?.toLowerCase().includes(filter.toLowerCase()) ||
         h.timeframe?.toLowerCase().includes(filter.toLowerCase()) ||
+        h.strategy_name?.toLowerCase().includes(filter.toLowerCase()) ||
         `#${h.id}`.includes(filter)
       )
     : history;
@@ -104,6 +105,9 @@ export default function RunHistorySidebar({
                       {item.symbol || `Run #${item.id}`}
                       {item.timeframe && (
                         <span className="ml-1 text-muted-foreground font-normal">{item.timeframe}</span>
+                      )}
+                      {item.strategy_name && (
+                        <span className="ml-1.5 text-accent/80 font-normal">{item.strategy_name}</span>
                       )}
                     </span>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
