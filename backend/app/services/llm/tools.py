@@ -44,6 +44,9 @@ FEATURE_DESCRIPTIONS = {
     "adx": "Average Directional Index (14 period)",
     "stochastic": "Stochastic %K and %D",
     "volume": "Volume ratio vs 20-bar SMA",
+    "time": "Cyclical hour-of-day and day-of-week (sin/cos encoded)",
+    "regime": "Market regime: ATR ratio, return autocorrelation, volatility clustering",
+    "momentum": "Rate of change (5/10/20) and price acceleration",
 }
 
 
@@ -85,9 +88,10 @@ Existing ML models (most recent):
 Available feature groups:
 {features_text}
 
-Model types: random_forest, xgboost, gradient_boosting
-Levels: 1 (Adaptive Params), 2 (Signal Prediction), 3 (Full ML/RL)
-Target types: direction (binary up/down), return (magnitude), volatility
+Model types: lightgbm (recommended), catboost, xgboost, random_forest, gradient_boosting
+Levels: 1 (Adaptive Params), 2 (Signal Prediction), 3 (Stacked Ensemble)
+Target types: direction (binary up/down), return (magnitude), volatility, triple_barrier (SL/TP barriers)
+Normalization: "none" (default) or "zscore" (rolling Z-score, good for non-stationary data)
 Timeframes: M1, M5, M15, M30, H1, H4, D1
 """
 
@@ -108,9 +112,10 @@ You must return ONLY valid JSON with this structure:
   "datasource_id": <int>,
   "symbol": "<auto-detected or specified>",
   "timeframe": "<M1|M5|M15|M30|H1|H4|D1>",
-  "target_type": "<direction|return|volatility>",
+  "target_type": "<direction|return|volatility|triple_barrier>",
   "target_horizon": <1-20>,
   "features": ["<feature_group_1>", "<feature_group_2>", ...],
+  "normalize": "<none|zscore>",
   "n_estimators": <50-500>,
   "max_depth": <3-20>,
   "learning_rate": <0.01-0.5>,
@@ -125,6 +130,9 @@ RULES:
 - LightGBM is recommended for most use cases. CatBoost is best for minimal tuning. XGBoost is the industry standard.
 - Level 2 (Signal Prediction) is the default if not specified.
 - Default features: use all available features unless the user wants specific ones.
+- Include "time", "regime", and "momentum" features when the user wants comprehensive analysis.
+- Use "zscore" normalization when the user asks for normalized or adaptive features.
+- Use "triple_barrier" target when the user mentions SL/TP-based labeling or real trading conditions.
 - If the user asks for something impossible or unclear, set action to "clarify" and
   put the question in "explanation".
 - Choose sensible hyperparameters based on dataset size.
@@ -169,10 +177,11 @@ def _validate_plan(plan: dict, datasources: list[DataSource]) -> dict:
     plan.setdefault("action", "train")
     plan.setdefault("name", "AI-Configured Model")
     plan.setdefault("level", 2)
-    plan.setdefault("model_type", "xgboost")
+    plan.setdefault("model_type", "lightgbm")
     plan.setdefault("target_type", "direction")
     plan.setdefault("target_horizon", 1)
     plan.setdefault("features", _DEFAULT_FEATURES)
+    plan.setdefault("normalize", "none")
     plan.setdefault("n_estimators", 100)
     plan.setdefault("max_depth", 10)
     plan.setdefault("learning_rate", 0.1)
@@ -204,8 +213,12 @@ def _validate_plan(plan: dict, datasources: list[DataSource]) -> dict:
         plan["level"] = 2
 
     # Validate target type
-    if plan["target_type"] not in ("direction", "return", "volatility"):
+    if plan["target_type"] not in ("direction", "return", "volatility", "triple_barrier"):
         plan["target_type"] = "direction"
+
+    # Validate normalization
+    if plan.get("normalize") not in ("none", "zscore"):
+        plan["normalize"] = "none"
 
     # Clamp hyperparameters
     plan["n_estimators"] = max(10, min(1000, int(plan.get("n_estimators", 100))))
@@ -213,8 +226,8 @@ def _validate_plan(plan: dict, datasources: list[DataSource]) -> dict:
     plan["learning_rate"] = max(0.001, min(1.0, float(plan.get("learning_rate", 0.1))))
     plan["target_horizon"] = max(1, min(20, int(plan.get("target_horizon", 1))))
 
-    # Validate features
-    valid_features = set(_DEFAULT_FEATURES)
+    # Validate features (includes new groups: time, regime, momentum)
+    valid_features = set(_DEFAULT_FEATURES) | {"time", "regime", "momentum"}
     plan["features"] = [f for f in plan["features"] if f in valid_features] or _DEFAULT_FEATURES
 
     return plan
@@ -314,7 +327,8 @@ def get_ml_context_for_chat(db: Session, user_id: int) -> dict:
     return {
         "data_sources": source_list,
         "trained_models": model_list,
-        "available_features": _DEFAULT_FEATURES,
+        "available_features": _DEFAULT_FEATURES + ["time", "regime", "momentum"],
         "model_types": ["lightgbm", "catboost", "xgboost", "random_forest", "gradient_boosting"],
-        "target_types": ["direction", "return", "volatility"],
+        "target_types": ["direction", "return", "volatility", "triple_barrier"],
+        "normalization_options": ["none", "zscore"],
     }

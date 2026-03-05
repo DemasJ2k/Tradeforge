@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import settings
-from app.services.ml.features import compute_features, compute_targets, clean_data
+from app.services.ml.features import compute_features, compute_targets, clean_data, apply_rolling_zscore
 
 logger = logging.getLogger(__name__)
 
@@ -62,22 +62,32 @@ class MLTrainer:
         if n < 100:
             raise ValueError(f"Need at least 100 bars, got {n}")
 
-        # Extract OHLCV
+        # Extract OHLCV + timestamps
         opens = [d["open"] for d in ohlcv_data]
         highs = [d["high"] for d in ohlcv_data]
         lows = [d["low"] for d in ohlcv_data]
         closes = [d["close"] for d in ohlcv_data]
         volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
 
         # Compute features
         feature_names, feature_matrix = compute_features(
-            opens, highs, lows, closes, volumes, features_config
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
         )
         if not feature_names:
             raise ValueError("No features computed — check data")
 
+        # Optional rolling Z-score normalization
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
+
         # Compute targets
-        target_name, targets = compute_targets(closes, target_config)
+        target_name, targets = compute_targets(closes, target_config, highs=highs, lows=lows)
 
         # Clean NaN rows
         feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
@@ -123,7 +133,7 @@ class MLTrainer:
         train_pred = model.predict(X_train)
         val_pred = model.predict(X_val)
 
-        is_classification = (target_config or {}).get("type", "direction") in ("direction",)
+        is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
         train_metrics = _compute_metrics(y_train, train_pred, is_classification)
         val_metrics = _compute_metrics(y_val, val_pred, is_classification)
@@ -193,20 +203,30 @@ class MLTrainer:
         lows = [d["low"] for d in ohlcv_data]
         closes = [d["close"] for d in ohlcv_data]
         volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
 
         feature_names, feature_matrix = compute_features(
-            opens, highs, lows, closes, volumes, features_config
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
         )
         if not feature_names:
             raise ValueError("No features computed")
 
-        target_name, targets = compute_targets(closes, target_config)
+        # Optional rolling Z-score normalization
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
+
+        target_name, targets = compute_targets(closes, target_config, highs=highs, lows=lows)
         feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
 
         if len(X) < 100:
             raise ValueError(f"Not enough valid samples: {len(X)}")
 
-        is_classification = (target_config or {}).get("type", "direction") in ("direction",)
+        is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
         # Walk-forward folds (expanding window)
         segment_size = len(X) // (n_folds + 1)
@@ -350,10 +370,20 @@ class MLTrainer:
         lows = [d["low"] for d in ohlcv_data]
         closes = [d["close"] for d in ohlcv_data]
         volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
 
         _, feature_matrix = compute_features(
-            opens, highs, lows, closes, volumes, features_config
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
         )
+
+        # Apply rolling Z-score if configured
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
 
         results = []
         for i, row in enumerate(feature_matrix):
@@ -404,14 +434,24 @@ class MLTrainer:
         lows = [d["low"] for d in ohlcv_data]
         closes = [d["close"] for d in ohlcv_data]
         volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
 
         feature_names, feature_matrix = compute_features(
-            opens, highs, lows, closes, volumes, features_config
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
         )
         if not feature_names:
             raise ValueError("No features computed — check data")
 
-        target_name, targets = compute_targets(closes, target_config)
+        # Optional rolling Z-score normalization
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
+
+        target_name, targets = compute_targets(closes, target_config, highs=highs, lows=lows)
         feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
 
         if len(X) < 50:
@@ -549,7 +589,7 @@ class MLTrainer:
 
 def _build_model(model_type: str, hp: dict, target_config: Optional[dict] = None):
     """Build a scikit-learn compatible model."""
-    is_classification = (target_config or {}).get("type", "direction") in ("direction",)
+    is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
     if model_type == "random_forest":
         if is_classification:
@@ -676,11 +716,13 @@ def _compute_metrics(y_true: list[float], y_pred, is_classification: bool) -> di
     from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
     if is_classification:
+        # Use weighted average for multiclass (e.g. triple barrier: 0, 0.5, 1)
+        avg = "weighted" if len(set(y_true)) > 2 else "binary"
         return {
             "accuracy": round(accuracy_score(y_true, y_pred), 4),
-            "precision": round(precision_score(y_true, y_pred, zero_division=0), 4),
-            "recall": round(recall_score(y_true, y_pred, zero_division=0), 4),
-            "f1": round(f1_score(y_true, y_pred, zero_division=0), 4),
+            "precision": round(precision_score(y_true, y_pred, zero_division=0, average=avg), 4),
+            "recall": round(recall_score(y_true, y_pred, zero_division=0, average=avg), 4),
+            "f1": round(f1_score(y_true, y_pred, zero_division=0, average=avg), 4),
         }
     else:
         return {

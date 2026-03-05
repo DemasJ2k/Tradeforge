@@ -64,6 +64,12 @@ export default function MLPage() {
   const [tMaxDepth, setTMaxDepth] = useState(10);
   const [tLR, setTLR] = useState(0.1);
   const [tFeatures, setTFeatures] = useState<string[]>([]);
+  const [tNormalize, setTNormalize] = useState("none");
+  const [tZscoreWindow, setTZscoreWindow] = useState(50);
+  // Triple barrier params
+  const [tSlAtrMult, setTSlAtrMult] = useState(1.5);
+  const [tTpAtrMult, setTTpAtrMult] = useState(2.0);
+  const [tMaxHoldBars, setTMaxHoldBars] = useState(10);
 
   // Level 3 config
   const [l3SubType, setL3SubType] = useState('ensemble');
@@ -203,9 +209,12 @@ export default function MLPage() {
         target_type: tTarget,
         target_horizon: tHorizon,
         features: tFeatures.length > 0 ? tFeatures : undefined,
+        normalize: tNormalize,
+        zscore_window: tZscoreWindow,
         n_estimators: tNEst,
         max_depth: tMaxDepth,
         learning_rate: tLR,
+        ...(tTarget === "triple_barrier" && { sl_atr_mult: tSlAtrMult, tp_atr_mult: tTpAtrMult, max_holding_bars: tMaxHoldBars }),
         ...(tLevel === 3 && { sub_type: l3SubType, seq_len: l3SeqLen, hidden_units: l3Units }),
       });
       setSelected(result);
@@ -627,9 +636,28 @@ export default function MLPage() {
                 <option value="direction">Direction (Up/Down)</option>
                 <option value="return">Return Magnitude</option>
                 <option value="volatility">Volatility</option>
+                <option value="triple_barrier">Triple Barrier (SL/TP)</option>
               </select>
             </div>
           </div>
+
+          {/* Triple barrier params */}
+          {tTarget === "triple_barrier" && (
+            <div className="grid grid-cols-3 gap-4 p-3 rounded-lg border border-orange-500/30 bg-orange-500/5">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">SL (ATR ×)</Label>
+                <Input type="number" step={0.1} value={tSlAtrMult} onChange={e => setTSlAtrMult(Number(e.target.value))} min={0.5} max={5} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">TP (ATR ×)</Label>
+                <Input type="number" step={0.1} value={tTpAtrMult} onChange={e => setTTpAtrMult(Number(e.target.value))} min={0.5} max={10} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">Max Hold (bars)</Label>
+                <Input type="number" value={tMaxHoldBars} onChange={e => setTMaxHoldBars(Number(e.target.value))} min={1} max={50} />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
@@ -648,12 +676,20 @@ export default function MLPage() {
               <Input type="number" value={tHorizon} onChange={e => setTHorizon(Number(e.target.value))} min={1} max={20} />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1">Estimators</Label>
-              <Input type="number" value={tNEst} onChange={e => setTNEst(Number(e.target.value))} min={10} max={1000} />
+              <Label className="text-xs text-muted-foreground mb-1">Normalization</Label>
+              <select value={tNormalize} onChange={e => setTNormalize(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm">
+                <option value="none">None</option>
+                <option value="zscore">Rolling Z-Score</option>
+              </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1">Estimators</Label>
+              <Input type="number" value={tNEst} onChange={e => setTNEst(Number(e.target.value))} min={10} max={1000} />
+            </div>
             <div>
               <Label className="text-xs text-muted-foreground mb-1">Max Depth</Label>
               <Input type="number" value={tMaxDepth} onChange={e => setTMaxDepth(Number(e.target.value))} min={2} max={30} />
@@ -662,6 +698,12 @@ export default function MLPage() {
               <Label className="text-xs text-muted-foreground mb-1">Learning Rate</Label>
               <Input type="number" step={0.01} value={tLR} onChange={e => setTLR(Number(e.target.value))} min={0.001} max={1} />
             </div>
+            {tNormalize === "zscore" && (
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">Z-Score Window</Label>
+                <Input type="number" value={tZscoreWindow} onChange={e => setTZscoreWindow(Number(e.target.value))} min={10} max={200} />
+              </div>
+            )}
           </div>
 
           {/* Level 3 Advanced ML config */}

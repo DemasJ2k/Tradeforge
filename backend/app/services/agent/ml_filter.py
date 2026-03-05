@@ -98,10 +98,21 @@ class MLSignalFilter:
             lows = [b["low"] for b in bars]
             closes = [b["close"] for b in bars]
             volumes = [b.get("volume", 0) for b in bars]
+            timestamps = [b.get("datetime") for b in bars]
+            if all(t is None for t in timestamps):
+                timestamps = None
 
             _, feature_matrix = compute_features(
-                opens, highs, lows, closes, volumes, self.features_config
+                opens, highs, lows, closes, volumes, self.features_config,
+                timestamps=timestamps,
             )
+
+            # Apply rolling Z-score if configured
+            normalize = self.features_config.get("normalize", "none")
+            if normalize == "zscore" and feature_matrix:
+                from app.services.ml.features import apply_rolling_zscore
+                zscore_window = self.features_config.get("zscore_window", 50)
+                feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
 
             if not feature_matrix:
                 return None

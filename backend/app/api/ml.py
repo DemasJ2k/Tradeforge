@@ -49,14 +49,20 @@ FEATURE_DESCRIPTIONS = {
     "adx": "Average Directional Index (14 period)",
     "stochastic": "Stochastic %K and %D",
     "volume": "Volume ratio vs 20-bar SMA",
+    "time": "Cyclical hour-of-day and day-of-week (sin/cos encoded)",
+    "regime": "Market regime: ATR ratio, return autocorrelation, volatility clustering",
+    "momentum": "Rate of change (5/10/20) and price acceleration",
 }
+
+
+_ALL_FEATURES = _DEFAULT_FEATURES + ["time", "regime", "momentum"]
 
 
 @router.get("/features")
 async def get_available_features(user: User = Depends(get_current_user)):
     """Get list of available ML features."""
     return FeatureListResponse(
-        available_features=_DEFAULT_FEATURES,
+        available_features=_ALL_FEATURES,
         descriptions=FEATURE_DESCRIPTIONS,
     )
 
@@ -171,7 +177,14 @@ async def train_model(
 
     # Create model record
     features_config = {"features": payload.features or _DEFAULT_FEATURES}
+    if payload.normalize != "none":
+        features_config["normalize"] = payload.normalize
+        features_config["zscore_window"] = payload.zscore_window
     target_config = {"type": payload.target_type, "horizon": payload.target_horizon}
+    if payload.target_type == "triple_barrier":
+        target_config["sl_atr_mult"] = payload.sl_atr_mult
+        target_config["tp_atr_mult"] = payload.tp_atr_mult
+        target_config["max_holding_bars"] = payload.max_holding_bars
     if payload.level == 3:
         hyperparams = {
             "sub_type": payload.sub_type or "ensemble",
@@ -636,7 +649,7 @@ async def update_prediction_actuals(
 # ── Helpers ───────────────────────────────────────────
 
 def _load_csv_ohlcv(file_path: str) -> list[dict]:
-    """Load OHLCV data from a CSV file."""
+    """Load OHLCV data from a CSV file, including timestamps when available."""
     import os
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"CSV not found: {file_path}")
@@ -654,7 +667,40 @@ def _load_csv_ohlcv(file_path: str) -> list[dict]:
                     "volume": float(row.get("volume") or row.get("Volume") or row.get("v") or 0),
                 }
                 if rec["close"] > 0:
+                    # Try to parse datetime from known column names
+                    dt_str = (
+                        row.get("datetime") or row.get("Datetime") or row.get("date")
+                        or row.get("Date") or row.get("time") or row.get("Time")
+                        or row.get("<DATE>") or row.get("timestamp") or ""
+                    )
+                    rec["datetime"] = _parse_csv_datetime(dt_str) if dt_str.strip() else None
                     data.append(rec)
             except (ValueError, TypeError):
                 continue
     return data
+
+
+def _parse_csv_datetime(dt_str: str) -> datetime | None:
+    """Parse datetime from common CSV formats."""
+    dt_str = dt_str.strip()
+    if not dt_str:
+        return None
+
+    # Try common formats
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S",          # ISO
+        "%Y-%m-%d %H:%M:%S",           # Standard
+        "%Y.%m.%d %H:%M:%S",           # MT5 dot format
+        "%Y-%m-%d %H:%M",              # No seconds
+        "%Y.%m.%d %H:%M",              # MT5 no seconds
+        "%Y-%m-%d",                     # Date only
+        "%m/%d/%Y %H:%M:%S",           # US format
+        "%m/%d/%Y %H:%M",              # US no seconds
+        "%d/%m/%Y %H:%M:%S",           # EU format
+    ):
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+
+    return None

@@ -28,9 +28,16 @@ class MLTrainRequest(BaseModel):
     timeframe: str = "H1"
     # Feature config
     features: list[str] = []                 # empty = use all defaults
+    # Normalization
+    normalize: str = "none"                  # "none" or "zscore" (rolling Z-score)
+    zscore_window: int = 50                  # window for rolling Z-score
     # Target config
-    target_type: str = "direction"           # direction, return, volatility
+    target_type: str = "direction"           # direction, return, volatility, triple_barrier
     target_horizon: int = 1                  # bars ahead to predict
+    # Triple barrier params (when target_type = "triple_barrier")
+    sl_atr_mult: float = 1.5                # SL distance in ATR multiples
+    tp_atr_mult: float = 2.0                # TP distance in ATR multiples
+    max_holding_bars: int = 10              # Max bars before time barrier
     # Hyperparameters (common)
     n_estimators: int = 100
     max_depth: int = 10
