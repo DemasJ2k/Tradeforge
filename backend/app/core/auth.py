@@ -70,7 +70,7 @@ def generate_totp_secret() -> str:
 
 def get_totp_provisioning_uri(secret: str, username: str) -> str:
     totp = pyotp.TOTP(secret)
-    return totp.provisioning_uri(name=username, issuer_name="TradeForge")
+    return totp.provisioning_uri(name=username, issuer_name="FlowrexAlgo")
 
 
 def verify_totp_code(secret: str, code: str) -> bool:
@@ -121,11 +121,11 @@ def send_otp_email(user, code: str) -> bool:
 
     return _send_email(
         to_email=email,
-        subject=f"TradeForge – Your verification code: {code}",
-        body_text=f"Your TradeForge verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.",
+        subject=f"FlowrexAlgo – Your verification code: {code}",
+        body_text=f"Your FlowrexAlgo verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.",
         body_html=f"""
         <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #3b82f6;">TradeForge</h2>
+            <h2 style="color: #3b82f6;">FlowrexAlgo</h2>
             <p>Your verification code is:</p>
             <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; text-align: center;
                         padding: 20px; background: #1a1a2e; color: #fff; border-radius: 8px; margin: 16px 0;">

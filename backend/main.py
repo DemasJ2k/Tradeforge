@@ -366,24 +366,24 @@ def _seed_admin_user():
 
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.username == "TradeforgeAdmin").first()
+        existing = db.query(User).filter(User.username == "FlowrexAdmin").first()
         if existing:
             # Reset password to known value
-            existing.password_hash = hash_password("Tradeforge2025!")
+            existing.password_hash = hash_password("Flowrex2025!")
             existing.must_change_password = False
             db.commit()
             logging.getLogger(__name__).info("Admin password reset to default")
             return
         admin = User(
-            username="TradeforgeAdmin",
-            password_hash=hash_password("Tradeforge2025!"),
+            username="FlowrexAdmin",
+            password_hash=hash_password("Flowrex2025!"),
             email="",
             is_admin=True,
             must_change_password=False,
         )
         db.add(admin)
         db.commit()
-        logging.getLogger(__name__).info("Default admin user 'TradeforgeAdmin' created")
+        logging.getLogger(__name__).info("Default admin user 'FlowrexAdmin' created")
     except Exception as e:
         db.rollback()
         logging.getLogger(__name__).error("Failed to seed admin user: %s", e)

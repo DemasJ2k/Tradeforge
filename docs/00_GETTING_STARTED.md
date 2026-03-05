@@ -1,10 +1,10 @@
-# TradeForge — Getting Started Guide
+# FlowrexAlgo — Getting Started Guide
 
-Welcome to **TradeForge**, a professional web-based trading platform for backtesting, optimization, and live trading across multiple brokers and instruments.
+Welcome to **FlowrexAlgo**, a professional web-based trading platform for backtesting, optimization, and live trading across multiple brokers and instruments.
 
 ## Table of Contents
 
-1. [What is TradeForge?](#what-is-tradeforge)
+1. [What is FlowrexAlgo?](#what-is-flowrexalgo)
 2. [System Requirements](#system-requirements)
 3. [Quick Start — Local Setup](#quick-start--local-setup)
 4. [Login & First Steps](#login--first-steps)
@@ -13,9 +13,9 @@ Welcome to **TradeForge**, a professional web-based trading platform for backtes
 
 ---
 
-## What is TradeForge?
+## What is FlowrexAlgo?
 
-TradeForge is an all-in-one trading platform that combines:
+FlowrexAlgo is an all-in-one trading platform that combines:
 
 - **Live Chart Analysis** — Real-time price feeds with technical indicators (MA, EMA, MACD)
 - **Strategy Builder** — Form-based strategy creation with entry/exit rules, indicators, and risk parameters
@@ -87,7 +87,7 @@ npm run build
 
 ### 4. Start Both Servers
 
-From the root `tradeforge/` directory, use the provided launcher:
+From the root `flowrexalgo/` directory, use the provided launcher:
 
 **Windows:**
 ```bash
@@ -110,7 +110,7 @@ Open your browser and go to:
 http://localhost:3000
 ```
 
-You should see the **TradeForge Login** page.
+You should see the **FlowrexAlgo Login** page.
 
 ---
 
@@ -118,7 +118,7 @@ You should see the **TradeForge Login** page.
 
 ### Default Admin Account
 
-**Username:** `TradeforgeAdmin`  
+**Username:** `FlowrexAdmin`  
 **Password:** `admin123`
 
 ⚠️ **IMPORTANT**: Change this password immediately in Settings → Profile.

@@ -78,7 +78,7 @@ class PlaceOrderRequest(BaseModel):
     price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
-    comment: str = "tradeforge"
+    comment: str = "flowrexalgo"
 
 class ModifyOrderRequest(BaseModel):
     order_id: str
@@ -270,7 +270,7 @@ async def close_position(position_id: str, size: Optional[float] = None):
             "position": ticket,
             "deviation": 20,
             "magic": 100,
-            "comment": "tradeforge_close",
+            "comment": "flowrexalgo_close",
             "type_time": mt5.ORDER_TIME_GTC,
         }
         result = _order_send_with_filling_fallback(request)

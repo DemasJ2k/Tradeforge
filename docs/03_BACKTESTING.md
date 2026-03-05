@@ -207,7 +207,7 @@ Each row shows:
 
 **Example**: ❌ "Exit when I know price will be higher tomorrow"
 
-**Solution**: TradeForge automatically prevents this; rules only use past/current bar data.
+**Solution**: FlowrexAlgo automatically prevents this; rules only use past/current bar data.
 
 ### Insufficient Historical Data
 

@@ -2,7 +2,7 @@
 import os, sqlite3
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-conn = sqlite3.connect("data/tradeforge.db")
+conn = sqlite3.connect("data/flowrexalgo.db")
 
 # Rename id=2 to MSS Classic
 conn.execute("UPDATE strategies SET name='MSS Classic – Market Structure Shift' WHERE id=2")

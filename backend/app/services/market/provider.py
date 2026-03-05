@@ -285,13 +285,13 @@ class PolygonProvider(DataProvider):
 class DabentoProvider(DataProvider):
     """
     Databento API provider for CME futures data.
-    Maps TradeForge symbols to CME futures via parent symbology.
+    Maps FlowrexAlgo symbols to CME futures via parent symbology.
     Handles timeframe aggregation (Databento has 1s/1m/1h/1d only).
     """
 
     provider_name = "databento"
 
-    # TradeForge symbol → (dataset, databento parent symbol)
+    # FlowrexAlgo symbol → (dataset, databento parent symbol)
     SYMBOL_MAP: dict[str, tuple[str, str]] = {
         "XAUUSD":  ("GLBX.MDP3", "GC.FUT"),
         "XAGUSD":  ("GLBX.MDP3", "SI.FUT"),

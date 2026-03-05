@@ -1,0 +1,14 @@
+Full rebrand: TradeForge → FlowrexAlgo
+
+- APP_NAME, secret key prefix, SQLite DB name all updated
+- Admin credentials: FlowrexAdmin / Flowrex2025!
+- All notification messages, bot commands, webhook headers
+- LLM system prompts, agent trade comments, strategy authors
+- Broker trade comments (mt5_bridge, mt5_remote)
+- Frontend: backup filename, settings page, indicator libs
+- Docs: all 7 markdown files updated
+- render.yaml: service names updated
+- Telegram bot messages reference FlowrexAlgo
+- Rust module kept as tradeforge_core (binary compat)
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

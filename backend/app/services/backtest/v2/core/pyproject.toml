@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "tradeforge_core"
 version = "0.1.0"
-description = "Rust hot-path engine for TradeForge backtesting"
+description = "Rust hot-path engine for FlowrexAlgo backtesting"
 requires-python = ">=3.10"
 
 [tool.maturin]

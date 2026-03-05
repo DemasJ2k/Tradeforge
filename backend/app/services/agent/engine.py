@@ -666,7 +666,7 @@ class AgentRunner:
                     order_type=OrderType.MARKET,
                     stop_loss=stop_loss,
                     take_profit=take_profit,
-                    comment=f"TradeForge Agent#{self.agent_id}",
+                    comment=f"FlowrexAlgo Agent#{self.agent_id}",
                 )
                 # place_order returns an Order dataclass (not a dict)
                 result = await adapter.place_order(request)
@@ -763,7 +763,7 @@ class AgentRunner:
                     "tp": tp,
                     "deviation": 20,
                     "magic": 234000,
-                    "comment": f"TradeForge Agent#{self.agent_id}",
+                    "comment": f"FlowrexAlgo Agent#{self.agent_id}",
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": filling,
                 }

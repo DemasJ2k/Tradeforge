@@ -9,8 +9,8 @@ BASE = "http://localhost:8000/api"
 
 def login():
     r = requests.post(f"{BASE}/auth/login", json={
-        "username": "TradeforgeAdmin",
-        "password": "Tradeforge2025!",
+        "username": "FlowrexAdmin",
+        "password": "Flowrex2025!",
     })
     r.raise_for_status()
     return r.json()["access_token"]
@@ -22,7 +22,7 @@ def headers(token):
 
 def main():
     print("=" * 80)
-    print("  TRADEFORGE — ML MODEL TRAINING & AGENT SETUP")
+    print("  FLOWREXALGO — ML MODEL TRAINING & AGENT SETUP")
     print("=" * 80)
 
     token = login()

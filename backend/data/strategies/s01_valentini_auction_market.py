@@ -14,7 +14,7 @@ Markets : Universal (futures, forex, crypto, stocks)
 Timeframe: 5m–15m (scalping/intraday)
 """
 
-# ── Settings (tunable via TradeForge UI) ─────────────────────────
+# ── Settings (tunable via FlowrexAlgo UI) ─────────────────────────
 DEFAULTS = {
     "vp_lookback":     100,   # bars for volume profile calculation
     "vp_value_pct":    70.0,  # % of volume defining the value area

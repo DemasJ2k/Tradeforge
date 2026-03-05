@@ -4,7 +4,7 @@ can link their Telegram account by username instead of pasting a Chat ID.
 
 Flow:
   1. User enters their Telegram username in Settings
-  2. User sends /start to the TradeForge bot on Telegram
+  2. User sends /start to the FlowrexAlgo bot on Telegram
   3. This webhook receives the message, matches the username → stores chat_id
   4. Bot replies "✅ Connected!" and notifications start working
 """
@@ -117,14 +117,14 @@ async def telegram_webhook(request: Request):
                 await _reply(
                     int(chat_id),
                     f"✅ <b>Connected!</b>\n\n"
-                    f"Hey {first_name}! Your Telegram is now linked to TradeForge.\n"
+                    f"Hey {first_name}! Your Telegram is now linked to FlowrexAlgo.\n"
                     f"You'll receive notifications for backtests, trades, alerts, and more right here.\n\n"
                     f"💡 Go back to <b>Settings → Notifications</b> to choose which events you want to be notified about.",
                 )
             else:
                 await _reply(
                     int(chat_id),
-                    f"🔍 Username <b>@{tg_username}</b> not found in TradeForge.\n\n"
+                    f"🔍 Username <b>@{tg_username}</b> not found in FlowrexAlgo.\n\n"
                     f"Make sure you've entered your Telegram username in:\n"
                     f"<b>Settings → Notifications → Telegram</b>\n\n"
                     f"Then come back and send /start again.",
@@ -145,7 +145,7 @@ async def telegram_webhook(request: Request):
                     func.lower(UserSettings.notification_telegram_username) == tg_username
                 ).first()
                 if user_settings and user_settings.notification_telegram_chat_id == chat_id:
-                    await _reply(int(chat_id), "✅ Your Telegram is <b>connected</b> to TradeForge. Notifications are active.")
+                    await _reply(int(chat_id), "✅ Your Telegram is <b>connected</b> to FlowrexAlgo. Notifications are active.")
                 else:
                     await _reply(int(chat_id), "⚠️ Not connected. Send /start to link your account.")
             finally:
@@ -162,9 +162,9 @@ async def telegram_webhook(request: Request):
                 if user_settings and user_settings.notification_telegram_chat_id:
                     user_settings.notification_telegram_chat_id = ""
                     db.commit()
-                    await _reply(int(chat_id), "🔌 <b>Disconnected.</b> You won't receive TradeForge notifications anymore.\n\nSend /start to reconnect.")
+                    await _reply(int(chat_id), "🔌 <b>Disconnected.</b> You won't receive FlowrexAlgo notifications anymore.\n\nSend /start to reconnect.")
                 else:
-                    await _reply(int(chat_id), "You're not connected to TradeForge.")
+                    await _reply(int(chat_id), "You're not connected to FlowrexAlgo.")
             finally:
                 db.close()
 
@@ -172,8 +172,8 @@ async def telegram_webhook(request: Request):
     elif text.startswith("/help"):
         await _reply(
             int(chat_id),
-            "🤖 <b>TradeForge Bot Commands</b>\n\n"
-            "/start — Link your Telegram to TradeForge\n"
+            "🤖 <b>FlowrexAlgo Bot Commands</b>\n\n"
+            "/start — Link your Telegram to FlowrexAlgo\n"
             "/status — Check connection status\n"
             "/disconnect — Unlink your account\n"
             "/help — Show this help message",

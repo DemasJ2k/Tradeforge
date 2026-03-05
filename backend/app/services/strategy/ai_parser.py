@@ -1,6 +1,6 @@
 """
 AI Strategy Parser — takes uploaded documents (TXT, PineScript, PDF, MD)
-and uses the LLM to produce a valid TradeForge strategy JSON config.
+and uses the LLM to produce a valid FlowrexAlgo strategy JSON config.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ INDICATOR PARAMS:
 
 SYSTEM_PROMPT = f"""You are a trading strategy conversion engine.
 Your job is to read trading strategy descriptions, PineScript code, or general
-trading documents and convert them into a structured TradeForge strategy JSON.
+trading documents and convert them into a structured FlowrexAlgo strategy JSON.
 
 {STRATEGY_SCHEMA}
 
@@ -231,7 +231,7 @@ async def parse_trading_document(
     user_prompt: str = "",
 ) -> dict:
     """
-    Parse a trading document into a TradeForge strategy JSON.
+    Parse a trading document into a FlowrexAlgo strategy JSON.
 
     Args:
         db: Database session (for loading LLM settings)
@@ -272,7 +272,7 @@ async def parse_trading_document(
         document_text = document_text[:15000] + "\n\n[... truncated ...]"
 
     # ── Build messages ───────────────────────────────────
-    user_msg = f"Convert the following trading strategy document into a TradeForge strategy JSON.\n\n"
+    user_msg = f"Convert the following trading strategy document into a FlowrexAlgo strategy JSON.\n\n"
     if user_prompt:
         user_msg += f"Additional instructions: {user_prompt}\n\n"
     user_msg += f"--- DOCUMENT ({filename}) ---\n{document_text}\n--- END DOCUMENT ---"

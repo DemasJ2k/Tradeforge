@@ -230,7 +230,7 @@ class MT5Adapter(BrokerAdapter):
                 "position": ticket,
                 "deviation": 20,
                 "magic": 100,
-                "comment": "tradeforge_close",
+                "comment": "flowrexalgo_close",
                 "type_time": mt5.ORDER_TIME_GTC,
             }
 
@@ -287,7 +287,7 @@ class MT5Adapter(BrokerAdapter):
                 "price": price,
                 "deviation": 20,
                 "magic": 100,
-                "comment": request.comment or "tradeforge",
+                "comment": request.comment or "flowrexalgo",
                 "type_time": mt5.ORDER_TIME_GTC,
             }
 

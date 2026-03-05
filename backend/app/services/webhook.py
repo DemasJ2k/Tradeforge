@@ -36,7 +36,7 @@ async def dispatch_webhook(
     Returns {success, status_code, message}.
     """
     # Build headers
-    headers = {"Content-Type": "application/json", "User-Agent": "TradeForge-Webhook/1.0"}
+    headers = {"Content-Type": "application/json", "User-Agent": "FlowrexAlgo-Webhook/1.0"}
     if endpoint.headers:
         headers.update(endpoint.headers)
 
@@ -48,10 +48,10 @@ async def dispatch_webhook(
             body_bytes,
             hashlib.sha256,
         ).hexdigest()
-        headers["X-TradeForge-Signature"] = f"sha256={signature}"
+        headers["X-FlowrexAlgo-Signature"] = f"sha256={signature}"
 
     # Add event type header
-    headers["X-TradeForge-Event"] = event_type
+    headers["X-FlowrexAlgo-Event"] = event_type
 
     # Send request
     status_code = None

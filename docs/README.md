@@ -1,6 +1,6 @@
-# TradeForge Documentation
+# FlowrexAlgo Documentation
 
-Complete guide to the TradeForge trading platform.
+Complete guide to the FlowrexAlgo trading platform.
 
 ## 📚 Documentation Index
 
@@ -46,7 +46,7 @@ Open `http://localhost:3000`
 
 ### 2. Login
 
-**Username:** `TradeforgeAdmin`  
+**Username:** `FlowrexAdmin`  
 **Password:** `admin123`
 
 ⚠️ Change password in Settings immediately.
@@ -98,7 +98,7 @@ Go to **Trading** → **Algo Agents** → **New Agent**
 
 | Goal | Guide |
 |------|-------|
-| Set up TradeForge for first time | [Getting Started](./00_GETTING_STARTED.md) |
+| Set up FlowrexAlgo for first time | [Getting Started](./00_GETTING_STARTED.md) |
 | Connect broker (API keys, setup) | [Broker Setup](./01_BROKER_SETUP.md) |
 | Create trading strategy | [Strategy Builder](./02_STRATEGY_BUILDER.md) |
 | Test strategy on historical data | [Backtesting](./03_BACKTESTING.md) |
@@ -293,7 +293,7 @@ More questions? See [FAQ Guide](./06_FAQ_AND_TROUBLESHOOTING.md)
 
 ## 📄 License
 
-TradeForge is proprietary software. All rights reserved.
+FlowrexAlgo is proprietary software. All rights reserved.
 
 ---
 

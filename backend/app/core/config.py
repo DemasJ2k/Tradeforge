@@ -3,15 +3,15 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "TradeForge"
+    APP_NAME: str = "FlowrexAlgo"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
 
     # Database — overridden by DATABASE_URL env var on Render (PostgreSQL)
-    DATABASE_URL: str = f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'tradeforge.db'}"
+    DATABASE_URL: str = f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'flowrexalgo.db'}"
 
     # Auth
-    SECRET_KEY: str = "tradeforge-dev-secret-change-in-production"
+    SECRET_KEY: str = "flowrexalgo-dev-secret-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 

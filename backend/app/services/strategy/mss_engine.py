@@ -1,5 +1,5 @@
 """
-Market Structure Shift (MSS) Strategy Engine — TradeForge Port.
+Market Structure Shift (MSS) Strategy Engine — FlowrexAlgo Port.
 
 Ported from: mt5_live_trading_bot-main/src/mss_strategy_engine.py
 
@@ -10,7 +10,7 @@ Core logic:
   4. TP1/TP2/SL based on ADR10 percentages
   5. Reversal: close ALL positions when new BOS/CHoCH fires
 
-Adapted to work with TradeForge bar format (list[dict]) instead of
+Adapted to work with FlowrexAlgo bar format (list[dict]) instead of
 numpy structured arrays from MT5 directly.
 """
 

@@ -1,6 +1,6 @@
 # Broker Setup Guide
 
-This guide explains how to connect each supported broker to TradeForge. Each broker requires obtaining API credentials and configuring them in the platform.
+This guide explains how to connect each supported broker to FlowrexAlgo. Each broker requires obtaining API credentials and configuring them in the platform.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ This guide explains how to connect each supported broker to TradeForge. Each bro
 
 ## MetaTrader5 (MT5)
 
-MetaTrader5 is the most complete integration for TradeForge, providing:
+MetaTrader5 is the most complete integration for FlowrexAlgo, providing:
 - Live price streaming
 - Real-time chart data
 - Order placement and management
@@ -37,7 +37,7 @@ MetaTrader5 is the most complete integration for TradeForge, providing:
 4. **Enable Auto-Trading**: Tools → Options → Expert Advisors → check "Allow live trading"
 5. **Note** the exact **Server Name** (displayed in terminal title bar)
 
-### Step 2: Add MT5 to TradeForge
+### Step 2: Add MT5 to FlowrexAlgo
 
 1. Go to **Settings** (sidebar)
 2. Go to **Broker Connections** tab (or **Trading Defaults** → scroll to Broker section)
@@ -49,7 +49,7 @@ MetaTrader5 is the most complete integration for TradeForge, providing:
 4. Click **Test Connection**
    - Green checkmark = success
    - Red error = check credentials and server name
-5. Enable **Auto-Connect on Startup** (optional) to auto-login when TradeForge starts
+5. Enable **Auto-Connect on Startup** (optional) to auto-login when FlowrexAlgo starts
 
 ### Step 3: Verify Connection
 
@@ -85,7 +85,7 @@ MetaTrader5 is the most complete integration for TradeForge, providing:
 
 ## Oanda
 
-Oanda provides forex and CFD trading via REST API. TradeForge supports Oanda v20 API.
+Oanda provides forex and CFD trading via REST API. FlowrexAlgo supports Oanda v20 API.
 
 ### Prerequisites
 
@@ -100,14 +100,14 @@ Oanda provides forex and CFD trading via REST API. TradeForge supports Oanda v20
    - Note your **Account ID** (format: `123-456-7890`)
    - Generate a new **API Token** (or use existing one):
      - Click **Generate Token** if creating new
-     - Name: `TradeForge` (for identification)
+     - Name: `FlowrexAlgo` (for identification)
      - Permissions: Select all (read/write account, read/write trades)
      - Copy the token immediately (you can't view it again)
 4. Note the **Environment**:
    - **fxTrade** = Live trading (real money)
    - **fxTrade Practice** = Demo account (sandbox)
 
-### Step 2: Add Oanda to TradeForge
+### Step 2: Add Oanda to FlowrexAlgo
 
 1. Go to **Settings** → **Broker Connections** (or **Trading Defaults**)
 2. Under **Oanda** section:
@@ -179,7 +179,7 @@ Coinbase provides crypto trading via REST and WebSocket APIs.
    - **API Secret** (private key)
    - **Passphrase** (set during creation)
 
-### Step 2: Add Coinbase to TradeForge
+### Step 2: Add Coinbase to FlowrexAlgo
 
 1. Go to **Settings** → **Broker Connections**
 2. Under **Coinbase** section:
@@ -255,7 +255,7 @@ Tradovate provides futures trading via REST API and WebSocket.
    - **Live**: `https://api.tradovate.net`
    - **Demo**: `https://demo.tradovate.net`
 
-### Step 2: Add Tradovate to TradeForge
+### Step 2: Add Tradovate to FlowrexAlgo
 
 1. Go to **Settings** → **Broker Connections**
 2. Under **Tradovate** section:
@@ -314,7 +314,7 @@ Full list: See [Tradovate Contract List](https://www.tradovate.com/contracts)
 ### General Issues
 
 **"Broker connection fails after 1-2 days"**
-- API tokens may expire; regenerate and update in TradeForge
+- API tokens may expire; regenerate and update in FlowrexAlgo
 - Auto-reconnect is in development
 
 **"Data is delayed or missing"**
@@ -348,7 +348,7 @@ Full list: See [Tradovate Contract List](https://www.tradovate.com/contracts)
 2. **Use API Key Permissions** — limit scope to what's needed (trading only, no account modification)
 3. **Whitelist IPs** (where available) — restrict API access to your machine
 4. **Regenerate keys regularly** — if exposed, immediately revoke and create new
-5. **Store safely** — TradeForge encrypts API keys at rest; don't commit to git
+5. **Store safely** — FlowrexAlgo encrypts API keys at rest; don't commit to git
 6. **Enable 2FA** — on broker accounts for additional security
 
 ---

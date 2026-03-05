@@ -1,5 +1,5 @@
 """
-TradeForge Core — Rust-accelerated hot-path engine.
+FlowrexAlgo Core — Rust-accelerated hot-path engine.
 
 Provides FastRunner, FastPortfolio, indicators, and tick matching
 backed by a compiled Rust extension (tradeforge_core, via PyO3).

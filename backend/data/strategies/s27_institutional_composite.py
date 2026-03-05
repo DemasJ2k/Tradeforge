@@ -43,7 +43,7 @@ Risk Management:
   - Cooldown between trades
   - Position sizing via risk percentage
 
-Author: TradeForge AI
+Author: FlowrexAlgo AI
 Version: 2.0 (research-based rebuild)
 """
 

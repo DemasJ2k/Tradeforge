@@ -193,8 +193,8 @@ def test_email_settings(*, to_email: str) -> bool:
     """Send a test email to the given address using app-level SMTP."""
     return _send_email(
         to_email=to_email,
-        subject="TradeForge – Test Notification",
-        body_text="This is a test email from TradeForge. If you received this, your email notifications are configured correctly!",
+        subject="FlowrexAlgo – Test Notification",
+        body_text="This is a test email from FlowrexAlgo. If you received this, your email notifications are configured correctly!",
     )
 
 
@@ -206,5 +206,5 @@ async def test_telegram_settings(*, chat_id: str) -> bool:
         return False
     return await _send_telegram_async(
         bot_token, chat_id,
-        "✅ <b>TradeForge</b> – Test notification received! Your Telegram notifications are configured correctly.",
+        "✅ <b>FlowrexAlgo</b> – Test notification received! Your Telegram notifications are configured correctly.",
     )

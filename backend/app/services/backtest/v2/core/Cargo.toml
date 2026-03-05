@@ -2,7 +2,7 @@
 name = "tradeforge_core"
 version = "0.1.0"
 edition = "2021"
-description = "Rust hot-path engine for TradeForge backtesting (PyO3 bindings)"
+description = "Rust hot-path engine for FlowrexAlgo backtesting (PyO3 bindings)"
 
 [lib]
 name = "tradeforge_core"

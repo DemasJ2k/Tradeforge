@@ -35,7 +35,7 @@ STRADDLE MODE:
   - One gets triggered by the news spike, cancel the other
   - Tight TP (1:1 RR), wider stop (2x ATR)
 
-Author: TradeForge AI
+Author: FlowrexAlgo AI
 Version: 1.0
 """
 

@@ -1,5 +1,5 @@
 """
-TradeForge Backtesting Engine V2
+FlowrexAlgo Backtesting Engine V2
 
 Professional-grade event-driven backtesting engine with:
 - Proper event queue architecture

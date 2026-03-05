@@ -40,7 +40,7 @@ _SYMBOL_MAP: dict[str, tuple[str, str]] = {
     "SI":      ("GLBX.MDP3", "SI.FUT"),
 }
 
-# Reverse map: Databento parent symbol → TradeForge symbol
+# Reverse map: Databento parent symbol → FlowrexAlgo symbol
 _REVERSE_MAP: dict[str, str] = {}
 for _tf_sym, (_, _db_sym) in _SYMBOL_MAP.items():
     if _db_sym not in _REVERSE_MAP:
@@ -59,7 +59,7 @@ class DabentoStreamer:
     def __init__(self):
         self._live_client = None
         self._thread: Optional[threading.Thread] = None
-        self._subscribed_symbols: set[str] = set()  # TradeForge symbol names
+        self._subscribed_symbols: set[str] = set()  # FlowrexAlgo symbol names
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -173,7 +173,7 @@ class DabentoStreamer:
                 # Extract raw symbol from record
                 raw_symbol = getattr(rec, "symbol", "") or ""
 
-                # Map back to TradeForge symbol
+                # Map back to FlowrexAlgo symbol
                 tf_symbol = None
                 for db_sym, tf_sym_candidate in _REVERSE_MAP.items():
                     root = db_sym.split(".")[0]  # "GC" from "GC.FUT"

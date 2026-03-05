@@ -94,7 +94,7 @@ Timeframes: M1, M5, M15, M30, H1, H4, D1
 
 # ── LLM interpretation prompt ────────────────────────────────────────
 
-ML_SYSTEM_PROMPT = """You are an ML training configuration assistant for the TradeForge platform.
+ML_SYSTEM_PROMPT = """You are an ML training configuration assistant for the FlowrexAlgo platform.
 
 Your job is to interpret natural language descriptions of ML training requests and
 convert them into a structured JSON configuration.

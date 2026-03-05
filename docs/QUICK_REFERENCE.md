@@ -1,4 +1,4 @@
-# TradeForge Quick Reference
+# FlowrexAlgo Quick Reference
 
 Cheat sheet with common tasks, shortcuts, and quick lookups.
 
@@ -395,7 +395,7 @@ Every month, review:
 - **Coinbase API Docs**: https://docs.cloud.coinbase.com
 - **Tradovate API**: https://api.tradovate.com
 - **TradingView Data**: https://tradingview.com/data
-- **TradeForge GitHub**: https://github.com/DemasJ2k/Tradeforge
+- **FlowrexAlgo GitHub**: https://github.com/DemasJ2k/Tradeforge
 
 ---
 

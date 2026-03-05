@@ -52,7 +52,7 @@ An **Algo Agent** is an automated trading bot that:
 
 ### Step 3: Choose Trading Mode
 
-TradeForge offers 3 modes:
+FlowrexAlgo offers 3 modes:
 
 #### Mode 1: Confirmation Mode ⚙️ (Recommended for beginners)
 

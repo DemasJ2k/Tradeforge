@@ -241,7 +241,7 @@ def run_single(strategy_name: str, instrument: str, tf: str) -> dict:
 
 def main():
     print("=" * 80)
-    print("  TRADEFORGE BATCH BACKTEST RUNNER")
+    print("  FLOWREXALGO BATCH BACKTEST RUNNER")
     print(f"  Balance: ${INITIAL_BALANCE:,.0f}  |  Spread: {SPREAD_POINTS}  |  Commission: {COMMISSION}")
     print("=" * 80)
 

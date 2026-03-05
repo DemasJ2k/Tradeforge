@@ -4,11 +4,11 @@ Quick answers to common questions and solutions to problems.
 
 ## Getting Started
 
-### Q: Do I need coding knowledge to use TradeForge?
+### Q: Do I need coding knowledge to use FlowrexAlgo?
 
 **A**: No. The Strategy Builder is fully visual/form-based. No code required.
 
-### Q: Can I use TradeForge on Mac/Linux?
+### Q: Can I use FlowrexAlgo on Mac/Linux?
 
 **A**: Yes, but most features require a Windows PC for MT5 support. Oanda, Coinbase, Tradovate work on all platforms.
 
@@ -206,7 +206,7 @@ DateTime,Open,High,Low,Close,Volume
 
 ### Q: Can I upload data from TradingView?
 
-**A**: Yes. Export as CSV from TradingView and upload to TradeForge.
+**A**: Yes. Export as CSV from TradingView and upload to FlowrexAlgo.
 
 ### Q: Why does my data import fail?
 
@@ -298,7 +298,7 @@ DateTime,Open,High,Low,Close,Volume
 
 **A**: Yes, CSV upload supports any OHLCV data. Future: integration with Polygon.io, Databento for real-time feeds.
 
-### Q: Does TradeForge support crypto futures?
+### Q: Does FlowrexAlgo support crypto futures?
 
 **A**: Yes via Coinbase (for spot) and Tradovate (for futures). MT5 also offers some CFD tokens.
 

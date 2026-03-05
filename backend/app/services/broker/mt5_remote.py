@@ -216,7 +216,7 @@ class MT5RemoteAdapter(BrokerAdapter):
                     "price": request.price,
                     "stop_loss": request.stop_loss,
                     "take_profit": request.take_profit,
-                    "comment": request.comment or "tradeforge",
+                    "comment": request.comment or "flowrexalgo",
                 },
             )
             resp.raise_for_status()

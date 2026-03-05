@@ -16,7 +16,7 @@ The Strategy Builder is a form-based interface for creating trading strategies w
 
 ## Overview
 
-A trading strategy in TradeForge consists of:
+A trading strategy in FlowrexAlgo consists of:
 
 | Component | Purpose |
 |-----------|---------|

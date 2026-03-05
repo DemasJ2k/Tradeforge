@@ -275,7 +275,7 @@ def download_backup(
 
     return FileResponse(
         path=str(backup_path),
-        filename=f"tradeforge_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+        filename=f"flowrexalgo_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
         media_type="application/octet-stream",
     )
 

@@ -23,7 +23,7 @@ from app.services.llm.providers import get_provider, estimate_cost
 
 # ── System prompt template ──
 
-BASE_SYSTEM_PROMPT = """You are TradeForge AI, an expert trading assistant embedded in a trading platform.
+BASE_SYSTEM_PROMPT = """You are FlowrexAlgo AI, an expert trading assistant embedded in a trading platform.
 
 Your capabilities:
 - Explain trading concepts, indicators, and strategies

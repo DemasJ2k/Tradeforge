@@ -1818,7 +1818,7 @@ export default function SettingsPage() {
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `tradeforge-backup-${new Date().toISOString().slice(0, 10)}.db`;
+                      a.download = `flowrexalgo-backup-${new Date().toISOString().slice(0, 10)}.db`;
                       a.click();
                       URL.revokeObjectURL(url);
                     } catch {
@@ -1910,7 +1910,7 @@ export default function SettingsPage() {
               ) : null}
 
               <p className="text-xs text-muted-foreground mb-2">
-                Enter your Telegram username below, then send <b>/start</b> to the TradeForge bot on Telegram to connect.
+                Enter your Telegram username below, then send <b>/start</b> to the FlowrexAlgo bot on Telegram to connect.
               </p>
               <div className="space-y-3">
                 <Field label="Your Telegram Username">
@@ -1951,7 +1951,7 @@ export default function SettingsPage() {
                   <div className="text-xs text-muted-foreground space-y-1 mt-2 p-3 rounded-lg bg-card-bg/50 border border-card-border">
                     <p className="font-semibold text-foreground mb-1">How to connect:</p>
                     <p>1. Enter your Telegram username above and <b>Save</b></p>
-                    <p>2. Open Telegram and search for the <b>TradeForge bot</b></p>
+                    <p>2. Open Telegram and search for the <b>FlowrexAlgo bot</b></p>
                     <p>3. Send <b>/start</b> to the bot</p>
                     <p>4. Refresh this page — status will show <span className="text-green-400">Connected</span></p>
                   </div>
