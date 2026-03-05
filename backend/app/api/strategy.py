@@ -22,27 +22,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 
 
+def _safe_json(val, fallback):
+    """Ensure JSON column value is deserialized (SQLite stores JSON as TEXT)."""
+    if val is None:
+        return fallback
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (ValueError, TypeError):
+            return fallback
+    return val
+
+
 def _to_response(s: Strategy) -> dict:
     return {
         "id": s.id,
         "name": s.name,
         "description": s.description or "",
-        "indicators": s.indicators or [],
-        "entry_rules": s.entry_rules or [],
-        "exit_rules": s.exit_rules or [],
-        "risk_params": s.risk_params or {},
-        "filters": s.filters or {},
+        "indicators": _safe_json(s.indicators, []),
+        "entry_rules": _safe_json(s.entry_rules, []),
+        "exit_rules": _safe_json(s.exit_rules, []),
+        "risk_params": _safe_json(s.risk_params, {}),
+        "filters": _safe_json(s.filters, {}),
         "creator_id": s.creator_id,
         "is_system": bool(s.is_system),
         "strategy_type": s.strategy_type or "builder",
         "file_path": s.file_path,
-        "settings_schema": s.settings_schema or [],
-        "settings_values": s.settings_values or {},
+        "settings_schema": _safe_json(s.settings_schema, []),
+        "settings_values": _safe_json(s.settings_values, {}),
         "folder": s.folder or None,
-        "verified_performance": (
-            json.loads(s.verified_performance) if isinstance(s.verified_performance, str)
-            else s.verified_performance
-        ) if hasattr(s, 'verified_performance') and s.verified_performance else None,
+        "verified_performance": _safe_json(s.verified_performance, None),
         "created_at": s.created_at.isoformat() if s.created_at else "",
         "updated_at": s.updated_at.isoformat() if s.updated_at else "",
     }
@@ -177,18 +186,21 @@ def duplicate_strategy(
     if not strat:
         raise HTTPException(status_code=404, detail="Strategy not found")
 
+    import copy as _copy
     new_strat = Strategy(
         name=f"{strat.name} (copy)",
         description=strat.description,
-        indicators=strat.indicators,
-        entry_rules=strat.entry_rules,
-        exit_rules=strat.exit_rules,
-        risk_params=strat.risk_params,
-        filters=strat.filters,
+        indicators=_copy.deepcopy(strat.indicators),
+        entry_rules=_copy.deepcopy(strat.entry_rules),
+        exit_rules=_copy.deepcopy(strat.exit_rules),
+        risk_params=_copy.deepcopy(strat.risk_params),
+        filters=_copy.deepcopy(strat.filters),
+        is_system=False,  # copies are always user-owned
         strategy_type=strat.strategy_type,
         file_path=strat.file_path,
-        settings_schema=strat.settings_schema,
-        settings_values=strat.settings_values,
+        settings_schema=_copy.deepcopy(strat.settings_schema),
+        settings_values=_copy.deepcopy(strat.settings_values),
+        verified_performance=None,  # don't inherit verified badge
         creator_id=current_user.id,
     )
     db.add(new_strat)

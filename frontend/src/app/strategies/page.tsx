@@ -344,14 +344,19 @@ export default function StrategiesPage() {
           </div>
         </div>
         <div className="flex items-center gap-1 ml-3 shrink-0">
-          {s.settings_schema?.length > 0 && (s.strategy_type !== "builder" || s.is_system) && (
+          {s.settings_schema?.length > 0 && (
             <Button variant="ghost" size="icon" onClick={() => setSettingsStrategy(s)} title="Strategy Settings" className="h-7 w-7 text-muted-foreground hover:text-accent">
               <Settings className="h-3.5 w-3.5" />
             </Button>
           )}
-          {(!s.strategy_type || s.strategy_type === "builder") && !(s.is_system && s.settings_schema?.length > 0) && (
-            <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title={s.is_system ? "View" : "Edit"} className="h-7 w-7 text-muted-foreground hover:text-accent">
-              {s.is_system ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          {(!s.strategy_type || s.strategy_type === "builder") && !s.is_system && (
+            <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title="Edit" className="h-7 w-7 text-muted-foreground hover:text-accent">
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {s.strategy_type && s.strategy_type !== "builder" && !s.is_system && (
+            <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title="View" className="h-7 w-7 text-muted-foreground hover:text-accent">
+              <Eye className="h-3.5 w-3.5" />
             </Button>
           )}
           <Button variant="ghost" size="icon" onClick={() => handleDuplicate(s.id)} title="Duplicate" className="h-7 w-7 text-muted-foreground hover:text-foreground">

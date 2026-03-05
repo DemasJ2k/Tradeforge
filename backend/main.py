@@ -908,8 +908,11 @@ def _seed_all_strategies():
             _log.info("Seeded %d new + updated %d existing strategies (catalog: %d)", added, updated, len(catalog))
 
         # ── Seed V2-native Market Structure Signal (ADR) strategy ────────
+        _log.info("Checking V2 MSS strategy seed...")
         MSS_NAME = "Market Structure Signal (ADR)"
         existing_mss = db.query(Strategy).filter(Strategy.name == MSS_NAME).first()
+        if existing_mss:
+            _log.info("V2 MSS already exists (id=%s)", existing_mss.id)
         if not existing_mss:
             mss_defaults = {
                 "swing_lb": 42, "tp1_pct": 15.0, "tp2_pct": 25.0,
