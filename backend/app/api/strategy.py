@@ -301,6 +301,18 @@ def update_strategy_settings(
         strat.settings_values = merged
     else:
         strat.settings_values = payload.settings_values
+        merged = payload.settings_values or {}
+
+    # Sync to mss_config if this is an MSS strategy
+    if strat.filters and isinstance(strat.filters, dict) and "mss_config" in strat.filters:
+        updated_filters = dict(strat.filters)
+        updated_mss = dict(updated_filters["mss_config"])
+        for k, v in (merged or {}).items():
+            if k in updated_mss:
+                updated_mss[k] = v
+        updated_filters["mss_config"] = updated_mss
+        strat.filters = updated_filters
+
     db.commit()
     db.refresh(strat)
     return JSONResponse(content=_to_response(strat))

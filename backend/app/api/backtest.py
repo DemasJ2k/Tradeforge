@@ -342,6 +342,15 @@ def run_backtest(
         # If MSS/Gold BT, merge their config into risk_params/filters
         if mss_config:
             strategy_config["filters"]["mss_config"] = mss_config
+            # Merge user settings_values overrides into mss_config
+            sv = strategy_config.get("settings_values") or {}
+            if sv:
+                merged_mss = dict(mss_config)
+                for k in ("swing_lb", "tp1_pct", "tp2_pct", "sl_pct",
+                           "use_pullback", "pb_pct", "confirm"):
+                    if k in sv:
+                        merged_mss[k] = sv[k]
+                strategy_config["filters"]["mss_config"] = merged_mss
         if gold_bt_config:
             strategy_config["filters"]["gold_bt_config"] = gold_bt_config
 
@@ -576,6 +585,18 @@ def run_backtest_v3(
         "file_path": getattr(strategy, "file_path", "") or "",
         "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
     }
+
+    # Merge user settings_values overrides into mss_config for V3 path
+    mss_wf = filters.get("mss_config")
+    sv_wf = strategy_config.get("settings_values") or {}
+    if mss_wf and sv_wf:
+        merged_mss_wf = dict(mss_wf)
+        for k in ("swing_lb", "tp1_pct", "tp2_pct", "sl_pct",
+                   "use_pullback", "pb_pct", "confirm"):
+            if k in sv_wf:
+                merged_mss_wf[k] = sv_wf[k]
+        strategy_config["filters"] = dict(filters)
+        strategy_config["filters"]["mss_config"] = merged_mss_wf
 
     symbol = datasource.symbol or "ASSET"
 
@@ -850,8 +871,19 @@ def run_walk_forward(
         "entry_rules": strategy.entry_rules or [],
         "exit_rules": strategy.exit_rules or [],
         "risk_params": strategy.risk_params or {},
-        "filters": filters,
+        "filters": dict(filters),
     }
+
+    # Merge user settings_values overrides into mss_config for chart-data path
+    if mss_config:
+        sv_cd = _ensure_dict(getattr(strategy, "settings_values", {}) or {})
+        if sv_cd:
+            merged_mss_cd = dict(mss_config)
+            for k in ("swing_lb", "tp1_pct", "tp2_pct", "sl_pct",
+                       "use_pullback", "pb_pct", "confirm"):
+                if k in sv_cd:
+                    merged_mss_cd[k] = sv_cd[k]
+            strategy_config["filters"]["mss_config"] = merged_mss_cd
 
     # Load datasource
     datasource = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()

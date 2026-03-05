@@ -428,6 +428,14 @@ def apply_best_params(
     strategy.exit_rules = config["exit_rules"]
     strategy.risk_params = config["risk_params"]
     strategy.filters = config["filters"]
+
+    # Sync mss_config params back to settings_values
+    mss = config.get("filters", {}).get("mss_config")
+    if mss:
+        sv = dict(strategy.settings_values or {})
+        sv.update({k: v for k, v in mss.items()})
+        strategy.settings_values = sv
+
     db.commit()
 
     return {"message": "Best parameters applied to strategy", "params": opt.best_params}

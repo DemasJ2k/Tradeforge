@@ -328,7 +328,10 @@ export default function StrategiesPage() {
                 {s.strategy_type === "python" ? "🐍 Python" : s.strategy_type === "json" ? "📋 JSON" : s.strategy_type === "pinescript" ? "🌲 Pine Script" : s.strategy_type}
               </Badge>
             )}
-            {(!s.strategy_type || s.strategy_type === "builder") && (
+            {(!s.strategy_type || s.strategy_type === "builder") && s.filters?.mss_config && (
+              <Badge className="bg-purple-500/10 text-purple-400 border-0 text-[10px]">📊 ADR Structure</Badge>
+            )}
+            {(!s.strategy_type || s.strategy_type === "builder") && !s.filters?.mss_config && (
               <>
                 <Badge className="bg-accent/10 text-accent border-0 text-[10px]">{s.indicators?.length || 0} ind</Badge>
                 <Badge className="bg-success/10 text-success border-0 text-[10px]">{s.entry_rules?.length || 0} entry</Badge>
@@ -341,12 +344,12 @@ export default function StrategiesPage() {
           </div>
         </div>
         <div className="flex items-center gap-1 ml-3 shrink-0">
-          {s.strategy_type && s.strategy_type !== "builder" && s.settings_schema?.length > 0 && (
+          {s.settings_schema?.length > 0 && (s.strategy_type !== "builder" || s.is_system) && (
             <Button variant="ghost" size="icon" onClick={() => setSettingsStrategy(s)} title="Strategy Settings" className="h-7 w-7 text-muted-foreground hover:text-accent">
               <Settings className="h-3.5 w-3.5" />
             </Button>
           )}
-          {(!s.strategy_type || s.strategy_type === "builder") && (
+          {(!s.strategy_type || s.strategy_type === "builder") && !(s.is_system && s.settings_schema?.length > 0) && (
             <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title={s.is_system ? "View" : "Edit"} className="h-7 w-7 text-muted-foreground hover:text-accent">
               {s.is_system ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
             </Button>

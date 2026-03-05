@@ -155,6 +155,12 @@ export interface FilterConfig {
   max_spread_pips: number;
   max_trades_per_day: number;
   consecutive_loss_limit: number;
+
+  // V2 engine configs
+  mss_config?: Record<string, unknown>;
+  gold_bt_config?: Record<string, unknown>;
+  tags?: string[];
+  timeframes?: string;
 }
 
 export interface SettingsSchemaEntry {
