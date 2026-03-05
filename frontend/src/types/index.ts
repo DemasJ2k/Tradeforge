@@ -343,6 +343,10 @@ export interface UserSettings {
   notification_smtp_use_tls: boolean;
   notification_telegram_bot_token_set: boolean;
   notification_telegram_chat_id: string;
+  // Copilot settings
+  copilot_enabled: number;
+  copilot_autonomy: string;
+  copilot_permissions: Record<string, string>;
 }
 
 export interface StorageInfo {

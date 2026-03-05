@@ -119,9 +119,16 @@ function getPageContext(pathname: string): string {
 
 // ── SSE streaming helper ──
 
+type SSEEvent = {
+  type: string; content?: string; conversation_id?: number; title?: string;
+  name?: string; args?: Record<string, unknown>; result?: unknown;
+  confirm_id?: string; description?: string;
+  tokens_in?: number; tokens_out?: number; model?: string;
+};
+
 async function* streamChat(
   body: { message: string; conversation_id?: number | null; page_context?: string; context_data?: Record<string, unknown> }
-): AsyncGenerator<{ type: string; content?: string; conversation_id?: number; title?: string; tokens_in?: number; tokens_out?: number; model?: string }> {
+): AsyncGenerator<SSEEvent> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const res = await fetch(`${API_BASE}/api/llm/chat/stream`, {
     method: "POST",
@@ -166,12 +173,7 @@ async function* streamChat(
 
 async function* streamCopilotChat(
   body: { message: string; conversation_id?: number | null; page_context?: string; context_data?: Record<string, unknown> }
-): AsyncGenerator<{
-  type: string; content?: string; conversation_id?: number;
-  name?: string; args?: Record<string, unknown>; result?: unknown;
-  confirm_id?: string; description?: string;
-  tokens_in?: number; tokens_out?: number; model?: string;
-}> {
+): AsyncGenerator<SSEEvent> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const res = await fetch(`${API_BASE}/api/llm/copilot/chat/stream`, {
     method: "POST",
