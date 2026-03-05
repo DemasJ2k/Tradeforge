@@ -349,6 +349,8 @@ export interface UserSettings {
   notification_smtp_use_tls: boolean;
   notification_telegram_bot_token_set: boolean;
   notification_telegram_chat_id: string;
+  notification_telegram_username: string;
+  notification_telegram_connected: boolean;
   // Copilot settings
   copilot_enabled: number;
   copilot_autonomy: string;

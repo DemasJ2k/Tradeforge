@@ -72,6 +72,7 @@ class UserSettings(Base):
     notification_smtp_use_tls = Column(Integer, default=1)       # 1=STARTTLS, 0=none
     notification_telegram_bot_token_encrypted = Column(Text, default="")
     notification_telegram_chat_id = Column(String(100), default="")
+    notification_telegram_username = Column(String(100), default="")  # @username (without @)
 
     # --- Timestamps ---
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -94,6 +94,8 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         notification_smtp_use_tls=bool(s.notification_smtp_use_tls),
         notification_telegram_bot_token_set=bool(s.notification_telegram_bot_token_encrypted),
         notification_telegram_chat_id=s.notification_telegram_chat_id or "",
+        notification_telegram_username=getattr(s, "notification_telegram_username", "") or "",
+        notification_telegram_connected=bool(getattr(s, "notification_telegram_chat_id", "")),
         copilot_enabled=bool(getattr(s, "copilot_enabled", 1)),
         copilot_autonomy=getattr(s, "copilot_autonomy", "assisted") or "assisted",
         copilot_permissions=_ensure_dict(getattr(s, "copilot_permissions", {}) or {}),

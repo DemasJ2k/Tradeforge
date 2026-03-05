@@ -1855,7 +1855,7 @@ export default function SettingsPage() {
             <div className="space-y-6 max-w-lg">
               <h2 className="text-lg font-semibold text-foreground">Notification Settings</h2>
               <p className="text-sm text-muted-foreground">
-                Enter your email and/or Telegram chat ID to receive notifications. The platform handles delivery automatically.
+                Enter your email and/or Telegram username to receive notifications. The platform handles delivery automatically.
               </p>
 
               {/* ── Email ── */}
@@ -1893,23 +1893,44 @@ export default function SettingsPage() {
               {/* ── Telegram ── */}
               <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-foreground">Telegram Notifications</h3>
+
+              {/* Connection status badge */}
+              {s.notification_telegram_connected ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-sm text-green-400 font-medium">Connected</span>
+                  <span className="text-xs text-muted-foreground ml-1">— @{s.notification_telegram_username || 'unknown'}</span>
+                </div>
+              ) : s.notification_telegram_username ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                  <span className="text-sm text-yellow-400 font-medium">Waiting for connection</span>
+                  <span className="text-xs text-muted-foreground ml-1">— Send <b>/start</b> to the bot</span>
+                </div>
+              ) : null}
+
               <p className="text-xs text-muted-foreground mb-2">
-                Start a chat with the TradeForge bot, then use <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@userinfobot</a> to find your Chat ID.
+                Enter your Telegram username below, then send <b>/start</b> to the TradeForge bot on Telegram to connect.
               </p>
               <div className="space-y-3">
-                <Field label="Your Telegram Chat ID">
-                  <input value={s.notification_telegram_chat_id ?? ''}
-                    onChange={e => set('notification_telegram_chat_id', e.target.value)}
-                    placeholder="123456789" className={inputCls} />
+                <Field label="Your Telegram Username">
+                  <div className="flex items-center gap-0">
+                    <span className="text-muted-foreground text-sm px-2">@</span>
+                    <input value={s.notification_telegram_username ?? ''}
+                      onChange={e => set('notification_telegram_username', e.target.value.replace(/^@/, '').toLowerCase())}
+                      placeholder="yourusername" className={inputCls} />
+                  </div>
                 </Field>
-                <div className="flex gap-2 items-center">
-                  <button disabled={notifTesting === 'telegram' || !s.notification_telegram_chat_id} onClick={async () => {
+
+                <div className="flex gap-2 items-center flex-wrap">
+                  {/* Send Test (only if connected) */}
+                  <button disabled={notifTesting === 'telegram' || !s.notification_telegram_connected} onClick={async () => {
                     setNotifTesting('telegram');
                     setNotifTestResult({});
                     try {
                       const resp = await fetch(`${API}/api/settings/test-notification`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                        body: JSON.stringify({ channel: 'telegram', chat_id: s.notification_telegram_chat_id }),
+                        body: JSON.stringify({ channel: 'telegram' }),
                       });
                       const data = await resp.json();
                       setNotifTestResult({ telegram: data.telegram ? 'Test message sent!' : (data.telegram_error || 'Failed to send') });
@@ -1924,6 +1945,17 @@ export default function SettingsPage() {
                     </span>
                   )}
                 </div>
+
+                {/* Step-by-step instructions when not connected */}
+                {!s.notification_telegram_connected && (
+                  <div className="text-xs text-muted-foreground space-y-1 mt-2 p-3 rounded-lg bg-card-bg/50 border border-card-border">
+                    <p className="font-semibold text-foreground mb-1">How to connect:</p>
+                    <p>1. Enter your Telegram username above and <b>Save</b></p>
+                    <p>2. Open Telegram and search for the <b>TradeForge bot</b></p>
+                    <p>3. Send <b>/start</b> to the bot</p>
+                    <p>4. Refresh this page — status will show <span className="text-green-400">Connected</span></p>
+                  </div>
+                )}
               </div>
 
               {/* ── Event Toggles ── */}
@@ -1964,6 +1996,7 @@ export default function SettingsPage() {
                     notifications: s.notifications,
                     notification_email: s.notification_email,
                     notification_telegram_chat_id: s.notification_telegram_chat_id,
+                    notification_telegram_username: s.notification_telegram_username,
                   });
                 }} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Notification Settings'}

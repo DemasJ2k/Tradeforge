@@ -64,6 +64,7 @@ class SettingsUpdate(BaseModel):
     notification_smtp_use_tls: Optional[bool] = None
     notification_telegram_bot_token: Optional[str] = None  # plain text in request, encrypted in DB
     notification_telegram_chat_id: Optional[str] = None
+    notification_telegram_username: Optional[str] = None  # @username (stored without @)
 
 
 class SettingsResponse(BaseModel):
@@ -126,6 +127,8 @@ class SettingsResponse(BaseModel):
     notification_smtp_use_tls: bool = True
     notification_telegram_bot_token_set: bool = False
     notification_telegram_chat_id: str = ""
+    notification_telegram_username: str = ""
+    notification_telegram_connected: bool = False  # True when chat_id is linked
 
 
 class LLMTestRequest(BaseModel):

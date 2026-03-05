@@ -34,6 +34,7 @@ from app.api import optimization_phase as optimization_phase_api
 from app.api import news as news_api
 from app.api import watchlist as watchlist_api
 from app.api import webhook as webhook_api
+from app.api import telegram_webhook as telegram_webhook_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -83,6 +84,7 @@ def _run_schema_migrations():
         ("user_settings", "notification_smtp_use_tls",            "INTEGER DEFAULT 1"),
         ("user_settings", "notification_telegram_bot_token_encrypted", "TEXT"),
         ("user_settings", "notification_telegram_chat_id",        "VARCHAR(100)"),
+        ("user_settings", "notification_telegram_username",       "VARCHAR(100)"),
         # DataSource ownership columns
         ("datasources", "creator_id",  "INTEGER DEFAULT 1"),
         ("datasources", "is_public",   "BOOLEAN DEFAULT TRUE"),
@@ -353,6 +355,7 @@ app.include_router(recycle_bin_api.router)
 app.include_router(news_api.router)
 app.include_router(watchlist_api.router)
 app.include_router(webhook_api.router)
+app.include_router(telegram_webhook_api.router)
 
 
 def _seed_admin_user():
@@ -1006,6 +1009,18 @@ async def startup_event():
     # Start paper trade monitor (simulates SL/TP exits for agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
     await trade_monitor.start()
+    # Register Telegram bot webhook (so /start commands auto-link users)
+    if settings.TELEGRAM_BOT_TOKEN:
+        from app.api.telegram_webhook import setup_telegram_webhook
+        # Use the backend's own public URL (Render) for the webhook callback
+        backend_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+        if not backend_url:
+            # Fallback: derive from FRONTEND_URL (replace frontend host with API host)
+            backend_url = "http://localhost:8000"
+        try:
+            await setup_telegram_webhook(backend_url)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Telegram webhook setup skipped: %s", e)
     # Start news background refresh (economic calendar + market news)
     from app.services.news.aggregator import start_background_refresh as start_news_refresh
     try:
