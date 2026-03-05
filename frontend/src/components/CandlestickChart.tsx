@@ -34,6 +34,15 @@ export interface ChartHandle {
   getCandleSeries: () => ISeriesApi<"Candlestick"> | null;
 }
 
+/** A single line to render on the main (price) chart. */
+export interface OverlayLine {
+  key: string;
+  color: string;
+  lineWidth?: number;
+  data: { time: number; value: number }[];
+}
+
+// Keep legacy IndicatorConfig for backward compat (used nowhere now but exported)
 export interface IndicatorConfig {
   ma?: boolean;
   maLen?: number;
@@ -49,33 +58,10 @@ interface Props {
   volumeColor?: string;
   showGrid?: boolean;
   showCrosshair?: boolean;
+  /** Generic overlay lines rendered on the price chart */
+  overlayLines?: OverlayLine[];
+  /** @deprecated Use overlayLines instead */
   indicators?: IndicatorConfig;
-}
-
-// ─── Indicator calculation helpers ───────────────────────────────────────────
-
-function calcSMA(closes: number[], len: number): (number | null)[] {
-  return closes.map((_, i) => {
-    if (i < len - 1) return null;
-    const slice = closes.slice(i - len + 1, i + 1);
-    return slice.reduce((a, b) => a + b, 0) / len;
-  });
-}
-
-function calcEMA(closes: number[], len: number): (number | null)[] {
-  const k = 2 / (len + 1);
-  const result: (number | null)[] = [];
-  let ema: number | null = null;
-  for (let i = 0; i < closes.length; i++) {
-    if (i < len - 1) { result.push(null); continue; }
-    if (ema === null) {
-      ema = closes.slice(0, len).reduce((a, b) => a + b, 0) / len;
-    } else {
-      ema = closes[i] * k + ema * (1 - k);
-    }
-    result.push(ema);
-  }
-  return result;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -89,7 +75,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     volumeColor,
     showGrid = true,
     showCrosshair = true,
-    indicators,
+    overlayLines,
   },
   ref
 ) {
@@ -97,8 +83,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
-  const maSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  /** Dynamic overlay line series — keyed by overlay key string */
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const colors = useMemo(() => ({ upColor, downColor, volumeColor }), [upColor, downColor, volumeColor]);
   const colorsRef = useRef(colors);
 
@@ -109,25 +95,15 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
   // Track whether initial data has been set (to avoid .update() on empty series)
   const dataLoadedRef = useRef(false);
-  // Track the Unix timestamp (seconds) of the last bar in the series.
-  // updateBar() silently skips any bar whose time < lastSeriesTimeRef — this prevents
-  // "Cannot update oldest data" errors when live bar_update comes in for an M15 period
-  // that's already closed and present in the loaded historical data.
   const lastSeriesTimeRef = useRef<number>(0);
 
   // Expose imperative handle for live updates
   const updateBar = useCallback((bar: CandleInput) => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
-    if (!dataLoadedRef.current) return; // Don't update before setData
+    if (!dataLoadedRef.current) return;
 
-    // Validate time is a proper finite number (Unix timestamp in seconds)
     const t = typeof bar.time === "number" ? bar.time : Number(bar.time);
     if (!Number.isFinite(t) || t <= 0) return;
-
-    // Skip bars older than the most recent series bar.
-    // This prevents "Cannot update oldest data" errors when a bar_update arrives
-    // for an M15 period that is already closed and present in the loaded history.
-    // Lightweight-charts only allows .update() on the LAST bar or a newer one.
     if (t < lastSeriesTimeRef.current) return;
 
     const candle: CandlestickData<Time> = {
@@ -149,14 +125,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       color: volColor,
     };
 
-    // .update() will append if new time, or update if same time
     try {
       candleSeriesRef.current.update(candle);
       volumeSeriesRef.current.update(volume);
-      // Track the highest bar time seen so far
       if (t > lastSeriesTimeRef.current) lastSeriesTimeRef.current = t;
     } catch (e) {
-      // Log actual error message for debugging
       const msg = e instanceof Error ? e.message : (typeof e === "object" && e !== null ? JSON.stringify(e) : String(e));
       console.warn("[CandlestickChart] update error:", msg, "| bar.time=", bar.time);
     }
@@ -217,31 +190,10 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       scaleMargins: { top: 0.8, bottom: 0 },
     });
 
-    // MA series (always created, hidden until enabled)
-    const maSeries = chart.addSeries(LineSeries, {
-      color: "#fbbf24",
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      visible: false,
-    });
-
-    // EMA series
-    const emaSeries = chart.addSeries(LineSeries, {
-      color: "#a78bfa",
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      visible: false,
-    });
-
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    maSeriesRef.current = maSeries;
-    emaSeriesRef.current = emaSeries;
+    overlaySeriesRef.current = new Map();
 
     // Handle resize
     const observer = new ResizeObserver((entries) => {
@@ -257,8 +209,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
-      maSeriesRef.current = null;
-      emaSeriesRef.current = null;
+      overlaySeriesRef.current = new Map();
       dataLoadedRef.current = false;
       lastSeriesTimeRef.current = 0;
     };
@@ -271,7 +222,6 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       return;
     }
 
-    // Ensure all time values are valid numbers (Unix timestamps in seconds)
     const candles: CandlestickData<Time>[] = data
       .filter((d) => typeof d.time === "number" && Number.isFinite(d.time) && d.time > 0)
       .map((d) => ({
@@ -301,7 +251,6 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     volumeSeriesRef.current.setData(volumes);
     dataLoadedRef.current = true;
 
-    // Record the last bar time so updateBar can reject stale bar_updates
     if (candles.length > 0) {
       lastSeriesTimeRef.current = candles[candles.length - 1].time as number;
     }
@@ -313,44 +262,44 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     }
   }, [data, upColor, downColor, volumeColor]);
 
-  // Update MA/EMA indicators when data or indicator config changes
+  // ── Overlay lines (generic — handles any number of lines) ──
   useEffect(() => {
-    if (!maSeriesRef.current || !emaSeriesRef.current || data.length === 0) return;
+    const chart = chartRef.current;
+    if (!chart) return;
 
-    const validData = data.filter(
-      (d) => typeof d.time === "number" && Number.isFinite(d.time) && d.time > 0
-    );
-    const closes = validData.map((d) => d.close);
-    const times = validData.map((d) => d.time as Time);
+    const currentMap = overlaySeriesRef.current;
+    const wantedKeys = new Set((overlayLines || []).map((l) => l.key));
 
-    // MA
-    const showMA = indicators?.ma ?? false;
-    const maLen = indicators?.maLen ?? 20;
-    if (showMA && closes.length >= maLen) {
-      const maValues = calcSMA(closes, maLen);
-      const maData: LineData<Time>[] = maValues
-        .map((v, i) => ({ time: times[i], value: v! }))
-        .filter((d) => d.value !== null);
-      maSeriesRef.current.setData(maData);
-      maSeriesRef.current.applyOptions({ visible: true });
-    } else {
-      maSeriesRef.current.applyOptions({ visible: false });
+    // Remove series that are no longer needed
+    for (const [key, series] of currentMap) {
+      if (!wantedKeys.has(key)) {
+        try { chart.removeSeries(series); } catch { /* ignore */ }
+        currentMap.delete(key);
+      }
     }
 
-    // EMA
-    const showEMA = indicators?.ema ?? false;
-    const emaLen = indicators?.emaLen ?? 50;
-    if (showEMA && closes.length >= emaLen) {
-      const emaValues = calcEMA(closes, emaLen);
-      const emaData: LineData<Time>[] = emaValues
-        .map((v, i) => ({ time: times[i], value: v! }))
-        .filter((d) => d.value !== null);
-      emaSeriesRef.current.setData(emaData);
-      emaSeriesRef.current.applyOptions({ visible: true });
-    } else {
-      emaSeriesRef.current.applyOptions({ visible: false });
+    // Add / update series
+    for (const line of overlayLines || []) {
+      let series = currentMap.get(line.key);
+      if (!series) {
+        series = chart.addSeries(LineSeries, {
+          color: line.color,
+          lineWidth: (line.lineWidth ?? 1) as 1 | 2 | 3 | 4,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        currentMap.set(line.key, series);
+      } else {
+        series.applyOptions({ color: line.color, lineWidth: (line.lineWidth ?? 1) as 1 | 2 | 3 | 4 });
+      }
+      const lineData: LineData<Time>[] = line.data.map((d) => ({
+        time: d.time as Time,
+        value: d.value,
+      }));
+      series.setData(lineData);
     }
-  }, [data, indicators]);
+  }, [overlayLines]);
 
   return (
     <div

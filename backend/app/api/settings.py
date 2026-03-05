@@ -523,8 +523,8 @@ async def test_notification(
 ):
     """
     Send a test notification via email and/or Telegram.
-    Accepts raw credentials (for testing before saving) or uses stored ones.
-    payload: { channel: "email"|"telegram"|"both", ...overrides }
+    Uses app-level SMTP/Telegram config. Only needs recipient address.
+    payload: { channel: "email"|"telegram"|"both", email?: str, chat_id?: str }
     """
     s = _get_or_create_settings(db, current_user)
     channel = payload.get("channel", "both")
@@ -533,46 +533,21 @@ async def test_notification(
     if channel in ("email", "both"):
         from app.services.notification import test_email_settings
 
-        smtp_host = payload.get("smtp_host") or s.notification_smtp_host or ""
-        smtp_port = payload.get("smtp_port") or s.notification_smtp_port or 587
-        smtp_user = payload.get("smtp_user") or s.notification_smtp_user or ""
         to_email = payload.get("email") or s.notification_email or ""
-        use_tls = payload.get("smtp_use_tls")
-        if use_tls is None:
-            use_tls = bool(s.notification_smtp_use_tls)
-
-        # Use provided password or decrypt stored
-        smtp_pass = payload.get("smtp_pass")
-        if not smtp_pass and s.notification_smtp_pass_encrypted:
-            smtp_pass = decrypt_value(s.notification_smtp_pass_encrypted)
-
-        if all([to_email, smtp_host, smtp_user, smtp_pass]):
-            results["email"] = test_email_settings(
-                to_email=to_email,
-                smtp_host=smtp_host,
-                smtp_port=int(smtp_port),
-                smtp_user=smtp_user,
-                smtp_pass=smtp_pass,
-                use_tls=use_tls,
-            )
+        if to_email:
+            results["email"] = test_email_settings(to_email=to_email)
         else:
             results["email"] = False
-            results["email_error"] = "Incomplete email settings"
+            results["email_error"] = "No email address provided"
 
     if channel in ("telegram", "both"):
         from app.services.notification import test_telegram_settings
 
         chat_id = payload.get("chat_id") or s.notification_telegram_chat_id or ""
-        bot_token = payload.get("bot_token")
-        if not bot_token and s.notification_telegram_bot_token_encrypted:
-            bot_token = decrypt_value(s.notification_telegram_bot_token_encrypted)
-
-        if bot_token and chat_id:
-            results["telegram"] = await test_telegram_settings(
-                bot_token=bot_token, chat_id=chat_id,
-            )
+        if chat_id:
+            results["telegram"] = await test_telegram_settings(chat_id=chat_id)
         else:
             results["telegram"] = False
-            results["telegram_error"] = "Incomplete Telegram settings"
+            results["telegram_error"] = "No Telegram chat ID provided"
 
     return results

@@ -9,8 +9,8 @@
     },
     {
       "name": "frontend",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["D:\\Doc\\DATA\\tradeforge\\frontend\\node_modules\\next\\dist\\bin\\next", "dev"],
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
+      "runtimeArgs": ["--prefix", "D:\\Doc\\DATA\\tradeforge\\frontend", "run", "dev"],
       "port": 3000
     }
   ]

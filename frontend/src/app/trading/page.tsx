@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
 import AgentPanel from "@/components/AgentPanel";
-import CandlestickChart, { type ChartHandle, type CandleInput } from "@/components/CandlestickChart";
+import CandlestickChart, { type ChartHandle, type CandleInput, type OverlayLine } from "@/components/CandlestickChart";
 import StrategyOverlayPanel from "@/components/StrategyOverlayPanel";
+import IndicatorDropdown, { type ActiveIndicator } from "@/components/IndicatorDropdown";
+import { getIndicatorById } from "@/lib/indicatorRegistry";
+import * as Calc from "@/lib/indicators";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { ChevronDown, Radio, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -164,14 +167,11 @@ export default function TradingPage() {
       .catch(() => {});
   }, []);
 
-  // ── Indicator state ──
-  const [indMA, setIndMA] = useState(false);
-  const [indMALen, setIndMALen] = useState(20);
-  const [indEMA, setIndEMA] = useState(false);
-  const [indEMALen, setIndEMALen] = useState(50);
-  const [indMACD, setIndMACD] = useState(false);
-  const macdContainerRef = useRef<HTMLDivElement>(null);
-  const macdChartRef = useRef<import("lightweight-charts").IChartApi | null>(null);
+  // ── Indicator state (2 slots: each can be any overlay or oscillator) ──
+  const [indicator1, setIndicator1] = useState<ActiveIndicator | null>(null);
+  const [indicator2, setIndicator2] = useState<ActiveIndicator | null>(null);
+  const oscContainerRef = useRef<HTMLDivElement>(null);
+  const oscChartRef = useRef<import("lightweight-charts").IChartApi | null>(null);
   const wsStatus = useWebSocket((s) => s.status);
   const { ticks, lastTickMs, bars, currentBar, subscribeBars, subscribeTicks } = useMarketData();
   const { settings } = useSettings();
@@ -398,117 +398,228 @@ export default function TradingPage() {
     return () => clearInterval(pollInterval);
   }, [chartMode, chartSymbol, chartTimeframe, chartBars.length]);
 
-  // ── MACD chart ──
+  // ── Determine which indicator (if any) is an oscillator ──
+  const oscIndicator = (() => {
+    if (indicator1) { const d = getIndicatorById(indicator1.id); if (d?.type === "oscillator") return indicator1; }
+    if (indicator2) { const d = getIndicatorById(indicator2.id); if (d?.type === "oscillator") return indicator2; }
+    return null;
+  })();
+  const oscDef = oscIndicator ? getIndicatorById(oscIndicator.id) : null;
+
+  // ── Compute overlay lines for the main chart ──
+  const overlayLines: OverlayLine[] = useMemo(() => {
+    if (chartBars.length === 0) return [];
+    const validData = chartBars.filter(d => typeof d.time === "number" && Number.isFinite(d.time) && d.time > 0);
+    const closes = validData.map(d => d.close);
+    const highs = validData.map(d => d.high);
+    const lows = validData.map(d => d.low);
+    const volumes = validData.map(d => d.volume || 0);
+    const times = validData.map(d => d.time);
+    const lines: OverlayLine[] = [];
+
+    const computeOverlay = (ind: ActiveIndicator, slot: string) => {
+      const def = getIndicatorById(ind.id);
+      if (!def || def.type !== "overlay") return;
+      const p = ind.params;
+
+      const toLineData = (vals: (number | null)[]) =>
+        vals.map((v, i) => v !== null ? { time: times[i], value: v } : null)
+            .filter((d): d is { time: number; value: number } => d !== null);
+
+      switch (ind.id) {
+        case "sma": {
+          const out = Calc.calcSMA(closes, p.length ?? 20);
+          lines.push({ key: `${slot}-sma`, color: def.outputs[0].color, lineWidth: 2, data: toLineData(out) });
+          break;
+        }
+        case "ema": {
+          const out = Calc.calcEMA(closes, p.length ?? 50);
+          lines.push({ key: `${slot}-ema`, color: def.outputs[0].color, lineWidth: 2, data: toLineData(out) });
+          break;
+        }
+        case "bb": {
+          const { upper, middle, lower } = Calc.calcBollingerBands(closes, p.length ?? 20, p.mult ?? 2);
+          lines.push({ key: `${slot}-bb-upper`, color: def.outputs[0].color, data: toLineData(upper) });
+          lines.push({ key: `${slot}-bb-mid`, color: def.outputs[1].color, data: toLineData(middle) });
+          lines.push({ key: `${slot}-bb-lower`, color: def.outputs[2].color, data: toLineData(lower) });
+          break;
+        }
+        case "vwap": {
+          const out = Calc.calcVWAP(highs, lows, closes, volumes, times);
+          lines.push({ key: `${slot}-vwap`, color: def.outputs[0].color, lineWidth: 2, data: toLineData(out) });
+          break;
+        }
+        case "psar": {
+          const out = Calc.calcParabolicSAR(highs, lows, p.afStart ?? 0.02, p.afStep ?? 0.02, p.afMax ?? 0.2);
+          lines.push({ key: `${slot}-psar`, color: def.outputs[0].color, data: toLineData(out) });
+          break;
+        }
+        case "supertrend": {
+          const { supertrend } = Calc.calcSuperTrend(highs, lows, closes, p.length ?? 10, p.mult ?? 3);
+          lines.push({ key: `${slot}-st`, color: def.outputs[0].color, lineWidth: 2, data: toLineData(supertrend) });
+          break;
+        }
+        case "ichimoku": {
+          const ich = Calc.calcIchimoku(highs, lows, closes, p.tenkanLen ?? 9, p.kijunLen ?? 26, p.senkouBLen ?? 52);
+          lines.push({ key: `${slot}-tenkan`, color: def.outputs[0].color, data: toLineData(ich.tenkan) });
+          lines.push({ key: `${slot}-kijun`, color: def.outputs[1].color, data: toLineData(ich.kijun) });
+          lines.push({ key: `${slot}-senkouA`, color: def.outputs[2].color, data: toLineData(ich.senkouA) });
+          lines.push({ key: `${slot}-senkouB`, color: def.outputs[3].color, data: toLineData(ich.senkouB) });
+          break;
+        }
+        case "keltner": {
+          const kc = Calc.calcKeltnerChannels(highs, lows, closes, p.emaLen ?? 20, p.atrLen ?? 10, p.mult ?? 1.5);
+          lines.push({ key: `${slot}-kc-upper`, color: def.outputs[0].color, data: toLineData(kc.upper) });
+          lines.push({ key: `${slot}-kc-mid`, color: def.outputs[1].color, data: toLineData(kc.middle) });
+          lines.push({ key: `${slot}-kc-lower`, color: def.outputs[2].color, data: toLineData(kc.lower) });
+          break;
+        }
+        case "donchian": {
+          const dc = Calc.calcDonchianChannels(highs, lows, p.length ?? 20);
+          lines.push({ key: `${slot}-dc-upper`, color: def.outputs[0].color, data: toLineData(dc.upper) });
+          lines.push({ key: `${slot}-dc-mid`, color: def.outputs[1].color, data: toLineData(dc.middle) });
+          lines.push({ key: `${slot}-dc-lower`, color: def.outputs[2].color, data: toLineData(dc.lower) });
+          break;
+        }
+      }
+    };
+
+    if (indicator1) computeOverlay(indicator1, "i1");
+    if (indicator2) computeOverlay(indicator2, "i2");
+    return lines;
+  }, [chartBars, indicator1, indicator2]);
+
+  // ── Generic oscillator pane (replaces old MACD-specific pane) ──
   useEffect(() => {
     let cancelled = false;
-    // Stores the main-chart time-scale unsubscribe fn so we can remove it on cleanup
     let unsubTimeSync: (() => void) | null = null;
 
     const destroy = () => {
       unsubTimeSync?.();
       unsubTimeSync = null;
-      if (macdChartRef.current) {
-        try { macdChartRef.current.remove(); } catch { /* already removed */ }
-        macdChartRef.current = null;
+      if (oscChartRef.current) {
+        try { oscChartRef.current.remove(); } catch { /* already removed */ }
+        oscChartRef.current = null;
       }
     };
 
-    if (!indMACD || !macdContainerRef.current || chartBars.length < 26) {
+    if (!oscIndicator || !oscDef || !oscContainerRef.current || chartBars.length < 2) {
       destroy();
       return () => { cancelled = true; };
     }
-    destroy(); // ensure clean slate before creating
+    destroy();
 
-    // Dynamic import to avoid SSR issues
-    import("lightweight-charts").then(({ createChart, LineSeries, HistogramSeries }) => {
-      if (cancelled || !macdContainerRef.current) return;
-      const macdChart = createChart(macdContainerRef.current, {
+    import("lightweight-charts").then(({ createChart: createOscChart, LineSeries: OscLine, HistogramSeries: OscHist }) => {
+      if (cancelled || !oscContainerRef.current) return;
+      const oscChart = createOscChart(oscContainerRef.current, {
         height: 120,
         layout: { background: { color: "transparent" }, textColor: "#9ca3af" },
         grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
         rightPriceScale: { borderColor: "#374151" },
-        timeScale: {
-          borderColor: "#374151",
-          timeVisible: true,
-          secondsVisible: false,
-          // Hide the MACD time axis to save space — main chart's axis is enough
-          visible: false,
-        },
+        timeScale: { borderColor: "#374151", timeVisible: true, secondsVisible: false, visible: false },
         crosshair: { mode: 1 },
         handleScroll: false,
         handleScale: false,
       });
-      macdChartRef.current = macdChart;
+      oscChartRef.current = oscChart;
 
-      // MACD calculation helpers
-      function ema(vals: number[], len: number): (number | null)[] {
-        const k = 2 / (len + 1);
-        const out: (number | null)[] = [];
-        let e: number | null = null;
-        for (let i = 0; i < vals.length; i++) {
-          if (i < len - 1) { out.push(null); continue; }
-          if (e === null) {
-            e = vals.slice(0, len).reduce((a, b) => a + b, 0) / len;
-          } else {
-            e = vals[i] * k + e * (1 - k);
-          }
-          out.push(e);
-        }
-        return out;
-      }
-
-      const closes = chartBars.map(b => b.close);
-      const times = chartBars.map(b => b.time as number);
-      const ema12 = ema(closes, 12);
-      const ema26 = ema(closes, 26);
-      const macdLine = ema12.map((v, i) => (v !== null && ema26[i] !== null ? v - ema26[i]! : null));
-      const macdClean = macdLine.filter(v => v !== null) as number[];
-      const macdStartIdx = macdLine.findIndex(v => v !== null);
-      const signalRaw = ema(macdClean, 9);
-      const signalLine = [...Array(macdStartIdx).fill(null), ...signalRaw] as (number | null)[];
-      const histogram = macdLine.map((v, i) => (v !== null && signalLine[i] !== null ? v - signalLine[i]! : null));
+      const validData = chartBars.filter(d => typeof d.time === "number" && Number.isFinite(d.time) && d.time > 0);
+      const closes = validData.map(d => d.close);
+      const highs = validData.map(d => d.high);
+      const lows = validData.map(d => d.low);
+      const volumes = validData.map(d => d.volume || 0);
+      const timesArr = validData.map(d => d.time as number);
+      const p = oscIndicator!.params;
 
       const toSeries = (vals: (number | null)[]) =>
-        vals.map((v, i) => v !== null ? { time: times[i] as Time, value: v } : null)
+        vals.map((v, i) => v !== null ? { time: timesArr[i] as Time, value: v } : null)
             .filter((d): d is { time: Time; value: number } => d !== null);
 
-      const histSeries = macdChart.addSeries(HistogramSeries, { color: "#22c55e", priceLineVisible: false });
-      histSeries.setData(toSeries(histogram).map(p => ({
-        time: p.time,
-        value: p.value,
-        color: p.value >= 0 ? "#22c55e66" : "#ef444466",
-      })));
+      // Compute and render based on oscillator type
+      const renderOutput = (key: string, values: (number | null)[], output: typeof oscDef.outputs[0]) => {
+        if (output.style === "histogram") {
+          const s = oscChart.addSeries(OscHist, { color: output.color, priceLineVisible: false });
+          s.setData(toSeries(values).map(pt => ({
+            time: pt.time,
+            value: pt.value,
+            color: pt.value >= 0 ? output.color + "66" : "#ef444466",
+          })));
+        } else {
+          const s = oscChart.addSeries(OscLine, { color: output.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+          s.setData(toSeries(values));
+        }
+      };
 
-      const macdSeries = macdChart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceLineVisible: false });
-      macdSeries.setData(toSeries(macdLine));
+      switch (oscIndicator!.id) {
+        case "macd": {
+          const r = Calc.calcMACD(closes, p.fast ?? 12, p.slow ?? 26, p.signal ?? 9);
+          renderOutput("histogram", r.histogram, oscDef!.outputs[2]);
+          renderOutput("macd", r.macd, oscDef!.outputs[0]);
+          renderOutput("signal", r.signal, oscDef!.outputs[1]);
+          break;
+        }
+        case "rsi": {
+          const r = Calc.calcRSI(closes, p.length ?? 14);
+          renderOutput("rsi", r, oscDef!.outputs[0]);
+          break;
+        }
+        case "atr": {
+          const r = Calc.calcATR(highs, lows, closes, p.length ?? 14);
+          renderOutput("atr", r, oscDef!.outputs[0]);
+          break;
+        }
+        case "stochastic": {
+          const r = Calc.calcStochastic(highs, lows, closes, p.kLen ?? 14, p.dLen ?? 3);
+          renderOutput("k", r.k, oscDef!.outputs[0]);
+          renderOutput("d", r.d, oscDef!.outputs[1]);
+          break;
+        }
+        case "adx": {
+          const r = Calc.calcADX(highs, lows, closes, p.length ?? 14);
+          renderOutput("adx", r.adx, oscDef!.outputs[0]);
+          renderOutput("plusDI", r.plusDI, oscDef!.outputs[1]);
+          renderOutput("minusDI", r.minusDI, oscDef!.outputs[2]);
+          break;
+        }
+        case "cci": {
+          const r = Calc.calcCCI(highs, lows, closes, p.length ?? 20);
+          renderOutput("cci", r, oscDef!.outputs[0]);
+          break;
+        }
+        case "williamsr": {
+          const r = Calc.calcWilliamsR(highs, lows, closes, p.length ?? 14);
+          renderOutput("williamsr", r, oscDef!.outputs[0]);
+          break;
+        }
+        case "obv": {
+          const r = Calc.calcOBV(closes, volumes);
+          renderOutput("obv", r, oscDef!.outputs[0]);
+          break;
+        }
+        case "mfi": {
+          const r = Calc.calcMFI(highs, lows, closes, volumes, p.length ?? 14);
+          renderOutput("mfi", r, oscDef!.outputs[0]);
+          break;
+        }
+      }
 
-      const signalSeries = macdChart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false });
-      signalSeries.setData(toSeries(signalLine));
-
-      // ── Sync time scale with main chart ──────────────────────────────────
-      // The MACD chart has scroll/scale disabled — all navigation is driven
-      // by the main chart. We subscribe to the main chart's visible-range
-      // changes and mirror them onto the MACD chart.
+      // Sync time scale with main chart
       const mainChart = chartRef.current?.getChart();
       if (mainChart) {
-        // Apply the main chart's current visible range immediately
         try {
           const range: LogicalRange | null = mainChart.timeScale().getVisibleLogicalRange();
-          if (range) macdChart.timeScale().setVisibleLogicalRange(range);
+          if (range) oscChart.timeScale().setVisibleLogicalRange(range);
         } catch { /* ignore */ }
-
-        // Keep MACD in sync whenever the user scrolls/zooms the main chart
         const syncHandler = (range: LogicalRange | null) => {
           if (!range) return;
-          try { macdChart.timeScale().setVisibleLogicalRange(range); } catch { /* ignore */ }
+          try { oscChart.timeScale().setVisibleLogicalRange(range); } catch { /* ignore */ }
         };
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(syncHandler);
         unsubTimeSync = () => {
           try { mainChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncHandler); } catch { /* ignore */ }
         };
       } else {
-        // Fallback: show all data if main chart isn't ready
-        macdChart.timeScale().fitContent();
+        oscChart.timeScale().fitContent();
       }
     });
 
@@ -517,7 +628,7 @@ export default function TradingPage() {
       destroy();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indMACD, chartBars]);
+  }, [oscIndicator?.id, oscIndicator?.params, chartBars]);
 
   /* ── check broker on mount ────────────────────── */
   useEffect(() => {
@@ -856,52 +967,11 @@ export default function TradingPage() {
           </div>
         </div>
 
-        {/* Indicator toggle bar */}
+        {/* Indicator selector bar */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-card-border bg-background/50">
           <span className="text-xs text-muted-foreground mr-1">Indicators:</span>
-          {/* MA toggle */}
-          <button
-            onClick={() => setIndMA(v => !v)}
-            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indMA ? "bg-amber-500/15 border-amber-500/40 text-amber-400" : "border-card-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            MA
-          </button>
-          {indMA && (
-            <input
-              type="number" value={indMALen} min={2} max={500}
-              onChange={e => setIndMALen(Math.max(2, Number(e.target.value)))}
-              className="w-14 rounded border border-amber-500/40 bg-background px-1.5 py-0.5 text-xs text-amber-400 focus:outline-none"
-              title="MA period"
-            />
-          )}
-          {/* EMA toggle */}
-          <button
-            onClick={() => setIndEMA(v => !v)}
-            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indEMA ? "bg-purple-500/15 border-purple-500/40 text-purple-400" : "border-card-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            EMA
-          </button>
-          {indEMA && (
-            <input
-              type="number" value={indEMALen} min={2} max={500}
-              onChange={e => setIndEMALen(Math.max(2, Number(e.target.value)))}
-              className="w-14 rounded border border-purple-500/40 bg-background px-1.5 py-0.5 text-xs text-purple-400 focus:outline-none"
-              title="EMA period"
-            />
-          )}
-          {/* MACD toggle */}
-          <button
-            onClick={() => setIndMACD(v => !v)}
-            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors ${
-              indMACD ? "bg-blue-500/15 border-blue-500/40 text-fa-accent" : "border-card-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            MACD
-          </button>
+          <IndicatorDropdown label="Indicator 1" value={indicator1} onChange={setIndicator1} />
+          <IndicatorDropdown label="Indicator 2" value={indicator2} onChange={setIndicator2} />
         </div>
 
         {/* Chart */}
@@ -939,7 +1009,7 @@ export default function TradingPage() {
             downColor={settings?.chart_down_color || "#ef4444"}
             showGrid={settings?.chart_grid !== false}
             showCrosshair={settings?.chart_crosshair !== false}
-            indicators={{ ma: indMA, maLen: indMALen, ema: indEMA, emaLen: indEMALen }}
+            overlayLines={overlayLines}
           />
         )}
         {/* Strategy Overlay Panel (Phase 5A) */}
@@ -949,17 +1019,22 @@ export default function TradingPage() {
         />
         </div>
 
-        {/* MACD pane */}
-        {indMACD && chartBars.length >= 26 && (
+        {/* Oscillator pane (generic — renders any oscillator indicator) */}
+        {oscDef && chartBars.length >= 2 && (
           <div className="border-t border-card-border">
             <div className="px-3 py-1 text-xs text-muted-foreground flex items-center gap-2">
-              <span className="text-fa-accent font-medium">MACD</span>
-              <span className="text-zinc-600">(12, 26, 9)</span>
-              <span className="inline-block h-2 w-2 rounded-sm bg-blue-500/60" /> MACD
-              <span className="inline-block h-2 w-2 rounded-sm bg-amber-500/60" /> Signal
-              <span className="inline-block h-2 w-2 rounded-sm bg-green-500/40" /> Hist
+              <span className="text-accent font-medium">{oscDef.shortName}</span>
+              <span className="text-zinc-600">
+                ({oscDef.params.map(p => oscIndicator?.params[p.key] ?? p.default).join(", ")})
+              </span>
+              {oscDef.outputs.map(o => (
+                <span key={o.key} className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: o.color + "99" }} />
+                  <span>{o.label}</span>
+                </span>
+              ))}
             </div>
-            <div ref={macdContainerRef} className="w-full" style={{ height: 120 }} />
+            <div ref={oscContainerRef} className="w-full" style={{ height: 120 }} />
           </div>
         )}
       </div>

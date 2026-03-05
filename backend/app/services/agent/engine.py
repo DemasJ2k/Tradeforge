@@ -634,6 +634,7 @@ class AgentRunner:
                         f"Agent #{self.agent_id} opened {direction} {self._symbol} @ {signal.entry_price:.5f}\n"
                         f"SL: {signal.stop_loss:.5f} | TP: {signal.take_profit_1:.5f}\n"
                         f"Lot: {lot_size} | Status: {trade.status}",
+                        event_type="trade_executed",
                     )
                 finally:
                     _ndb.close()

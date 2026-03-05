@@ -1,6 +1,6 @@
 """
 Notification service – sends email (SMTP) and Telegram messages
-using per-user settings stored in UserSettings.
+using app-level config (env vars) + per-user recipient addresses.
 """
 
 import asyncio
@@ -14,7 +14,7 @@ import httpx
 
 from sqlalchemy.orm import Session
 
-from app.core.encryption import decrypt_value
+from app.core.config import settings as app_settings
 from app.models.settings import UserSettings
 
 logger = logging.getLogger(__name__)
@@ -33,30 +33,39 @@ def _send_email(
     subject: str,
     body_text: str,
     body_html: Optional[str] = None,
-    smtp_host: str,
-    smtp_port: int,
-    smtp_user: str,
-    smtp_pass: str,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
+    smtp_user: Optional[str] = None,
+    smtp_pass: Optional[str] = None,
     use_tls: bool = True,
 ) -> bool:
-    """Send an email via user-configured SMTP. Returns True on success."""
+    """Send an email via SMTP. Uses app-level config by default."""
+    host = smtp_host or app_settings.SMTP_SERVER
+    port = smtp_port or app_settings.SMTP_PORT
+    user = smtp_user or app_settings.SMTP_USERNAME
+    passwd = smtp_pass or app_settings.SMTP_PASSWORD
+
+    if not all([to_email, host, user, passwd]):
+        logger.debug("Email skipped – incomplete SMTP config")
+        return False
+
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = smtp_user
+        msg["From"] = user
         msg["To"] = to_email
 
         msg.attach(MIMEText(body_text, "plain"))
         if body_html:
             msg.attach(MIMEText(body_html, "html"))
 
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+        with smtplib.SMTP(host, port, timeout=15) as server:
             server.ehlo()
             if use_tls:
                 server.starttls()
                 server.ehlo()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, to_email, msg.as_string())
+            server.login(user, passwd)
+            server.sendmail(user, to_email, msg.as_string())
 
         logger.info("Notification email sent to %s", to_email)
         return True
@@ -72,22 +81,14 @@ def send_email_notification(
     body_text: str,
     body_html: Optional[str] = None,
 ) -> bool:
-    """Send an email notification using the user's stored SMTP settings."""
+    """Send an email notification using app-level SMTP + user's recipient email."""
     s = _get_user_settings(db, user_id)
     if not s:
         return False
 
     to_email = s.notification_email
-    smtp_host = s.notification_smtp_host
-    smtp_user = s.notification_smtp_user
-    smtp_pass_enc = s.notification_smtp_pass_encrypted
-
-    if not all([to_email, smtp_host, smtp_user, smtp_pass_enc]):
-        logger.debug("Email notification skipped – incomplete config for user %s", user_id)
-        return False
-
-    smtp_pass = decrypt_value(smtp_pass_enc)
-    if not smtp_pass:
+    if not to_email:
+        logger.debug("Email notification skipped – no recipient email for user %s", user_id)
         return False
 
     return _send_email(
@@ -95,11 +96,6 @@ def send_email_notification(
         subject=subject,
         body_text=body_text,
         body_html=body_html,
-        smtp_host=smtp_host,
-        smtp_port=s.notification_smtp_port or 587,
-        smtp_user=smtp_user,
-        smtp_pass=smtp_pass,
-        use_tls=bool(s.notification_smtp_use_tls),
     )
 
 
@@ -122,41 +118,21 @@ async def _send_telegram_async(bot_token: str, chat_id: str, text: str) -> bool:
         return False
 
 
-def _send_telegram_sync(bot_token: str, chat_id: str, text: str) -> bool:
-    """Synchronous wrapper for Telegram sending."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        # Already inside an async context – schedule as task
-        future = asyncio.ensure_future(_send_telegram_async(bot_token, chat_id, text))
-        # Can't await here from sync context; fire-and-forget
-        return True
-    else:
-        return asyncio.run(_send_telegram_async(bot_token, chat_id, text))
-
-
 async def send_telegram_notification(
     db: Session,
     user_id: int,
     text: str,
 ) -> bool:
-    """Send a Telegram notification using the user's stored bot token/chat_id."""
+    """Send a Telegram notification using app-level bot token + user's chat_id."""
     s = _get_user_settings(db, user_id)
     if not s:
         return False
 
-    token_enc = s.notification_telegram_bot_token_encrypted
+    bot_token = app_settings.TELEGRAM_BOT_TOKEN
     chat_id = s.notification_telegram_chat_id
 
-    if not token_enc or not chat_id:
+    if not bot_token or not chat_id:
         logger.debug("Telegram notification skipped – incomplete config for user %s", user_id)
-        return False
-
-    bot_token = decrypt_value(token_enc)
-    if not bot_token:
         return False
 
     return await _send_telegram_async(bot_token, chat_id, text)
@@ -164,18 +140,43 @@ async def send_telegram_notification(
 
 # ───────────────────────── UNIFIED ─────────────────────────
 
+# Event types that users can toggle on/off
+NOTIFICATION_EVENTS = {
+    "backtest_complete",
+    "optimize_complete",
+    "trade_executed",
+    "agent_started",
+    "agent_stopped",
+    "agent_error",
+    "signal_generated",
+    "price_alert",
+}
+
+
 async def notify(
     db: Session,
     user_id: int,
     subject: str,
     body: str,
     body_html: Optional[str] = None,
+    event_type: Optional[str] = None,
 ) -> dict:
     """
     Send notification to all configured channels for the user.
-    Returns {"email": bool, "telegram": bool} indicating which channels succeeded.
+    Checks user's notification toggles if event_type is provided.
+    Returns {"email": bool, "telegram": bool}.
     """
     results = {"email": False, "telegram": False}
+
+    # Check if user has this event type enabled
+    if event_type:
+        s = _get_user_settings(db, user_id)
+        if s:
+            prefs = s.notifications if isinstance(s.notifications, dict) else {}
+            # Default: all events enabled if not explicitly toggled off
+            if not prefs.get(event_type, True):
+                logger.debug("Notification '%s' disabled for user %s", event_type, user_id)
+                return results
 
     # Email (sync, fast enough for SMTP)
     results["email"] = send_email_notification(db, user_id, subject, body, body_html)
@@ -188,31 +189,22 @@ async def notify(
 
 # ───────────────────────── TEST helpers ─────────────────────────
 
-def test_email_settings(
-    *,
-    to_email: str,
-    smtp_host: str,
-    smtp_port: int,
-    smtp_user: str,
-    smtp_pass: str,
-    use_tls: bool = True,
-) -> bool:
-    """Send a test email with the provided (raw) settings."""
+def test_email_settings(*, to_email: str) -> bool:
+    """Send a test email to the given address using app-level SMTP."""
     return _send_email(
         to_email=to_email,
-        subject="FlowrexAlgo – Test Notification",
-        body_text="This is a test email from FlowrexAlgo. If you received this, your email notifications are configured correctly!",
-        smtp_host=smtp_host,
-        smtp_port=smtp_port,
-        smtp_user=smtp_user,
-        smtp_pass=smtp_pass,
-        use_tls=use_tls,
+        subject="TradeForge – Test Notification",
+        body_text="This is a test email from TradeForge. If you received this, your email notifications are configured correctly!",
     )
 
 
-async def test_telegram_settings(*, bot_token: str, chat_id: str) -> bool:
-    """Send a test Telegram message with the provided (raw) settings."""
+async def test_telegram_settings(*, chat_id: str) -> bool:
+    """Send a test Telegram message to the given chat_id using app-level bot token."""
+    bot_token = app_settings.TELEGRAM_BOT_TOKEN
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not configured")
+        return False
     return await _send_telegram_async(
         bot_token, chat_id,
-        "✅ <b>FlowrexAlgo</b> – Test notification received! Your Telegram notifications are configured correctly.",
+        "✅ <b>TradeForge</b> – Test notification received! Your Telegram notifications are configured correctly.",
     )

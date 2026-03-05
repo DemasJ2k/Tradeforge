@@ -119,6 +119,9 @@ def _run_schema_migrations():
         ("trades", "take_profit", "REAL"),
         # News AI analysis
         ("news_articles", "ai_analysis", "TEXT"),
+        # 2FA Email OTP columns
+        ("users", "otp_code",       "VARCHAR(10) DEFAULT ''"),
+        ("users", "otp_expires_at", "TIMESTAMP"),
     ]
 
     insp = inspect(engine)

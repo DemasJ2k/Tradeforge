@@ -157,6 +157,7 @@ def _run_optimization_thread(
                         f"Optimization completed – {n_trials} trials",
                         f"Optimization finished in {elapsed:.0f}s. "
                         f"Best {objective}: {result.best_score:.4f}",
+                        event_type="optimize_complete",
                     ))
                 finally:
                     _ndb.close()

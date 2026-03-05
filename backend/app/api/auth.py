@@ -1,19 +1,16 @@
 import hashlib
-import io
-import base64
 import logging
 import secrets
 import threading
 from datetime import datetime, timedelta, timezone
 
-import qrcode
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, get_current_admin,
-    generate_totp_secret, get_totp_provisioning_uri, verify_totp_code,
+    store_otp, verify_otp, send_otp_email,
 )
 from app.core.database import get_db
 from app.models.user import User
@@ -74,6 +71,16 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = create_access_token({"sub": str(user.id)})
+
+    # If 2FA is enabled, generate OTP and send via email
+    if user.totp_enabled:
+        code = store_otp(user, db)
+        sent = send_otp_email(user, code)
+        if not sent:
+            logging.getLogger(__name__).warning(
+                "2FA OTP email failed for user %s – allowing login anyway", user.username
+            )
+
     return Token(
         access_token=token,
         must_change_password=bool(user.must_change_password),
@@ -103,66 +110,61 @@ def force_change_password(
     return {"status": "ok", "message": "Password changed successfully"}
 
 
-# ─── TOTP Setup (generate secret + QR) ───
-@router.post("/setup-totp", response_model=TOTPSetupResponse)
+# ─── 2FA Setup (send test OTP to email) ───
+@router.post("/setup-totp")
 def setup_totp(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is already enabled")
+    if not current_user.email:
+        raise HTTPException(status_code=400, detail="Please set your email address in Profile settings first")
 
-    secret = generate_totp_secret()
-    uri = get_totp_provisioning_uri(secret, current_user.username)
+    # Generate OTP and send to email
+    code = store_otp(current_user, db)
+    sent = send_otp_email(current_user, code)
+    if not sent:
+        raise HTTPException(status_code=500, detail="Failed to send verification email. Check that email is configured.")
 
-    # Generate QR code as base64
-    img = qrcode.make(uri)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    qr_b64 = base64.b64encode(buf.getvalue()).decode()
-
-    # Store secret (not yet enabled — user must confirm with a valid code)
-    current_user.totp_secret = secret
-    db.commit()
-
-    return TOTPSetupResponse(
-        secret=secret,
-        provisioning_uri=uri,
-        qr_base64=qr_b64,
-    )
+    return {"status": "ok", "message": f"Verification code sent to {current_user.email}"}
 
 
-# ─── Confirm TOTP (verify code to enable 2FA) ───
+# ─── Confirm 2FA (verify emailed code to enable 2FA) ───
 @router.post("/confirm-totp", response_model=TOTPVerifyResponse)
 def confirm_totp(
     payload: TOTPVerifyRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.totp_secret:
-        raise HTTPException(status_code=400, detail="Run /setup-totp first")
-
-    valid = verify_totp_code(current_user.totp_secret, payload.code)
+    valid = verify_otp(current_user, payload.code)
     if valid:
         current_user.totp_enabled = True
+        current_user.otp_code = ""  # Clear used code
+        current_user.otp_expires_at = None
         db.commit()
     return TOTPVerifyResponse(valid=valid)
 
 
-# ─── Verify TOTP (on login when 2FA is enabled) ───
+# ─── Verify 2FA (on login when 2FA is enabled) ───
 @router.post("/verify-totp", response_model=TOTPVerifyResponse)
 def verify_totp(
     payload: TOTPVerifyRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.totp_enabled or not current_user.totp_secret:
+    if not current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
-    valid = verify_totp_code(current_user.totp_secret, payload.code)
+    valid = verify_otp(current_user, payload.code)
+    if valid:
+        current_user.otp_code = ""  # Clear used code
+        current_user.otp_expires_at = None
+        db.commit()
     return TOTPVerifyResponse(valid=valid)
 
 
-# ─── Disable TOTP ───
+# ─── Disable 2FA ───
 @router.post("/disable-totp")
 def disable_totp(
     payload: TOTPVerifyRequest,
@@ -172,11 +174,19 @@ def disable_totp(
     if not current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
-    if not verify_totp_code(current_user.totp_secret, payload.code):
-        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+    # Send OTP for verification before disabling
+    if not current_user.otp_code or not current_user.otp_expires_at:
+        code = store_otp(current_user, db)
+        send_otp_email(current_user, code)
+        return {"status": "code_sent", "message": "Verification code sent to your email"}
+
+    if not verify_otp(current_user, payload.code):
+        raise HTTPException(status_code=400, detail="Invalid verification code")
 
     current_user.totp_enabled = False
     current_user.totp_secret = ""
+    current_user.otp_code = ""
+    current_user.otp_expires_at = None
     db.commit()
     return {"status": "ok", "message": "2FA disabled"}
 

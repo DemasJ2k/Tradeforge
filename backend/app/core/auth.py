@@ -62,7 +62,7 @@ def get_current_admin(
     return current_user
 
 
-# ─── TOTP helpers ───
+# ─── TOTP helpers (legacy, kept for backward compat) ───
 
 def generate_totp_secret() -> str:
     return pyotp.random_base32()
@@ -76,3 +76,63 @@ def get_totp_provisioning_uri(secret: str, username: str) -> str:
 def verify_totp_code(secret: str, code: str) -> bool:
     totp = pyotp.TOTP(secret)
     return totp.verify(code, valid_window=1)
+
+
+# ─── Email OTP helpers ───
+
+import secrets
+import logging
+
+_otp_log = logging.getLogger(__name__)
+
+
+def generate_otp_code() -> str:
+    """Generate a 6-digit numeric OTP code."""
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def store_otp(user, db: Session, expires_minutes: int = 10) -> str:
+    """Generate and store OTP on user record. Returns the code."""
+    code = generate_otp_code()
+    user.otp_code = code
+    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    db.commit()
+    return code
+
+
+def verify_otp(user, code: str) -> bool:
+    """Verify OTP code against stored value. Returns True if valid and not expired."""
+    if not user.otp_code or not user.otp_expires_at:
+        return False
+    if datetime.now(timezone.utc) > user.otp_expires_at.replace(tzinfo=timezone.utc) if user.otp_expires_at.tzinfo is None else user.otp_expires_at:
+        _otp_log.debug("OTP expired for user %s", user.id)
+        return False
+    return secrets.compare_digest(user.otp_code, code.strip())
+
+
+def send_otp_email(user, code: str) -> bool:
+    """Send OTP code to user's email using app-level SMTP."""
+    from app.services.notification import _send_email
+
+    email = user.email
+    if not email:
+        _otp_log.warning("Cannot send OTP – user %s has no email", user.id)
+        return False
+
+    return _send_email(
+        to_email=email,
+        subject=f"TradeForge – Your verification code: {code}",
+        body_text=f"Your TradeForge verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.",
+        body_html=f"""
+        <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #3b82f6;">TradeForge</h2>
+            <p>Your verification code is:</p>
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; text-align: center;
+                        padding: 20px; background: #1a1a2e; color: #fff; border-radius: 8px; margin: 16px 0;">
+                {code}
+            </div>
+            <p style="color: #888; font-size: 14px;">This code expires in 10 minutes.</p>
+            <p style="color: #888; font-size: 12px;">If you did not request this, please ignore this email.</p>
+        </div>
+        """,
+    )

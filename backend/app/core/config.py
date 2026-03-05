@@ -27,12 +27,15 @@ class Settings(BaseSettings):
     ALPHAVANTAGE_API_KEY: str = ""
     NEWS_CACHE_TTL_MINUTES: int = 15
 
-    # SMTP (for invitation emails)
+    # SMTP (app-level, for notifications + invitations + 2FA)
     SMTP_SERVER: str = ""
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     NOTIFICATION_EMAIL: str = ""
+
+    # Telegram (app-level bot token)
+    TELEGRAM_BOT_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

@@ -239,6 +239,11 @@ export default function OptimizePage() {
   const [pastRuns, setPastRuns] = useState<OptimizationListItem[]>([]);
   const [pastRunsOpen, setPastRunsOpen] = useState(false);
 
+  // Results dashboard tabs
+  const [resultTab, setResultTab] = useState<"overview" | "walkforward" | "trades" | "history">("overview");
+  const convergenceRef = useRef<HTMLDivElement>(null);
+  const convergenceChartRef = useRef<import("lightweight-charts").IChartApi | null>(null);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load strategies + sources
@@ -499,6 +504,66 @@ export default function OptimizePage() {
   const isRunning = runningId !== null;
   const canRun = !!selectedStrategy && !!selectedSource && paramSpace.length > 0 && !isRunning;
 
+  // ── Convergence chart (score vs trial #) ──
+  useEffect(() => {
+    const destroy = () => {
+      if (convergenceChartRef.current) {
+        try { convergenceChartRef.current.remove(); } catch { /* */ }
+        convergenceChartRef.current = null;
+      }
+    };
+    if (!result || result.status !== "completed" || !convergenceRef.current || result.history.length === 0 || resultTab !== "overview") {
+      destroy();
+      return;
+    }
+    destroy();
+
+    import("lightweight-charts").then(({ createChart: createConvChart, LineSeries: ConvLine }) => {
+      if (!convergenceRef.current) return;
+      const chart = createConvChart(convergenceRef.current, {
+        height: 180,
+        layout: { background: { color: "transparent" }, textColor: "#9ca3af" },
+        grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
+        rightPriceScale: { borderColor: "#374151" },
+        timeScale: { borderColor: "#374151", visible: true },
+        crosshair: { mode: 1 },
+        handleScroll: true,
+        handleScale: true,
+      });
+      convergenceChartRef.current = chart;
+
+      // Build cumulative best score line
+      const sorted = [...result.history].sort((a, b) => a.trial_number - b.trial_number);
+      let bestSoFar = -Infinity;
+      const bestLine: { time: number; value: number }[] = [];
+      const scoreLine: { time: number; value: number }[] = [];
+      for (const t of sorted) {
+        const x = t.trial_number + 1;
+        scoreLine.push({ time: x as unknown as number, value: t.score });
+        if (t.score > bestSoFar) bestSoFar = t.score;
+        bestLine.push({ time: x as unknown as number, value: bestSoFar });
+      }
+
+      const scoreSeries = chart.addSeries(ConvLine, {
+        color: "#3b82f640", lineWidth: 1, priceLineVisible: false,
+        lastValueVisible: false, crosshairMarkerVisible: true,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      scoreSeries.setData(scoreLine as any);
+
+      const bestSeries = chart.addSeries(ConvLine, {
+        color: "#22c55e", lineWidth: 2, priceLineVisible: false,
+        lastValueVisible: true,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      bestSeries.setData(bestLine as any);
+      chart.timeScale().fitContent();
+    });
+
+    return destroy;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, resultTab]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -748,7 +813,14 @@ export default function OptimizePage() {
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Trial {status.current_trial} / {status.total_trials}</span>
-            <span>{status.progress.toFixed(1)}%</span>
+            <div className="flex items-center gap-3">
+              <span>{status.progress.toFixed(1)}%</span>
+              {status.current_trial > 0 && status.elapsed_seconds > 0 && (
+                <span className="text-muted-foreground/60">
+                  ~{Math.round((status.elapsed_seconds / status.current_trial) * (status.total_trials - status.current_trial))}s remaining
+                </span>
+              )}
+            </div>
           </div>
           {status.best_score > -1e5 && (
             <div className="text-sm">
@@ -762,9 +834,10 @@ export default function OptimizePage() {
         <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">{error}</div>
       )}
 
-      {/* ── Results ── */}
+      {/* ── Results Dashboard ── */}
       {result && result.status === "completed" && (
         <div className="space-y-4">
+          {/* Summary header */}
           <div className="rounded-xl border border-success/30 bg-card-bg p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-success uppercase tracking-wide">Optimization Complete</h2>
@@ -774,9 +847,34 @@ export default function OptimizePage() {
               </Button>
             </div>
 
+            {/* Key metrics cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(() => {
+                const best = [...result.history].sort((a, b) => b.score - a.score)[0];
+                return <>
+                  <div className="rounded-lg border border-card-border bg-black/20 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Best Score</div>
+                    <div className="text-lg font-bold text-accent">{result.best_score.toFixed(4)}</div>
+                  </div>
+                  <div className="rounded-lg border border-card-border bg-black/20 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Profit Factor</div>
+                    <div className="text-lg font-bold">{best?.stats?.profit_factor?.toFixed(2) ?? "—"}</div>
+                  </div>
+                  <div className="rounded-lg border border-card-border bg-black/20 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Sharpe Ratio</div>
+                    <div className="text-lg font-bold">{best?.stats?.sharpe_ratio?.toFixed(2) ?? "—"}</div>
+                  </div>
+                  <div className="rounded-lg border border-card-border bg-black/20 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Trades</div>
+                    <div className="text-lg font-bold">{best?.stats?.total_trades ?? "—"}</div>
+                  </div>
+                </>;
+              })()}
+            </div>
+
             {/* Best params */}
             <div>
-              <h3 className="text-xs text-muted-foreground mb-2">Best Parameters (Score: {result.best_score.toFixed(4)})</h3>
+              <h3 className="text-xs text-muted-foreground mb-2">Best Parameters</h3>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(result.best_params).map(([k, v]) => {
                   const label = paramSpace.find((p) => p.param_path === k)?.label || k;
@@ -788,11 +886,44 @@ export default function OptimizePage() {
                 })}
               </div>
             </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex gap-1 border-b border-card-border">
+            {([
+              { id: "overview", label: "Overview" },
+              { id: "walkforward", label: "Walk-Forward" },
+              { id: "trades", label: "Trade Analysis" },
+              { id: "history", label: "Trial History" },
+            ] as const).map(t => (
+              <button key={t.id} onClick={() => setResultTab(t.id)}
+                className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  resultTab === t.id
+                    ? "border-accent text-accent"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* ── Tab: Overview ── */}
+          {resultTab === "overview" && (<>
+            {/* Convergence chart */}
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5">
+                <h3 className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Convergence (Score vs Trial)</h3>
+                <div ref={convergenceRef} className="w-full" style={{ height: 180 }} />
+                <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-blue-500/40" /> Trial Score</span>
+                  <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-green-500" /> Cumulative Best</span>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Param importance */}
             {Object.keys(result.param_importance).length > 0 && (
-              <div>
-                <h3 className="text-xs text-muted-foreground mb-2">Parameter Importance</h3>
+              <Card className="bg-card-bg border-card-border">
+                <CardContent className="p-5">
+                <h3 className="text-xs text-muted-foreground mb-3 uppercase tracking-wide">Parameter Importance</h3>
                 <div className="space-y-1.5">
                   {Object.entries(result.param_importance)
                     .sort(([, a], [, b]) => b - a)
@@ -809,64 +940,11 @@ export default function OptimizePage() {
                       );
                     })}
                 </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
-          </div>
 
-          {/* Trial history table */}
-          <Card className="bg-card-bg border-card-border">
-            <CardContent className="p-5">
-            <h3 className="text-xs text-muted-foreground mb-3 uppercase tracking-wide">Trial History ({result.history.length} trials)</h3>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-card-bg">
-                  <tr className="border-b border-card-border text-muted-foreground">
-                    <th className="py-2 text-left px-2">#</th>
-                    <th className="py-2 text-right px-2">Score</th>
-                    <th className="py-2 text-right px-2">Trades</th>
-                    <th className="py-2 text-right px-2">Win %</th>
-                    <th className="py-2 text-right px-2">Net P&amp;L</th>
-                    <th className="py-2 text-right px-2">Sharpe</th>
-                    <th className="py-2 text-right px-2">SQN</th>
-                    <th className="py-2 text-right px-2">PF</th>
-                    <th className="py-2 text-right px-2">Neg Yrs</th>
-                    <th className="py-2 text-left px-2">Params</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...result.history]
-                    .sort((a, b) => b.score - a.score)
-                    .slice(0, 50)
-                    .map((t, i) => (
-                      <tr key={i} className={`border-b border-card-border/50 ${i === 0 ? "text-accent font-medium" : ""}`}>
-                        <td className="py-1.5 px-2">{t.trial_number + 1}</td>
-                        <td className="py-1.5 px-2 text-right">{t.score.toFixed(4)}</td>
-                        <td className="py-1.5 px-2 text-right">{t.stats.total_trades ?? "—"}</td>
-                        <td className="py-1.5 px-2 text-right">{t.stats.win_rate?.toFixed(1) ?? "—"}%</td>
-                        <td className={`py-1.5 px-2 text-right ${(t.stats.net_profit ?? 0) >= 0 ? "text-success" : "text-danger"}`}>
-                          ${(t.stats.net_profit ?? 0).toFixed(0)}
-                        </td>
-                        <td className="py-1.5 px-2 text-right">{t.stats.sharpe_ratio?.toFixed(2) ?? "—"}</td>
-                        <td className="py-1.5 px-2 text-right">{t.stats.sqn?.toFixed(2) ?? "—"}</td>
-                        <td className="py-1.5 px-2 text-right">{t.stats.profit_factor?.toFixed(2) ?? "—"}</td>
-                        <td className={`py-1.5 px-2 text-right ${(t.stats.negative_years ?? 0) > 0 ? "text-danger" : ""}`}>
-                          {t.stats.negative_years ?? "—"}
-                        </td>
-                        <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[200px]">
-                          {Object.entries(t.params).map(([k, v]) => {
-                            const lbl = paramSpace.find((p) => p.param_path === k)?.label || k.split(".").pop();
-                            return `${lbl}=${typeof v === "number" ? (v % 1 === 0 ? v : v.toFixed(2)) : v}`;
-                          }).join(", ")}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            </CardContent>
-          </Card>
-
-          {/* Yearly PnL breakdown for best result */}
+          {/* Yearly PnL — included in overview */}
           {(() => {
             const best = [...result.history].sort((a, b) => b.score - a.score)[0];
             const yearly = best?.stats?.yearly_pnl as Record<string, number> | undefined;
@@ -900,8 +978,10 @@ export default function OptimizePage() {
               </Card>
             );
           })()}
+          </>)}
 
-          {/* ── Robustness Test ── */}
+          {/* ── Tab: Walk-Forward (Robustness) ── */}
+          {resultTab === "walkforward" && (
           <Card className="bg-card-bg border-card-border">
             <CardContent className="p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -1007,8 +1087,10 @@ export default function OptimizePage() {
             )}
             </CardContent>
           </Card>
+          )}
 
-          {/* ── Trade Log Analysis ── */}
+          {/* ── Tab: Trade Analysis ── */}
+          {resultTab === "trades" && (
           <Card className="bg-card-bg border-card-border">
             <CardContent className="p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -1124,6 +1206,61 @@ export default function OptimizePage() {
             )}
             </CardContent>
           </Card>
+          )}
+
+          {/* ── Tab: Trial History ── */}
+          {resultTab === "history" && (
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5">
+            <h3 className="text-xs text-muted-foreground mb-3 uppercase tracking-wide">Trial History ({result.history.length} trials)</h3>
+            <div className="max-h-[500px] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-card-bg">
+                  <tr className="border-b border-card-border text-muted-foreground">
+                    <th className="py-2 text-left px-2">#</th>
+                    <th className="py-2 text-right px-2">Score</th>
+                    <th className="py-2 text-right px-2">Trades</th>
+                    <th className="py-2 text-right px-2">Win %</th>
+                    <th className="py-2 text-right px-2">Net P&amp;L</th>
+                    <th className="py-2 text-right px-2">Sharpe</th>
+                    <th className="py-2 text-right px-2">SQN</th>
+                    <th className="py-2 text-right px-2">PF</th>
+                    <th className="py-2 text-right px-2">Neg Yrs</th>
+                    <th className="py-2 text-left px-2">Params</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...result.history]
+                    .sort((a, b) => b.score - a.score)
+                    .map((t, i) => (
+                      <tr key={i} className={`border-b border-card-border/50 ${i === 0 ? "text-accent font-medium" : ""}`}>
+                        <td className="py-1.5 px-2">{t.trial_number + 1}</td>
+                        <td className="py-1.5 px-2 text-right">{t.score.toFixed(4)}</td>
+                        <td className="py-1.5 px-2 text-right">{t.stats.total_trades ?? "—"}</td>
+                        <td className="py-1.5 px-2 text-right">{t.stats.win_rate?.toFixed(1) ?? "—"}%</td>
+                        <td className={`py-1.5 px-2 text-right ${(t.stats.net_profit ?? 0) >= 0 ? "text-success" : "text-danger"}`}>
+                          ${(t.stats.net_profit ?? 0).toFixed(0)}
+                        </td>
+                        <td className="py-1.5 px-2 text-right">{t.stats.sharpe_ratio?.toFixed(2) ?? "—"}</td>
+                        <td className="py-1.5 px-2 text-right">{t.stats.sqn?.toFixed(2) ?? "—"}</td>
+                        <td className="py-1.5 px-2 text-right">{t.stats.profit_factor?.toFixed(2) ?? "—"}</td>
+                        <td className={`py-1.5 px-2 text-right ${(t.stats.negative_years ?? 0) > 0 ? "text-danger" : ""}`}>
+                          {t.stats.negative_years ?? "—"}
+                        </td>
+                        <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[200px]">
+                          {Object.entries(t.params).map(([k, v]) => {
+                            const lbl = paramSpace.find((p) => p.param_path === k)?.label || k.split(".").pop();
+                            return `${lbl}=${typeof v === "number" ? (v % 1 === 0 ? v : v.toFixed(2)) : v}`;
+                          }).join(", ")}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            </CardContent>
+          </Card>
+          )}
         </div>
       )}
 

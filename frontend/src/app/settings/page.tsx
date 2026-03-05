@@ -5,7 +5,7 @@ import type { UserSettings, StorageInfo, Invitation, BrokerCredentialMasked } fr
 import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Palette, Bot, TrendingUp, Link, HardDrive, Cog, ChevronDown, Bell, Zap, type LucideIcon } from 'lucide-react';
+import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, type LucideIcon } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -527,10 +527,8 @@ function WebhookSettingsSection() {
 const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'profile',       label: 'Profile',           icon: User },
   { id: 'appearance',    label: 'Appearance',         icon: Palette },
-  { id: 'llm',           label: 'AI / LLM',           icon: Bot },
-  { id: 'copilot',       label: 'AI Copilot',          icon: Zap },
-  { id: 'trading',       label: 'Trading Defaults',   icon: TrendingUp },
-  { id: 'brokers',       label: 'Brokers',            icon: Link },
+  { id: 'ai',            label: 'AI Settings',        icon: Bot },
+  { id: 'trading',       label: 'Trading',            icon: TrendingUp },
   { id: 'data',          label: 'Data Management',    icon: HardDrive },
   { id: 'notifications', label: 'Notifications',      icon: Bell },
   { id: 'platform',      label: 'Platform',           icon: Cog },
@@ -601,8 +599,6 @@ export default function SettingsPage() {
   const [expandedBroker, setExpandedBroker] = useState<string | null>(null);
 
   // Notification channel state
-  const [notifSmtpPass, setNotifSmtpPass] = useState('');
-  const [notifTelegramToken, setNotifTelegramToken] = useState('');
   const [notifTesting, setNotifTesting] = useState<string | null>(null); // 'email' | 'telegram' | null
   const [notifTestResult, setNotifTestResult] = useState<Record<string, string>>({});
 
@@ -903,37 +899,52 @@ export default function SettingsPage() {
               <h3 className="text-md font-semibold text-foreground">Two-Factor Authentication (2FA)</h3>
               {user?.totp_enabled ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-green-400">2FA is enabled</p>
-                  <Field label="Enter 2FA code to disable">
-                    <div className="flex gap-2">
-                      <input type="text" inputMode="numeric" maxLength={6} value={disableCode}
-                        onChange={e => setDisableCode(e.target.value.replace(/\D/g, ''))} className={inputCls} placeholder="000000" />
-                      <button onClick={async () => {
-                        setTotpMsg('');
-                        try {
-                          const r = await fetch(`${API}/api/auth/disable-totp`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                            body: JSON.stringify({ code: disableCode }),
-                          });
-                          const d = await r.json();
-                          if (r.ok) { await refreshUser(); setTotpMsg('2FA disabled'); setDisableCode(''); }
-                          else setTotpMsg(d.detail || 'Failed');
-                        } catch { setTotpMsg('Failed'); }
-                      }} disabled={disableCode.length !== 6} className={btnDanger}>Disable 2FA</button>
-                    </div>
-                  </Field>
-                  {totpMsg && <p className={`text-sm ${totpMsg.includes('disabled') ? 'text-green-400' : 'text-red-400'}`}>{totpMsg}</p>}
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-400" />
+                    <p className="text-sm text-green-400 font-medium">2FA is enabled</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">A verification code will be sent to your email on each login.</p>
+                  {!totpSetup ? (
+                    <button onClick={async () => {
+                      setTotpMsg('');
+                      try {
+                        const r = await fetch(`${API}/api/auth/disable-totp`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                          body: JSON.stringify({ code: '' }),
+                        });
+                        const d = await r.json();
+                        if (d.status === 'code_sent') { setTotpSetup({ secret: '', qr_base64: '' }); setTotpMsg('Verification code sent to your email'); }
+                        else setTotpMsg(d.detail || 'Failed');
+                      } catch { setTotpMsg('Failed'); }
+                    }} className={btnDanger}>Disable 2FA</button>
+                  ) : (
+                    <Field label="Enter the code sent to your email to confirm disable">
+                      <div className="flex gap-2">
+                        <input type="text" inputMode="numeric" maxLength={6} value={disableCode}
+                          onChange={e => setDisableCode(e.target.value.replace(/\D/g, ''))} className={inputCls} placeholder="000000" />
+                        <button onClick={async () => {
+                          setTotpMsg('');
+                          try {
+                            const r = await fetch(`${API}/api/auth/disable-totp`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                              body: JSON.stringify({ code: disableCode }),
+                            });
+                            const d = await r.json();
+                            if (d.status === 'ok') { await refreshUser(); setTotpSetup(null); setDisableCode(''); setTotpMsg('2FA disabled'); }
+                            else setTotpMsg(d.detail || 'Invalid code');
+                          } catch { setTotpMsg('Failed'); }
+                        }} disabled={disableCode.length !== 6} className={btnDanger}>Confirm Disable</button>
+                      </div>
+                    </Field>
+                  )}
+                  {totpMsg && <p className={`text-sm ${totpMsg.includes('disabled') ? 'text-green-400' : totpMsg.includes('sent') ? 'text-blue-400' : 'text-red-400'}`}>{totpMsg}</p>}
                 </div>
               ) : totpSetup ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</p>
-                  <div className="flex justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URIs can't use next/image */}
-                    <img src={`data:image/png;base64,${totpSetup.qr_base64}`} alt="TOTP QR" className="w-48 h-48 rounded-lg" />
-                  </div>
-                  <p className="text-xs text-muted-foreground/60 text-center break-all">Manual key: {totpSetup.secret}</p>
-                  <Field label="Enter the 6-digit code to confirm">
+                  <p className="text-sm text-muted-foreground">A verification code has been sent to your email. Enter it below to enable 2FA.</p>
+                  <Field label="Enter the 6-digit code from your email">
                     <div className="flex gap-2">
                       <input type="text" inputMode="numeric" maxLength={6} value={totpCode}
                         onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))} className={inputCls} placeholder="000000" />
@@ -952,12 +963,16 @@ export default function SettingsPage() {
                       }} disabled={totpCode.length !== 6} className={btnPrimary}>Confirm</button>
                     </div>
                   </Field>
+                  <button onClick={() => { setTotpSetup(null); setTotpCode(''); setTotpMsg(''); }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
                   {totpMsg && <p className={`text-sm ${totpMsg.includes('enabled') ? 'text-green-400' : 'text-red-400'}`}>{totpMsg}</p>}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security to your account.</p>
-                  <button onClick={async () => {
+                  <p className="text-sm text-muted-foreground">Add an extra layer of security. A verification code will be emailed to you on each login.</p>
+                  {!user?.email && (
+                    <p className="text-xs text-amber-400">Please set your email address above before enabling 2FA.</p>
+                  )}
+                  <button disabled={!user?.email} onClick={async () => {
                     setTotpMsg('');
                     try {
                       const r = await fetch(`${API}/api/auth/setup-totp`, {
@@ -965,11 +980,11 @@ export default function SettingsPage() {
                         headers: { 'Content-Type': 'application/json', ...authHeaders() },
                       });
                       const d = await r.json();
-                      if (r.ok) setTotpSetup(d);
+                      if (r.ok) { setTotpSetup({ secret: '', qr_base64: '' }); setTotpMsg('Verification code sent to your email'); }
                       else setTotpMsg(d.detail || 'Setup failed');
                     } catch { setTotpMsg('Setup failed'); }
                   }} className={btnPrimary}>Enable 2FA</button>
-                  {totpMsg && <p className="text-sm text-red-400">{totpMsg}</p>}
+                  {totpMsg && <p className={`text-sm ${totpMsg.includes('sent') ? 'text-blue-400' : 'text-red-400'}`}>{totpMsg}</p>}
                 </div>
               )}
 
@@ -1377,8 +1392,8 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ─── AI / LLM ─── */}
-          {tab === 'llm' && (
+          {/* ─── AI Settings (LLM + Copilot) ─── */}
+          {tab === 'ai' && (
             <div className="space-y-6 max-w-xl">
               <h2 className="text-lg font-semibold text-foreground">AI Assistant Configuration</h2>
               <p className="text-sm text-muted-foreground">Connect your preferred LLM provider to enable the AI trading assistant across all pages.</p>
@@ -1453,12 +1468,8 @@ export default function SettingsPage() {
               {llmTestResult && (
                 <p className={`text-sm ${llmTestResult.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>{llmTestResult}</p>
               )}
-            </div>
-          )}
 
-          {/* ─── AI Copilot ─── */}
-          {tab === 'copilot' && (
-            <div className="space-y-6 max-w-xl">
+              <hr className="border-card-border my-4" />
               <h2 className="text-lg font-semibold text-foreground">AI Copilot Settings</h2>
               <p className="text-sm text-muted-foreground">
                 Control how the AI copilot interacts with your account — toggle it on or off, set the autonomy level,
@@ -1838,336 +1849,31 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ─── Brokers ─── */}
-          {tab === 'brokers' && (
-            <div className="space-y-6 max-w-2xl">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Broker Connections</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Save API credentials for each broker. Credentials are encrypted at rest.
-                  Once saved, you can connect and fetch historical data from the Data page.
-                </p>
-              </div>
-
-              {/* Oanda */}
-              {(() => {
-                const bc = brokerCreds.find(b => b.broker === 'oanda');
-                const busy = brokerBusy['oanda'];
-                const msg = brokerMsg['oanda'];
-                const form = brokerForms['oanda'] || {};
-                const expanded = expandedBroker === 'oanda';
-                return (
-                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-foreground">Oanda</span>
-                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
-                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                        {bc?.fields_set?.length ? <span className="text-xs text-muted-foreground/60">{bc.fields_set.join(', ')} set</span> : null}
-                      </div>
-                      <button onClick={() => setExpandedBroker(expanded ? null : 'oanda')}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
-                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
-                      </button>
-                    </div>
-                    {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-card-border">
-                        <Field label="API Key (Personal Access Token)">
-                          <input type="password" value={form.api_key || ''} onChange={e => setBrokerField('oanda', 'api_key', e.target.value)}
-                            placeholder="••••••••" className={inputCls} />
-                        </Field>
-                        <Field label="Account ID">
-                          <input type="text" value={form.account_id || ''} onChange={e => setBrokerField('oanda', 'account_id', e.target.value)}
-                            placeholder="101-011-12345678-001" className={inputCls} />
-                        </Field>
-                        <Toggle value={form.practice !== 'false'}
-                          onChange={v => setBrokerField('oanda', 'practice', v.toString())}
-                          label="Practice account (paper trading)" />
-                        <Toggle value={brokerAutoConnect['oanda'] ?? false}
-                          onChange={v => setBrokerAutoConnect(p => ({ ...p, oanda: v }))}
-                          label="Auto-connect on startup" />
-                        <div className="flex gap-2 pt-1 flex-wrap">
-                          <button onClick={() => saveBrokerCreds('oanda')} disabled={busy} className={btnPrimary}>
-                            {busy ? 'Saving...' : 'Save Credentials'}
-                          </button>
-                          {bc?.configured && (
-                            <button onClick={() => connectBroker('oanda')} disabled={busy} className={btnSecondary}>
-                              {busy ? 'Connecting...' : 'Test Connection'}
-                            </button>
-                          )}
-                          {bc?.configured && (
-                            <button onClick={() => deleteBrokerCreds('oanda')} disabled={busy} className={btnDanger}>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Coinbase */}
-              {(() => {
-                const bc = brokerCreds.find(b => b.broker === 'coinbase');
-                const busy = brokerBusy['coinbase'];
-                const msg = brokerMsg['coinbase'];
-                const form = brokerForms['coinbase'] || {};
-                const expanded = expandedBroker === 'coinbase';
-                return (
-                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-foreground">Coinbase Advanced</span>
-                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
-                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                      </div>
-                      <button onClick={() => setExpandedBroker(expanded ? null : 'coinbase')}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
-                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
-                      </button>
-                    </div>
-                    {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-card-border">
-                        <p className="text-xs text-muted-foreground">Use CDP (Cloud Developer Platform) API keys. Format: organizations/…/apiKeys/…</p>
-                        <Field label="CDP API Key Name">
-                          <input type="text" value={form.api_key || ''} onChange={e => setBrokerField('coinbase', 'api_key', e.target.value)}
-                            placeholder="organizations/.../apiKeys/..." className={inputCls} />
-                        </Field>
-                        <Field label="CDP API Secret (EC Private Key PEM)">
-                          <textarea value={form.api_secret || ''} onChange={e => setBrokerField('coinbase', 'api_secret', e.target.value)}
-                            placeholder="-----BEGIN EC PRIVATE KEY-----&#10;...&#10;-----END EC PRIVATE KEY-----"
-                            rows={4} className={`${inputCls} font-mono text-xs`} />
-                        </Field>
-                        <div className="flex gap-2 pt-1 flex-wrap">
-                          <button onClick={() => saveBrokerCreds('coinbase')} disabled={busy} className={btnPrimary}>
-                            {busy ? 'Saving...' : 'Save Credentials'}
-                          </button>
-                          {bc?.configured && (
-                            <button onClick={() => connectBroker('coinbase')} disabled={busy} className={btnSecondary}>
-                              {busy ? 'Connecting...' : 'Test Connection'}
-                            </button>
-                          )}
-                          {bc?.configured && (
-                            <button onClick={() => deleteBrokerCreds('coinbase')} disabled={busy} className={btnDanger}>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Tradovate */}
-              {(() => {
-                const bc = brokerCreds.find(b => b.broker === 'tradovate');
-                const busy = brokerBusy['tradovate'];
-                const msg = brokerMsg['tradovate'];
-                const form = brokerForms['tradovate'] || {};
-                const expanded = expandedBroker === 'tradovate';
-                return (
-                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-foreground">Tradovate</span>
-                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
-                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                      </div>
-                      <button onClick={() => setExpandedBroker(expanded ? null : 'tradovate')}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
-                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
-                      </button>
-                    </div>
-                    {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-card-border">
-                        <Field label="Username">
-                          <input type="text" value={form.username || ''} onChange={e => setBrokerField('tradovate', 'username', e.target.value)}
-                            placeholder="your@email.com" className={inputCls} />
-                        </Field>
-                        <Field label="Password">
-                          <input type="password" value={form.password || ''} onChange={e => setBrokerField('tradovate', 'password', e.target.value)}
-                            placeholder="••••••••" className={inputCls} />
-                        </Field>
-                        <Field label="App ID">
-                          <input type="text" value={form.app_id || ''} onChange={e => setBrokerField('tradovate', 'app_id', e.target.value)}
-                            placeholder="MyApp" className={inputCls} />
-                        </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="CID">
-                            <input type="text" value={form.cid || ''} onChange={e => setBrokerField('tradovate', 'cid', e.target.value)}
-                              placeholder="12345" className={inputCls} />
-                          </Field>
-                          <Field label="SEC">
-                            <input type="password" value={form.sec || ''} onChange={e => setBrokerField('tradovate', 'sec', e.target.value)}
-                              placeholder="••••••••" className={inputCls} />
-                          </Field>
-                        </div>
-                        <Toggle value={form.practice !== 'false'}
-                          onChange={v => setBrokerField('tradovate', 'practice', v.toString())}
-                          label="Demo account" />
-                        <div className="flex gap-2 pt-1 flex-wrap">
-                          <button onClick={() => saveBrokerCreds('tradovate')} disabled={busy} className={btnPrimary}>
-                            {busy ? 'Saving...' : 'Save Credentials'}
-                          </button>
-                          {bc?.configured && (
-                            <button onClick={() => connectBroker('tradovate')} disabled={busy} className={btnSecondary}>
-                              {busy ? 'Connecting...' : 'Test Connection'}
-                            </button>
-                          )}
-                          {bc?.configured && (
-                            <button onClick={() => deleteBrokerCreds('tradovate')} disabled={busy} className={btnDanger}>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* MT5 */}
-              {(() => {
-                const bc = brokerCreds.find(b => b.broker === 'mt5');
-                const busy = brokerBusy['mt5'];
-                const msg = brokerMsg['mt5'];
-                const form = brokerForms['mt5'] || {};
-                const expanded = expandedBroker === 'mt5';
-                return (
-                  <div className="bg-input-bg rounded-xl border border-card-border p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-foreground">MetaTrader 5</span>
-                        {bc?.connected && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Connected</span>}
-                        {bc?.configured && !bc.connected && <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded-full">Saved</span>}
-                        <span className="text-xs text-muted-foreground/40">(Windows-only)</span>
-                      </div>
-                      <button onClick={() => setExpandedBroker(expanded ? null : 'mt5')}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded bg-input-bg hover:bg-input-bg">
-                        {expanded ? 'Collapse' : bc?.configured ? 'Edit' : 'Configure'}
-                      </button>
-                    </div>
-                    {expanded && (
-                      <div className="space-y-3 pt-2 border-t border-card-border">
-                        <Field label="Server">
-                          <input type="text" value={form.server || ''} onChange={e => setBrokerField('mt5', 'server', e.target.value)}
-                            placeholder="ICMarkets-Demo01" className={inputCls} />
-                        </Field>
-                        <Field label="Login">
-                          <input type="text" value={form.login || ''} onChange={e => setBrokerField('mt5', 'login', e.target.value)}
-                            placeholder="12345678" className={inputCls} />
-                        </Field>
-                        <Field label="Password">
-                          <input type="password" value={form.password || ''} onChange={e => setBrokerField('mt5', 'password', e.target.value)}
-                            placeholder="••••••••" className={inputCls} />
-                        </Field>
-                        <div className="flex gap-2 pt-1 flex-wrap">
-                          <button onClick={() => saveBrokerCreds('mt5')} disabled={busy} className={btnPrimary}>
-                            {busy ? 'Saving...' : 'Save Credentials'}
-                          </button>
-                          {bc?.configured && (
-                            <button onClick={() => connectBroker('mt5')} disabled={busy} className={btnSecondary}>
-                              {busy ? 'Connecting...' : 'Test Connection'}
-                            </button>
-                          )}
-                          {bc?.configured && (
-                            <button onClick={() => deleteBrokerCreds('mt5')} disabled={busy} className={btnDanger}>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                        {msg && <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
 
           {/* ─── Notifications ─── */}
           {tab === 'notifications' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-foreground">Notification Channels</h2>
+              <h2 className="text-lg font-semibold text-foreground">Notification Settings</h2>
               <p className="text-sm text-muted-foreground">
-                Configure email and/or Telegram to receive alerts for trade executions, backtest completions, and optimization results.
+                Enter your email and/or Telegram chat ID to receive notifications. The platform handles delivery automatically.
               </p>
 
-              {/* ── In-app toggles ── */}
-              <h3 className="text-md font-semibold text-foreground pt-2">Event Toggles</h3>
+              {/* ── Email ── */}
+              <h3 className="text-md font-semibold text-foreground pt-2">Email Notifications</h3>
               <div className="space-y-3">
-                <Toggle value={s.notifications?.backtest ?? true}
-                  onChange={v => set('notifications', { ...s.notifications, backtest: v })}
-                  label="Backtest completed" />
-                <Toggle value={s.notifications?.optimize ?? true}
-                  onChange={v => set('notifications', { ...s.notifications, optimize: v })}
-                  label="Optimization completed" />
-                <Toggle value={s.notifications?.trade ?? true}
-                  onChange={v => set('notifications', { ...s.notifications, trade: v })}
-                  label="Trade executed" />
-              </div>
-
-              {/* ── Email / SMTP ── */}
-              <hr className="border-card-border" />
-              <h3 className="text-md font-semibold text-foreground">Email (SMTP)</h3>
-              <div className="space-y-3">
-                <Field label="Recipient Email">
+                <Field label="Your Email Address">
                   <input type="email" value={s.notification_email ?? ''}
                     onChange={e => set('notification_email', e.target.value)}
                     placeholder="you@example.com" className={inputCls} />
                 </Field>
-                <Field label="SMTP Host">
-                  <input value={s.notification_smtp_host ?? ''}
-                    onChange={e => set('notification_smtp_host', e.target.value)}
-                    placeholder="smtp.gmail.com" className={inputCls} />
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="SMTP Port">
-                    <input type="number" value={s.notification_smtp_port ?? 587}
-                      onChange={e => set('notification_smtp_port', parseInt(e.target.value) || 587)}
-                      className={inputCls} />
-                  </Field>
-                  <Field label="Use TLS">
-                    <select value={s.notification_smtp_use_tls ? 'yes' : 'no'}
-                      onChange={e => set('notification_smtp_use_tls', e.target.value === 'yes')}
-                      className={selectCls}>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
-                  </Field>
-                </div>
-                <Field label="SMTP Username">
-                  <input value={s.notification_smtp_user ?? ''}
-                    onChange={e => set('notification_smtp_user', e.target.value)}
-                    placeholder="you@gmail.com" className={inputCls} />
-                </Field>
-                <Field label="SMTP Password">
-                  <input type="password" value={notifSmtpPass}
-                    onChange={e => setNotifSmtpPass(e.target.value)}
-                    placeholder={s.notification_smtp_pass_set ? '••••••••  (saved)' : 'App password'}
-                    className={inputCls} />
-                </Field>
                 <div className="flex gap-2 items-center">
-                  <button disabled={notifTesting === 'email'} onClick={async () => {
+                  <button disabled={notifTesting === 'email' || !s.notification_email} onClick={async () => {
                     setNotifTesting('email');
                     setNotifTestResult({});
                     try {
                       const resp = await fetch(`${API}/api/settings/test-notification`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                        body: JSON.stringify({
-                          channel: 'email',
-                          email: s.notification_email,
-                          smtp_host: s.notification_smtp_host,
-                          smtp_port: s.notification_smtp_port,
-                          smtp_user: s.notification_smtp_user,
-                          smtp_pass: notifSmtpPass || undefined,
-                          smtp_use_tls: s.notification_smtp_use_tls,
-                        }),
+                        body: JSON.stringify({ channel: 'email', email: s.notification_email }),
                       });
                       const data = await resp.json();
                       setNotifTestResult({ email: data.email ? 'Test email sent!' : (data.email_error || 'Failed to send') });
@@ -2186,35 +1892,24 @@ export default function SettingsPage() {
 
               {/* ── Telegram ── */}
               <hr className="border-card-border" />
-              <h3 className="text-md font-semibold text-foreground">Telegram</h3>
+              <h3 className="text-md font-semibold text-foreground">Telegram Notifications</h3>
               <p className="text-xs text-muted-foreground mb-2">
-                1. Message <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@BotFather</a> to create a bot and get a token.
-                2. Start a chat with your bot, then use <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@userinfobot</a> to get your Chat ID.
+                Start a chat with the TradeForge bot, then use <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-fa-accent hover:underline">@userinfobot</a> to find your Chat ID.
               </p>
               <div className="space-y-3">
-                <Field label="Bot Token">
-                  <input type="password" value={notifTelegramToken}
-                    onChange={e => setNotifTelegramToken(e.target.value)}
-                    placeholder={s.notification_telegram_bot_token_set ? '••••••••  (saved)' : '123456:ABC-DEF...'}
-                    className={inputCls} />
-                </Field>
-                <Field label="Chat ID">
+                <Field label="Your Telegram Chat ID">
                   <input value={s.notification_telegram_chat_id ?? ''}
                     onChange={e => set('notification_telegram_chat_id', e.target.value)}
                     placeholder="123456789" className={inputCls} />
                 </Field>
                 <div className="flex gap-2 items-center">
-                  <button disabled={notifTesting === 'telegram'} onClick={async () => {
+                  <button disabled={notifTesting === 'telegram' || !s.notification_telegram_chat_id} onClick={async () => {
                     setNotifTesting('telegram');
                     setNotifTestResult({});
                     try {
                       const resp = await fetch(`${API}/api/settings/test-notification`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                        body: JSON.stringify({
-                          channel: 'telegram',
-                          bot_token: notifTelegramToken || undefined,
-                          chat_id: s.notification_telegram_chat_id,
-                        }),
+                        body: JSON.stringify({ channel: 'telegram', chat_id: s.notification_telegram_chat_id }),
                       });
                       const data = await resp.json();
                       setNotifTestResult({ telegram: data.telegram ? 'Test message sent!' : (data.telegram_error || 'Failed to send') });
@@ -2231,23 +1926,45 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* ── Event Toggles ── */}
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Event Notifications</h3>
+              <p className="text-xs text-muted-foreground mb-2">Choose which events trigger notifications.</p>
+              <div className="space-y-3">
+                <Toggle value={s.notifications?.backtest_complete ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, backtest_complete: v })}
+                  label="Backtest completed" />
+                <Toggle value={s.notifications?.optimize_complete ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, optimize_complete: v })}
+                  label="Optimization completed" />
+                <Toggle value={s.notifications?.trade_executed ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, trade_executed: v })}
+                  label="Trade executed" />
+                <Toggle value={s.notifications?.agent_started ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, agent_started: v })}
+                  label="Agent started" />
+                <Toggle value={s.notifications?.agent_stopped ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, agent_stopped: v })}
+                  label="Agent stopped" />
+                <Toggle value={s.notifications?.agent_error ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, agent_error: v })}
+                  label="Agent error" />
+                <Toggle value={s.notifications?.signal_generated ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, signal_generated: v })}
+                  label="Signal generated" />
+                <Toggle value={s.notifications?.price_alert ?? true}
+                  onChange={v => set('notifications', { ...s.notifications, price_alert: v })}
+                  label="Price alert triggered" />
+              </div>
+
               {/* ── Save ── */}
               <div className="pt-4">
                 <button onClick={() => {
-                  const payload: Record<string, unknown> = {
+                  save({
                     notifications: s.notifications,
                     notification_email: s.notification_email,
-                    notification_smtp_host: s.notification_smtp_host,
-                    notification_smtp_port: s.notification_smtp_port,
-                    notification_smtp_user: s.notification_smtp_user,
-                    notification_smtp_use_tls: s.notification_smtp_use_tls,
                     notification_telegram_chat_id: s.notification_telegram_chat_id,
-                  };
-                  if (notifSmtpPass) payload.notification_smtp_pass = notifSmtpPass;
-                  if (notifTelegramToken) payload.notification_telegram_bot_token = notifTelegramToken;
-                  save(payload);
-                  setNotifSmtpPass('');
-                  setNotifTelegramToken('');
+                  });
                 }} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Notification Settings'}
                 </button>

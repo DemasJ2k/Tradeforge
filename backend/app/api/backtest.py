@@ -31,7 +31,7 @@ from app.services.backtest.engine import Bar  # Bar dataclass still used for CSV
 # V1 imports deprecated — Phase 1C: all strategies route through V2 unified runner
 
 
-def _fire_notification(user_id: int, subject: str, body: str):
+def _fire_notification(user_id: int, subject: str, body: str, event_type: str = "backtest_complete"):
     """Send notification in background thread (fire-and-forget)."""
     def _run():
         try:
@@ -39,7 +39,7 @@ def _fire_notification(user_id: int, subject: str, body: str):
             from app.services.notification import notify
             _db = SessionLocal()
             try:
-                asyncio.run(notify(_db, user_id, subject, body))
+                asyncio.run(notify(_db, user_id, subject, body, event_type=event_type))
             finally:
                 _db.close()
         except Exception:

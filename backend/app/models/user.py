@@ -18,9 +18,13 @@ class User(Base):
     email = Column(String(255), default="")
     phone = Column(String(50), default="")
 
-    # 2FA / TOTP
+    # 2FA / TOTP (legacy columns kept for migration compat)
     totp_secret = Column(String(64), default="")
     totp_enabled = Column(Boolean, default=False)
+
+    # 2FA Email OTP
+    otp_code = Column(String(10), default="")
+    otp_expires_at = Column(DateTime, nullable=True)
 
     # Admin & invitation
     is_admin = Column(Boolean, default=False)

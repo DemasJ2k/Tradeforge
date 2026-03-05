@@ -136,7 +136,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <Logo />
           <h2 className="text-center text-sm font-semibold mb-1">Two-Factor Authentication</h2>
           <p className="text-center text-xs text-muted-foreground mb-4">
-            Enter the 6-digit code from your authenticator app.
+            Enter the verification code sent to your email.
           </p>
           <form onSubmit={handleTotp} className="space-y-4">
             <input

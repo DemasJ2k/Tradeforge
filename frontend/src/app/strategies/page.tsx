@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp } from "lucide-react";
+import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -46,6 +46,10 @@ export default function StrategiesPage() {
 
   // Settings modal state
   const [settingsStrategy, setSettingsStrategy] = useState<Strategy | null>(null);
+
+  // Rename state
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // Search filter
   const [search, setSearch] = useState("");
@@ -177,6 +181,26 @@ export default function StrategiesPage() {
     setMovingStrategy(null);
   };
 
+  const startRename = (s: Strategy) => {
+    setRenamingId(s.id);
+    setRenameValue(s.name);
+  };
+
+  const commitRename = async () => {
+    if (!renamingId) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) { setRenamingId(null); return; }
+    try {
+      await api.put(`/api/strategies/${renamingId}`, { name: trimmed });
+      setStrategies((prev) =>
+        prev.map((s) => (s.id === renamingId ? { ...s, name: trimmed } : s))
+      );
+    } catch { /* ignore */ }
+    setRenamingId(null);
+  };
+
+  const cancelRename = () => { setRenamingId(null); };
+
   /* ── AI Import ──────────────────────────────────────── */
   const handleAiGenerate = async () => {
     if (!aiFile) return;
@@ -282,7 +306,25 @@ export default function StrategiesPage() {
             {s.strategy_type === "python" && <span title="Python strategy" className="shrink-0">🐍</span>}
             {s.strategy_type === "json" && <span title="JSON strategy" className="shrink-0">📋</span>}
             {s.strategy_type === "pinescript" && <span title="Pine Script strategy" className="shrink-0">🌲</span>}
-            {s.name}
+            {renamingId === s.id ? (
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={e => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); }}
+                className="bg-input-bg border border-accent/50 rounded px-1.5 py-0.5 text-sm text-foreground outline-none min-w-[120px]"
+                onClick={e => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className={!s.is_system ? "cursor-pointer hover:text-accent transition-colors" : ""}
+                onDoubleClick={() => !s.is_system && startRename(s)}
+                title={!s.is_system ? "Double-click to rename" : undefined}
+              >
+                {s.name}
+              </span>
+            )}
             {s.is_system && (
               <Badge variant="outline" className="text-accent border-accent/30 text-[10px]">System</Badge>
             )}
@@ -344,6 +386,11 @@ export default function StrategiesPage() {
           </div>
         </div>
         <div className="flex items-center gap-1 ml-3 shrink-0">
+          {!s.is_system && (
+            <Button variant="ghost" size="icon" onClick={() => startRename(s)} title="Rename" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+              <Type className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {s.settings_schema?.length > 0 && (
             <Button variant="ghost" size="icon" onClick={() => setSettingsStrategy(s)} title="Strategy Settings" className="h-7 w-7 text-muted-foreground hover:text-accent">
               <Settings className="h-3.5 w-3.5" />
