@@ -16,6 +16,9 @@ Complete guide to the FlowrexAlgo trading platform.
 - **[Optimization Guide](./05_OPTIMIZATION.md)** — Find optimal parameters using Bayesian/Genetic algorithms
 - **[Live Trading Guide](./04_LIVE_TRADING.md)** — Deploy strategies as Algo Agents, manage risk, monitor trades
 
+### Complete User Guide
+- **[User Guide](./USER_GUIDE.md)** — Comprehensive guide covering every page, feature, setting, and interaction (beginner-friendly)
+
 ### Help & Reference
 - **[FAQ & Troubleshooting](./06_FAQ_AND_TROUBLESHOOTING.md)** — Common questions, error solutions, tips
 - **[Quick Reference](./QUICK_REFERENCE.md)** — Cheat sheet, keyboard shortcuts, common workflows
