@@ -59,6 +59,8 @@ class MLTrainRequest(BaseModel):
     sub_type: Optional[str] = None        # "lstm" or "ensemble" for level 3
     seq_len: Optional[int] = 20           # LSTM sequence length
     hidden_units: Optional[int] = 64      # LSTM hidden units
+    # Meta-labeling
+    primary_model_id: Optional[int] = None  # ID of primary model for meta-labeling
 
 
 class MLModelResponse(BaseModel):

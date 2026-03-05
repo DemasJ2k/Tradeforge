@@ -490,6 +490,144 @@ async def retrain_purged_kfold(
         raise HTTPException(500, f"Purged k-fold retrain failed: {str(e)}")
 
 
+@router.post("/train-meta")
+async def train_meta_label(
+    payload: MLTrainRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Train a meta-labeling model that filters signals from a primary model.
+
+    Requires payload.primary_model_id pointing to an existing trained model.
+    The meta model learns which signals from the primary model are profitable.
+    """
+    if not payload.primary_model_id:
+        raise HTTPException(400, "primary_model_id is required for meta-labeling")
+
+    primary_record = db.query(MLModel).filter(MLModel.id == payload.primary_model_id).first()
+    if not primary_record:
+        raise HTTPException(404, f"Primary model {payload.primary_model_id} not found")
+    if primary_record.status != "ready":
+        raise HTTPException(400, f"Primary model not ready (status: {primary_record.status})")
+    if not primary_record.model_path:
+        raise HTTPException(400, "Primary model has no saved model file")
+
+    ds = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()
+    if not ds:
+        raise HTTPException(404, f"Data source {payload.datasource_id} not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
+    if len(ohlcv_data) < 200:
+        raise HTTPException(400, f"Need at least 200 bars for meta-labeling, got {len(ohlcv_data)}")
+
+    features_config = {"features": payload.features or _DEFAULT_FEATURES}
+    if payload.normalize != "none":
+        features_config["normalize"] = payload.normalize
+        features_config["zscore_window"] = payload.zscore_window
+    target_config = {"type": payload.target_type, "horizon": payload.target_horizon}
+    if payload.target_type == "triple_barrier":
+        target_config["sl_atr_mult"] = payload.sl_atr_mult
+        target_config["tp_atr_mult"] = payload.tp_atr_mult
+        target_config["max_holding_bars"] = payload.max_holding_bars
+    hyperparams = {
+        "n_estimators": payload.n_estimators,
+        "max_depth": payload.max_depth,
+        "learning_rate": payload.learning_rate,
+        "early_stopping_rounds": payload.early_stopping_rounds,
+    }
+
+    model_record = MLModel(
+        name=payload.name,
+        level=2,
+        model_type=payload.model_type,
+        creator_id=user.id,
+        symbol=payload.symbol or ds.symbol or "",
+        timeframe=payload.timeframe or ds.timeframe or "H1",
+        features_config={
+            **features_config,
+            "is_meta_model": True,
+            "primary_model_id": payload.primary_model_id,
+        },
+        target_config=target_config,
+        hyperparams=hyperparams,
+        status="training",
+    )
+    db.add(model_record)
+    db.commit()
+    db.refresh(model_record)
+
+    meta_model_id = model_record.id
+    primary_model_path = primary_record.model_path
+    model_type = payload.model_type
+
+    asyncio.get_event_loop().run_in_executor(
+        _train_pool,
+        _run_meta_training,
+        meta_model_id, ohlcv_data, primary_model_path, model_type,
+        features_config, target_config, hyperparams,
+    )
+
+    return {
+        "id": model_record.id,
+        "name": model_record.name,
+        "status": "training",
+        "message": "Meta-labeling training started. Poll GET /api/ml/models/{id} for status.",
+    }
+
+
+def _run_meta_training(
+    model_id: int,
+    ohlcv_data: list[dict],
+    primary_model_path: str,
+    model_type: str,
+    features_config: dict,
+    target_config: dict,
+    hyperparams: dict,
+):
+    """Run meta-labeling training in a background thread."""
+    db = SessionLocal()
+    try:
+        from app.services.ml.meta_labeler import train_meta_model
+
+        model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+        if not model_record:
+            logger.error("Meta train: model %d not found", model_id)
+            return
+
+        result = train_meta_model(
+            ohlcv_data=ohlcv_data,
+            primary_model_path=primary_model_path,
+            model_type=model_type,
+            features_config=features_config,
+            target_config=target_config,
+            hyperparams=hyperparams,
+            model_id=model_id,
+        )
+
+        model_record.train_metrics = result["train_metrics"]
+        model_record.val_metrics = result["val_metrics"]
+        model_record.feature_importance = result["feature_importance"]
+        model_record.model_path = result["model_path"]
+        model_record.status = "ready"
+        model_record.trained_at = datetime.now(timezone.utc)
+        db.commit()
+        logger.info("Meta train complete: model %d → ready", model_id)
+
+    except Exception as e:
+        try:
+            model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+            if model_record:
+                model_record.status = "failed"
+                model_record.error_message = str(e)[:500]
+                db.commit()
+        except Exception:
+            pass
+        logger.error("Meta train failed for model %d: %s", model_id, e)
+    finally:
+        db.close()
+
+
 @router.post("/retrain-all-wf")
 async def retrain_all_walk_forward(
     n_folds: int = 5,

@@ -80,6 +80,9 @@ export default function MLPage() {
   const [pDsId, setPDsId] = useState<number>(0);
   const [pBars, setPBars] = useState(50);
 
+  // Meta-labeling
+  const [metaTraining, setMetaTraining] = useState(false);
+
   // AI assist state
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -350,6 +353,63 @@ export default function MLPage() {
     }
   };
 
+  /* ── meta-labeling train ──────────────────────── */
+  const handleMetaTrain = async () => {
+    if (!selected) return;
+    setMetaTraining(true);
+    setError("");
+    try {
+      // Find the datasource for this model
+      const ds = dataSources.find(d => d.symbol === selected.symbol && d.timeframe === selected.timeframe)
+        || dataSources[0];
+      if (!ds) {
+        setError("No data source found. Upload data first.");
+        setMetaTraining(false);
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await api.post<any>("/api/ml/train-meta", {
+        name: `Meta: ${selected.name}`,
+        model_type: selected.model_type === "ensemble" ? "lightgbm" : selected.model_type,
+        datasource_id: ds.id,
+        symbol: selected.symbol,
+        timeframe: selected.timeframe,
+        target_type: selected.target_config?.type || "direction",
+        target_horizon: selected.target_config?.horizon || 1,
+        features: [],
+        n_estimators: 200,
+        max_depth: 6,
+        learning_rate: 0.05,
+        primary_model_id: selected.id,
+      });
+      if (result.status === "training" && result.id) {
+        // Poll for completion
+        const pollId = result.id;
+        const poll = setInterval(async () => {
+          try {
+            const m = await api.get<MLModelDetail>(`/api/ml/models/${pollId}`);
+            if (m.status === "ready" || m.status === "failed") {
+              clearInterval(poll);
+              setSelected(m);
+              loadModels();
+              setMetaTraining(false);
+            }
+          } catch {
+            clearInterval(poll);
+            setMetaTraining(false);
+          }
+        }, 3000);
+        setTimeout(() => { clearInterval(poll); setMetaTraining(false); }, 600000);
+      } else {
+        setMetaTraining(false);
+        loadModels();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Meta-labeling training failed");
+      setMetaTraining(false);
+    }
+  };
+
   /* ═══════════════ RENDER ═══════════════════════ */
   return (
     <div className="space-y-4">
@@ -603,6 +663,9 @@ export default function MLPage() {
                         {m.level === 3 && (m as { architecture?: string }).architecture && (
                           <span className="ml-1 text-accent/70">· {(m as { architecture?: string }).architecture}</span>
                         )}
+                        {m.name.startsWith("Meta:") && (
+                          <Badge variant="secondary" className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 py-0">META</Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -806,6 +869,9 @@ export default function MLPage() {
                 <h3 className="text-lg font-semibold">{selected.name}</h3>
                 <div className="text-sm text-muted-foreground mt-1">
                   {levelLabel(selected.level)} · {selected.model_type} · {selected.symbol} {selected.timeframe}
+                  {!!(selected.features_config as Record<string, unknown>)?.is_meta_model && (
+                    <Badge variant="secondary" className="ml-2 text-[10px] bg-purple-500/20 text-purple-400">META-LABEL</Badge>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -817,6 +883,9 @@ export default function MLPage() {
                   </Button>
                   <Button onClick={handlePurgedRetrain} disabled={retraining} variant="outline" className="gap-1.5 border-blue-500/40 text-blue-400 hover:bg-blue-500/10">
                     {retraining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Retraining...</> : <><RefreshCw className="h-3.5 w-3.5" /> Purged K-Fold</>}
+                  </Button>
+                  <Button onClick={handleMetaTrain} disabled={metaTraining || retraining} variant="outline" className="gap-1.5 border-purple-500/40 text-purple-400 hover:bg-purple-500/10">
+                    {metaTraining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Training Meta...</> : <><Brain className="h-3.5 w-3.5" /> Meta-Label</>}
                   </Button>
                   <Button onClick={() => { setPDsId(0); setPredictions(null); setView("predict"); }} className="gap-1.5">
                     <Play className="h-3.5 w-3.5" /> Run Predictions
@@ -885,6 +954,24 @@ export default function MLPage() {
                       <div className="flex justify-between text-xs">
                         <span className="text-muted-foreground">Std</span>
                         <span>{((selected.val_metrics.purged_kfold as unknown as {std_accuracy: number}).std_accuracy * 100).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Meta-labeling stats */}
+                  {!!(selected.features_config as Record<string, unknown>)?.is_meta_model && selected.val_metrics.meta_trades_taken != null && (
+                    <div className="pt-2 border-t border-card-border">
+                      <span className="text-xs text-purple-400 font-medium">Meta-Label Filter</span>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-muted-foreground">Trades Taken</span>
+                        <span>{selected.val_metrics.meta_trades_taken} / {selected.val_metrics.meta_trades_total}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Filter Rate</span>
+                        <span>{pct(selected.val_metrics.meta_filter_rate as number)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Filtered Accuracy</span>
+                        <span className="text-green-400 font-medium">{pct(selected.val_metrics.meta_filtered_accuracy as number)}</span>
                       </div>
                     </div>
                   )}

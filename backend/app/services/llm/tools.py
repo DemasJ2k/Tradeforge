@@ -92,6 +92,7 @@ Model types: lightgbm (recommended), catboost, xgboost, random_forest, gradient_
 Levels: 1 (Adaptive Params), 2 (Signal Prediction), 3 (Stacked Ensemble)
 Target types: direction (binary up/down), return (magnitude), volatility, triple_barrier (SL/TP barriers)
 Normalization: "none" (default) or "zscore" (rolling Z-score, good for non-stationary data)
+Meta-Labeling: Train a secondary model that filters signals from a primary model (trade/no-trade)
 Timeframes: M1, M5, M15, M30, H1, H4, D1
 """
 
@@ -133,6 +134,9 @@ RULES:
 - Include "time", "regime", and "momentum" features when the user wants comprehensive analysis.
 - Use "zscore" normalization when the user asks for normalized or adaptive features.
 - Use "triple_barrier" target when the user mentions SL/TP-based labeling or real trading conditions.
+- When the user asks for "meta-labeling" or "trade filter", set action to "meta_label" and include
+  "primary_model_id" referencing an existing trained model. The meta model learns which signals
+  from the primary model are profitable (trade/no-trade filter).
 - If the user asks for something impossible or unclear, set action to "clarify" and
   put the question in "explanation".
 - Choose sensible hyperparameters based on dataset size.

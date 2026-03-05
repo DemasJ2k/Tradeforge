@@ -47,6 +47,11 @@ class MLSignalFilter:
         self._scaler = None
         self._feature_names: list[str] = []
         self._loaded = False
+        # Meta-labeling support
+        self._is_meta_model = False
+        self._primary_model = None
+        self._primary_scaler = None
+        self._primary_model_path: Optional[str] = None
 
     def load(self) -> bool:
         """Load the model from disk. Returns True if successful."""
@@ -63,10 +68,17 @@ class MLSignalFilter:
             self._model = saved["model"]
             self._feature_names = saved["feature_names"]
             self._scaler = saved.get("scaler")  # Level 3 models have a scaler
+            # Detect meta-labeling model
+            self._is_meta_model = saved.get("is_meta_model", False)
+            if self._is_meta_model:
+                self._primary_model = saved.get("primary_model")
+                self._primary_scaler = saved.get("primary_scaler")
+                self._primary_model_path = saved.get("primary_model_path")
+                logger.info("[MLFilter] Loaded META-LABELING model from %s", self.model_path)
             self._loaded = True
             logger.info(
-                "[MLFilter] Loaded model from %s (%d features)",
-                self.model_path, len(self._feature_names),
+                "[MLFilter] Loaded model from %s (%d features, meta=%s)",
+                self.model_path, len(self._feature_names), self._is_meta_model,
             )
             return True
         except Exception as e:
@@ -91,6 +103,10 @@ class MLSignalFilter:
             return None
 
         try:
+            # Meta-labeling: use two-stage prediction
+            if self._is_meta_model:
+                return self._predict_meta(bars)
+
             from app.services.ml.features import compute_features
 
             opens = [b["open"] for b in bars]
@@ -157,6 +173,43 @@ class MLSignalFilter:
             logger.error("[MLFilter] Prediction failed: %s", e)
             return None
 
+    def _predict_meta(self, bars: list[dict]) -> Optional[dict]:
+        """Two-stage meta-labeling prediction."""
+        try:
+            from app.services.ml.meta_labeler import predict_with_meta
+
+            result = predict_with_meta(
+                primary_model_path=self._primary_model_path or "",
+                meta_model_path=self.model_path,
+                bars=bars,
+                features_config=self.features_config,
+                target_config=self.target_config,
+            )
+            if result is None:
+                return None
+
+            # If meta says "don't trade", return direction 0 with low confidence
+            if not result["should_trade"]:
+                return {
+                    "direction": 0,
+                    "confidence": 0.1,
+                    "raw_prediction": result["primary_prediction"],
+                    "meta_filtered": True,
+                    "meta_confidence": result["meta_confidence"],
+                }
+
+            return {
+                "direction": result["direction"],
+                "confidence": result["confidence"] * result["meta_confidence"],
+                "raw_prediction": result["primary_prediction"],
+                "meta_filtered": False,
+                "meta_confidence": result["meta_confidence"],
+            }
+
+        except Exception as e:
+            logger.error("[MLFilter] Meta prediction failed: %s", e)
+            return None
+
     def evaluate_signal(
         self,
         strategy_direction: int,
@@ -189,6 +242,16 @@ class MLSignalFilter:
                 "ml_direction": 0,
                 "ml_confidence": 0.0,
                 "reason": "ML prediction unavailable, using strategy signal only",
+            }
+
+        # Meta-labeling: if meta model filtered out the trade, veto it
+        if ml_pred.get("meta_filtered"):
+            return {
+                "approved": False,
+                "combined_confidence": 0.0,
+                "ml_direction": 0,
+                "ml_confidence": ml_pred.get("meta_confidence", 0),
+                "reason": f"Meta model filtered trade (meta_conf={ml_pred.get('meta_confidence', 0):.1%})",
             }
 
         ml_dir = ml_pred["direction"]
