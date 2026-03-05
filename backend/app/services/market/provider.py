@@ -280,26 +280,145 @@ class PolygonProvider(DataProvider):
             return False
 
 
-# ── Databento Provider (placeholder) ──────────────────
+# ── Databento Provider ────────────────────────────────
 
 class DabentoProvider(DataProvider):
     """
-    Databento API provider for institutional-grade market data.
-    Placeholder — requires Databento subscription.
+    Databento API provider for CME futures data.
+    Maps TradeForge symbols to CME futures via parent symbology.
+    Handles timeframe aggregation (Databento has 1s/1m/1h/1d only).
     """
 
     provider_name = "databento"
 
+    # TradeForge symbol → (dataset, databento parent symbol)
+    SYMBOL_MAP: dict[str, tuple[str, str]] = {
+        "XAUUSD":  ("GLBX.MDP3", "GC.FUT"),
+        "XAGUSD":  ("GLBX.MDP3", "SI.FUT"),
+        "US30":    ("GLBX.MDP3", "YM.FUT"),
+        "NAS100":  ("GLBX.MDP3", "NQ.FUT"),
+        "BTCUSD":  ("GLBX.MDP3", "BTC.FUT"),
+        "BTC":     ("GLBX.MDP3", "BTC.FUT"),
+        "EURUSD":  ("GLBX.MDP3", "6E.FUT"),
+        "ES":      ("GLBX.MDP3", "ES.FUT"),
+        "NQ":      ("GLBX.MDP3", "NQ.FUT"),
+        "YM":      ("GLBX.MDP3", "YM.FUT"),
+        "GC":      ("GLBX.MDP3", "GC.FUT"),
+        "SI":      ("GLBX.MDP3", "SI.FUT"),
+    }
+
+    # Timeframe → (databento schema, aggregation factor from base schema)
+    TF_MAP: dict[str, tuple[str, int]] = {
+        "M1":  ("ohlcv-1m", 1),
+        "M5":  ("ohlcv-1m", 5),
+        "M10": ("ohlcv-1m", 10),
+        "M15": ("ohlcv-1m", 15),
+        "M30": ("ohlcv-1m", 30),
+        "H1":  ("ohlcv-1h", 1),
+        "H4":  ("ohlcv-1h", 4),
+        "D1":  ("ohlcv-1d", 1),
+    }
+
     def __init__(self, api_key: str):
         self._api_key = api_key
+        self._client = None
 
-    async def get_candles(self, **kwargs) -> list[OHLCVBar]:
-        # TODO: Implement when Databento MCP or SDK is available
-        logger.warning("Databento provider not yet implemented")
-        return []
+    def _get_client(self):
+        if self._client is None:
+            import databento as db
+            self._client = db.Historical(key=self._api_key)
+        return self._client
+
+    async def get_candles(
+        self,
+        symbol: str = "",
+        timeframe: str = "H1",
+        count: int = 100,
+        from_time: Optional[datetime] = None,
+        to_time: Optional[datetime] = None,
+    ) -> list[OHLCVBar]:
+        mapping = self.SYMBOL_MAP.get(symbol.upper())
+        if not mapping:
+            logger.warning("Databento: unmapped symbol %s", symbol)
+            return []
+
+        dataset, db_symbol = mapping
+        tf_info = self.TF_MAP.get(timeframe)
+        if not tf_info:
+            logger.warning("Databento: unsupported timeframe %s", timeframe)
+            return []
+
+        schema, agg_factor = tf_info
+
+        # Calculate time range — fetch extra to cover aggregation + gaps
+        end = to_time or datetime.now(timezone.utc)
+        if from_time:
+            start = from_time
+        else:
+            base_seconds = {"ohlcv-1m": 60, "ohlcv-1h": 3600, "ohlcv-1d": 86400}
+            bar_sec = base_seconds.get(schema, 3600) * agg_factor
+            start = end - timedelta(seconds=int(count * bar_sec * 1.5))
+
+        try:
+            import asyncio
+            client = self._get_client()
+            data = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.timeseries.get_range(
+                    dataset=dataset,
+                    symbols=[db_symbol],
+                    schema=schema,
+                    start=start.isoformat(),
+                    end=end.isoformat(),
+                    stype_in="parent",
+                ),
+            )
+        except Exception as e:
+            logger.error("Databento API error for %s/%s: %s", symbol, timeframe, e)
+            return []
+
+        # Convert Databento records to OHLCVBar
+        bars: list[OHLCVBar] = []
+        for rec in data:
+            ts = rec.ts_event / 1e9 if hasattr(rec, "ts_event") else 0
+            # Databento GLBX.MDP3 uses fixed-point prices (1e-9 scale)
+            o = float(rec.open)
+            h = float(rec.high)
+            lo = float(rec.low)
+            c = float(rec.close)
+            if o > 1e12:  # Fixed-point nanosecond format
+                o, h, lo, c = o / 1e9, h / 1e9, lo / 1e9, c / 1e9
+            bars.append(OHLCVBar(
+                timestamp=ts, open=o, high=h, low=lo, close=c,
+                volume=float(rec.volume),
+            ))
+
+        # Aggregate if needed (e.g., 5× M1 bars → 1× M5 bar)
+        if agg_factor > 1 and bars:
+            bars = self._aggregate_bars(bars, agg_factor)
+
+        return bars[-count:] if len(bars) > count else bars
+
+    @staticmethod
+    def _aggregate_bars(bars: list[OHLCVBar], factor: int) -> list[OHLCVBar]:
+        """Aggregate N base-timeframe bars into 1 higher-timeframe bar."""
+        result: list[OHLCVBar] = []
+        for i in range(0, len(bars), factor):
+            chunk = bars[i : i + factor]
+            if not chunk:
+                break
+            result.append(OHLCVBar(
+                timestamp=chunk[0].timestamp,
+                open=chunk[0].open,
+                high=max(b.high for b in chunk),
+                low=min(b.low for b in chunk),
+                close=chunk[-1].close,
+                volume=sum(b.volume for b in chunk),
+            ))
+        return result
 
     async def get_symbols(self) -> list[str]:
-        return []
+        return list(self.SYMBOL_MAP.keys())
 
     async def is_available(self) -> bool:
         return bool(self._api_key)
@@ -345,8 +464,8 @@ class MarketDataManager:
             if await p.is_available():
                 return await p.get_candles(symbol, timeframe, count, from_time, to_time)
 
-        # Auto-select: broker first, then polygon, then csv
-        for name in ["broker", "polygon", "csv"]:
+        # Auto-select: broker first, then databento, polygon, csv
+        for name in ["broker", "databento", "polygon", "csv"]:
             p = self._providers.get(name)
             if p and await p.is_available():
                 try:

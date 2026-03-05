@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Telegram (app-level bot token)
     TELEGRAM_BOT_TOKEN: str = ""
 
+    # Databento (CME futures data — requires subscription)
+    DATABENTO_API_KEY: str = ""
+
     class Config:
         env_file = ".env"
 

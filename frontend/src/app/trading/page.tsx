@@ -217,6 +217,26 @@ export default function TradingPage() {
         } catch {
           setChartBars([]);
         }
+      } else if (chartBroker === "databento") {
+        // Databento: use market candles with explicit provider param
+        try {
+          const res = await api.get<{ candles: CandleInput[] }>(
+            `/api/market/candles/${sym}?timeframe=${tf}&count=500&provider=databento`
+          );
+          if (res.candles && res.candles.length > 0) {
+            setChartBars(res.candles);
+            return;
+          }
+        } catch { /* Databento not configured — fall back */ }
+        // Fallback to generic if Databento unavailable
+        try {
+          const res = await api.get<{ candles: CandleInput[] }>(
+            `/api/market/candles/${sym}?timeframe=${tf}&count=500`
+          );
+          setChartBars(res.candles || []);
+        } catch {
+          setChartBars([]);
+        }
       } else if (chartBroker === "static") {
         // Static / CSV mode
         try {
@@ -603,6 +623,23 @@ export default function TradingPage() {
         }
       }
 
+      // Add hidden reference series spanning full candle time range
+      // so the oscillator chart knows about all timestamps (fixes sync clipping)
+      const refSeries = oscChart.addSeries(OscLine, {
+        color: "transparent",
+        lineWidth: 0 as unknown as 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      if (timesArr.length >= 2) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        refSeries.setData([
+          { time: timesArr[0] as unknown as Time, value: 0 },
+          { time: timesArr[timesArr.length - 1] as unknown as Time, value: 0 },
+        ] as any);
+      }
+
       // Sync time scale with main chart
       const mainChart = chartRef.current?.getChart();
       if (mainChart) {
@@ -897,8 +934,9 @@ export default function TradingPage() {
               onChange={e => setChartBroker(e.target.value)}
               className="ml-2 rounded px-2 py-1 text-xs font-medium bg-input-bg border border-card-border text-foreground/90 focus:outline-none focus:border-blue-500"
             >
-              <option value="mt5">MT5 Live</option>
               <option value="oanda">Oanda</option>
+              <option value="databento">Databento (CME)</option>
+              <option value="mt5">MT5 Live</option>
               <option value="coinbase">Coinbase</option>
               <option value="tradovate">Tradovate</option>
               <option value="static">Chart Data</option>

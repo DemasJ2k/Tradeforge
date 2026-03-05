@@ -28,7 +28,7 @@ from app.models.watchlist import Watchlist, WatchlistAlert
 
 _log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
+router = APIRouter(prefix="/api/watchlists", tags=["watchlist"])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ async def delete_watchlist(
     return {"message": "Watchlist deleted"}
 
 
-@router.post("/{watchlist_id}/symbol")
+@router.post("/{watchlist_id}/symbols")
 async def add_symbol(
     watchlist_id: int,
     body: SymbolAdd,
@@ -163,7 +163,7 @@ async def add_symbol(
     return {"symbols": wl.symbols}
 
 
-@router.delete("/{watchlist_id}/symbol/{symbol}")
+@router.delete("/{watchlist_id}/symbols/{symbol}")
 async def remove_symbol(
     watchlist_id: int,
     symbol: str,
