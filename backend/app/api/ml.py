@@ -4,15 +4,17 @@ ML Lab API endpoints.
 Manages ML model training, prediction, and model lifecycle.
 """
 
+import asyncio
 import csv
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.api.auth import get_current_user
 from app.models.user import User
 from app.models.datasource import DataSource
@@ -31,6 +33,9 @@ from app.services.ml.features import _DEFAULT_FEATURES
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ml", tags=["ml"])
+
+# Thread pool for CPU-bound training (1 worker to stay within 2GB RAM)
+_train_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ml_train")
 
 
 # ── Feature catalogue ─────────────────────────────────
@@ -227,28 +232,72 @@ async def train_model(
     db.commit()
     db.refresh(model_record)
 
-    # Train the model — dispatch by level
+    # Launch background training task
+    model_id = model_record.id
+    level = payload.level
+    model_type = payload.model_type
+    sub_type = payload.sub_type or "ensemble"
+    seq_len = payload.seq_len or 20
+    hidden_units = payload.hidden_units or 64
+
+    asyncio.get_event_loop().run_in_executor(
+        _train_pool,
+        _run_training,
+        model_id, ohlcv_data, level, model_type, sub_type,
+        seq_len, hidden_units, features_config, target_config, hyperparams,
+    )
+
+    # Return immediately with "training" status
+    return {
+        "id": model_record.id,
+        "name": model_record.name,
+        "status": "training",
+        "message": "Training started in background. Poll GET /api/ml/models/{id} for status.",
+    }
+
+
+# ── Background training runner ────────────────────────
+
+def _run_training(
+    model_id: int,
+    ohlcv_data: list[dict],
+    level: int,
+    model_type: str,
+    sub_type: str,
+    seq_len: int,
+    hidden_units: int,
+    features_config: dict,
+    target_config: dict,
+    hyperparams: dict,
+):
+    """Run ML training in a background thread. Updates DB when done."""
+    db = SessionLocal()
     try:
         from app.services.ml.trainer import MLTrainer
 
-        if payload.level == 3:
+        model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+        if not model_record:
+            logger.error("Background train: model %d not found", model_id)
+            return
+
+        if level == 3:
             result = MLTrainer.train_level3(
                 ohlcv_data=ohlcv_data,
-                sub_type=payload.sub_type or "ensemble",
-                seq_len=payload.seq_len or 20,
-                hidden_units=payload.hidden_units or 64,
+                sub_type=sub_type,
+                seq_len=seq_len,
+                hidden_units=hidden_units,
                 features_config=features_config,
                 target_config=target_config,
-                model_id=model_record.id,
+                model_id=model_id,
             )
         else:
             result = MLTrainer.train_model(
                 ohlcv_data=ohlcv_data,
-                model_type=payload.model_type,
+                model_type=model_type,
                 features_config=features_config,
                 target_config=target_config,
                 hyperparams=hyperparams,
-                model_id=model_record.id,
+                model_id=model_id,
             )
 
         model_record.train_metrics = result["train_metrics"]
@@ -258,31 +307,20 @@ async def train_model(
         model_record.status = "ready"
         model_record.trained_at = datetime.now(timezone.utc)
         db.commit()
-
-        return MLModelResponse(
-            id=model_record.id,
-            name=model_record.name,
-            level=model_record.level,
-            model_type=model_record.model_type,
-            symbol=model_record.symbol,
-            timeframe=model_record.timeframe,
-            status="ready",
-            features_config=model_record.features_config,
-            target_config=model_record.target_config,
-            hyperparams=model_record.hyperparams,
-            train_metrics=result["train_metrics"],
-            val_metrics=result["val_metrics"],
-            feature_importance=result["feature_importance"],
-            created_at=model_record.created_at.isoformat(),
-            trained_at=model_record.trained_at.isoformat() if model_record.trained_at else None,
-        )
+        logger.info("Background train complete: model %d → ready", model_id)
 
     except Exception as e:
-        model_record.status = "failed"
-        model_record.error_message = str(e)
-        db.commit()
-        logger.error("ML training failed: %s", e)
-        raise HTTPException(500, f"Training failed: {str(e)}")
+        try:
+            model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+            if model_record:
+                model_record.status = "failed"
+                model_record.error_message = str(e)[:500]
+                db.commit()
+        except Exception:
+            pass
+        logger.error("Background train failed for model %d: %s", model_id, e)
+    finally:
+        db.close()
 
 
 # ── Walk-Forward Retrain ──────────────────────────────
@@ -370,6 +408,86 @@ async def retrain_walk_forward(
         db.commit()
         logger.error("WF retrain failed for model %d: %s", model_id, e)
         raise HTTPException(500, f"Walk-forward retrain failed: {str(e)}")
+
+
+@router.post("/retrain-purged/{model_id}")
+async def retrain_purged_kfold(
+    model_id: int,
+    n_folds: int = 5,
+    embargo_pct: float = 0.02,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrain using purged k-fold CV with embargo (gold standard for financial ML)."""
+    model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+    if not model_record:
+        raise HTTPException(404, "Model not found")
+
+    ds = None
+    if model_record.symbol and model_record.timeframe:
+        ds = db.query(DataSource).filter(
+            DataSource.symbol == model_record.symbol,
+            DataSource.timeframe == model_record.timeframe,
+        ).first()
+    if not ds and model_record.symbol:
+        ds = db.query(DataSource).filter(DataSource.symbol == model_record.symbol).first()
+    if not ds:
+        raise HTTPException(404, "No data source found for this model")
+
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
+    if len(ohlcv_data) < 200:
+        raise HTTPException(400, f"Need 200+ bars for purged k-fold, got {len(ohlcv_data)}")
+
+    model_record.status = "training"
+    db.commit()
+
+    try:
+        from app.services.ml.trainer import MLTrainer
+        result = MLTrainer.train_purged_kfold(
+            ohlcv_data=ohlcv_data,
+            model_type=model_record.model_type,
+            features_config=model_record.features_config,
+            target_config=model_record.target_config,
+            hyperparams=model_record.hyperparams,
+            model_id=model_record.id,
+            n_folds=n_folds,
+            embargo_pct=embargo_pct,
+        )
+
+        model_record.train_metrics = result["train_metrics"]
+        model_record.val_metrics = result["val_metrics"]
+        if result.get("purged_kfold"):
+            model_record.val_metrics["purged_kfold"] = result["purged_kfold"]
+        model_record.feature_importance = result["feature_importance"]
+        model_record.model_path = result["model_path"]
+        model_record.status = "ready"
+        model_record.trained_at = datetime.now(timezone.utc)
+        db.commit()
+
+        return MLModelResponse(
+            id=model_record.id,
+            name=model_record.name,
+            level=model_record.level,
+            model_type=model_record.model_type,
+            symbol=model_record.symbol,
+            timeframe=model_record.timeframe,
+            status="ready",
+            features_config=model_record.features_config or {},
+            target_config=model_record.target_config or {},
+            hyperparams=model_record.hyperparams or {},
+            train_metrics=result["train_metrics"],
+            val_metrics=model_record.val_metrics,
+            feature_importance=result["feature_importance"],
+            created_at=model_record.created_at.isoformat(),
+            trained_at=model_record.trained_at.isoformat(),
+        )
+
+    except Exception as e:
+        model_record.status = "failed"
+        model_record.error_message = str(e)
+        db.commit()
+        logger.error("Purged KF retrain failed for model %d: %s", model_id, e)
+        raise HTTPException(500, f"Purged k-fold retrain failed: {str(e)}")
 
 
 @router.post("/retrain-all-wf")

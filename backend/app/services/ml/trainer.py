@@ -135,8 +135,12 @@ class MLTrainer:
 
         is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
-        train_metrics = _compute_metrics(y_train, train_pred, is_classification)
-        val_metrics = _compute_metrics(y_val, val_pred, is_classification)
+        # Split closes for financial metrics
+        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
+
+        train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)
+        val_metrics = _compute_metrics(y_val, val_pred, is_classification, c_val)
 
         # Feature importance
         importance = _get_feature_importance(model, feature_names)
@@ -341,6 +345,202 @@ class MLTrainer:
                 "avg_accuracy": round(wf_avg_accuracy, 4),
                 "avg_f1": round(wf_avg_f1, 4),
                 "std_accuracy": round(wf_std_accuracy, 4),
+            },
+        }
+
+    @staticmethod
+    def train_purged_kfold(
+        ohlcv_data: list[dict],
+        model_type: str = "lightgbm",
+        features_config: Optional[dict] = None,
+        target_config: Optional[dict] = None,
+        hyperparams: Optional[dict] = None,
+        model_id: int = 0,
+        n_folds: int = 5,
+        embargo_pct: float = 0.02,
+    ) -> dict:
+        """
+        Train with purged k-fold cross-validation (financial ML best practice).
+
+        Purging: removes training samples whose target labels overlap with
+        the test fold's time range (prevents label leakage).
+        Embargo: adds a gap between train and test sets (prevents feature leakage
+        from rolling indicators).
+
+        Final model trained on 80% with standard holdout for deployment.
+        """
+        import joblib
+        import numpy as np
+
+        hp = hyperparams or {}
+        n = len(ohlcv_data)
+        if n < 200:
+            raise ValueError(f"Need at least 200 bars for purged k-fold, got {n}")
+
+        opens = [d["open"] for d in ohlcv_data]
+        highs = [d["high"] for d in ohlcv_data]
+        lows = [d["low"] for d in ohlcv_data]
+        closes = [d["close"] for d in ohlcv_data]
+        volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
+
+        feature_names, feature_matrix = compute_features(
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
+        )
+        if not feature_names:
+            raise ValueError("No features computed")
+
+        # Optional rolling Z-score normalization
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            from app.services.ml.features import apply_rolling_zscore
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
+
+        target_name, targets = compute_targets(closes, target_config, highs=highs, lows=lows)
+        feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
+
+        if len(X) < 100:
+            raise ValueError(f"Not enough valid samples: {len(X)}")
+
+        is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
+        horizon = (target_config or {}).get("horizon", 1)
+        embargo_size = max(1, int(len(X) * embargo_pct))
+
+        X_arr = np.array(X)
+        y_arr = np.array(y)
+
+        # Purged k-fold splits
+        fold_size = len(X_arr) // n_folds
+        fold_metrics = []
+
+        for fold in range(n_folds):
+            test_start = fold * fold_size
+            test_end = min(test_start + fold_size, len(X_arr))
+
+            # Purge: remove training samples whose target horizon overlaps test
+            purge_start = max(0, test_start - horizon)
+            purge_end = min(len(X_arr), test_end + horizon)
+
+            # Embargo: gap after test set
+            embargo_end = min(len(X_arr), test_end + embargo_size)
+
+            # Build train indices: everything except purged zone + embargo zone
+            train_mask = np.ones(len(X_arr), dtype=bool)
+            train_mask[purge_start:embargo_end] = False
+
+            if np.sum(train_mask) < 50 or (test_end - test_start) < 10:
+                continue
+
+            X_train_f = X_arr[train_mask]
+            y_train_f = y_arr[train_mask]
+            X_test_f = X_arr[test_start:test_end]
+            y_test_f = y_arr[test_start:test_end]
+
+            model = _build_model(model_type, hp, target_config)
+
+            early_rounds = hp.get("early_stopping_rounds", 0)
+            if early_rounds > 0 and model_type in ("xgboost", "lightgbm"):
+                try:
+                    model.fit(X_train_f, y_train_f, eval_set=[(X_test_f, y_test_f)], verbose=False)
+                except Exception:
+                    model.fit(X_train_f, y_train_f)
+            elif early_rounds > 0 and model_type == "catboost":
+                try:
+                    model.fit(X_train_f, y_train_f, eval_set=(X_test_f, y_test_f),
+                              early_stopping_rounds=early_rounds, verbose=False)
+                except Exception:
+                    model.fit(X_train_f, y_train_f)
+            else:
+                model.fit(X_train_f, y_train_f)
+
+            test_pred = model.predict(X_test_f)
+            metrics = _compute_metrics(y_test_f.tolist(), test_pred, is_classification)
+            metrics["fold"] = fold + 1
+            metrics["n_train"] = int(np.sum(train_mask))
+            metrics["n_test"] = test_end - test_start
+            metrics["n_purged"] = int(purge_end - purge_start - (test_end - test_start))
+            fold_metrics.append(metrics)
+
+            logger.info(
+                "Purged KF Fold %d: train=%d (purged=%d), test=%d, acc=%.4f",
+                fold + 1, int(np.sum(train_mask)),
+                metrics["n_purged"], test_end - test_start,
+                metrics.get("accuracy", metrics.get("r2", 0)),
+            )
+
+        # Train final model on 80%
+        split_idx = int(len(X_arr) * 0.8)
+        X_train, X_val = X_arr[:split_idx], X_arr[split_idx:]
+        y_train, y_val = y_arr[:split_idx], y_arr[split_idx:]
+
+        final_model = _build_model(model_type, hp, target_config)
+        early_rounds = hp.get("early_stopping_rounds", 0)
+        if early_rounds > 0 and model_type in ("xgboost", "lightgbm"):
+            try:
+                final_model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+            except Exception:
+                final_model.fit(X_train, y_train)
+        elif early_rounds > 0 and model_type == "catboost":
+            try:
+                final_model.fit(X_train, y_train, eval_set=(X_val, y_val),
+                                early_stopping_rounds=early_rounds, verbose=False)
+            except Exception:
+                final_model.fit(X_train, y_train)
+        else:
+            final_model.fit(X_train, y_train)
+
+        train_pred = final_model.predict(X_train)
+        val_pred = final_model.predict(X_val)
+        c_val = closes[split_idx:split_idx + len(y_val)]
+        train_metrics = _compute_metrics(y_train.tolist(), train_pred, is_classification)
+        val_metrics = _compute_metrics(y_val.tolist(), val_pred, is_classification, c_val)
+        importance = _get_feature_importance(final_model, feature_names)
+
+        # Aggregate fold metrics
+        if fold_metrics and is_classification:
+            pkf_avg_acc = sum(m.get("accuracy", 0) for m in fold_metrics) / len(fold_metrics)
+            pkf_std_acc = (
+                sum((m.get("accuracy", 0) - pkf_avg_acc) ** 2 for m in fold_metrics)
+                / len(fold_metrics)
+            ) ** 0.5
+        else:
+            pkf_avg_acc = 0
+            pkf_std_acc = 0
+
+        model_path = str(_MODEL_DIR / f"model_{model_id}.joblib")
+        joblib.dump({
+            "model": final_model,
+            "feature_names": feature_names,
+            "target_name": target_name,
+            "model_type": model_type,
+        }, model_path)
+
+        logger.info(
+            "Purged KF Model %d: avg_cv_acc=%.4f (std=%.4f), final_val_acc=%.4f",
+            model_id, pkf_avg_acc, pkf_std_acc,
+            val_metrics.get("accuracy", 0),
+        )
+
+        return {
+            "train_metrics": train_metrics,
+            "val_metrics": val_metrics,
+            "feature_importance": importance,
+            "model_path": model_path,
+            "n_train": len(X_train),
+            "n_val": len(X_val),
+            "n_features": len(feature_names),
+            "feature_names": feature_names,
+            "target_name": target_name,
+            "purged_kfold": {
+                "n_folds": len(fold_metrics),
+                "fold_metrics": fold_metrics,
+                "avg_accuracy": round(pkf_avg_acc, 4),
+                "std_accuracy": round(pkf_std_acc, 4),
+                "embargo_pct": embargo_pct,
             },
         }
 
@@ -710,26 +910,99 @@ def _build_model(model_type: str, hp: dict, target_config: Optional[dict] = None
     return RandomForestClassifier(n_estimators=100, random_state=42)
 
 
-def _compute_metrics(y_true: list[float], y_pred, is_classification: bool) -> dict:
-    """Compute evaluation metrics."""
+def _compute_metrics(
+    y_true: list[float],
+    y_pred,
+    is_classification: bool,
+    closes: Optional[list[float]] = None,
+) -> dict:
+    """Compute evaluation metrics, including financial metrics when closes are provided."""
+    import numpy as np
     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
     from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
     if is_classification:
         # Use weighted average for multiclass (e.g. triple barrier: 0, 0.5, 1)
         avg = "weighted" if len(set(y_true)) > 2 else "binary"
-        return {
+        metrics = {
             "accuracy": round(accuracy_score(y_true, y_pred), 4),
             "precision": round(precision_score(y_true, y_pred, zero_division=0, average=avg), 4),
             "recall": round(recall_score(y_true, y_pred, zero_division=0, average=avg), 4),
             "f1": round(f1_score(y_true, y_pred, zero_division=0, average=avg), 4),
         }
     else:
-        return {
+        metrics = {
             "mse": round(mean_squared_error(y_true, y_pred), 6),
             "mae": round(mean_absolute_error(y_true, y_pred), 6),
             "r2": round(r2_score(y_true, y_pred), 4),
         }
+
+    # Financial metrics (when close prices available)
+    if closes is not None and len(closes) == len(y_pred):
+        fin = _compute_financial_metrics(y_true, y_pred, closes, is_classification)
+        metrics.update(fin)
+
+    return metrics
+
+
+def _compute_financial_metrics(
+    y_true: list[float],
+    y_pred,
+    closes: list[float],
+    is_classification: bool,
+) -> dict:
+    """Compute Sharpe ratio, profit factor, and max drawdown from predicted signals."""
+    import numpy as np
+
+    c = np.array(closes, dtype=np.float64)
+    yt = np.array(y_true, dtype=np.float64)
+    yp = np.array(y_pred, dtype=np.float64)
+
+    # Compute per-bar returns
+    if len(c) < 2:
+        return {}
+
+    bar_returns = np.zeros(len(c))
+    bar_returns[1:] = (c[1:] - c[:-1]) / np.where(c[:-1] != 0, c[:-1], 1.0)
+
+    # Signal returns: go long when pred=1, stay out (or short) when pred=0
+    if is_classification:
+        signals = np.where(yp >= 0.5, 1.0, -1.0)
+    else:
+        signals = np.sign(yp)
+
+    # Use lagged signals (predict at bar i, get return at bar i+1)
+    # But since our y_pred is already aligned to the future return, use directly
+    signal_returns = signals * bar_returns
+
+    # Skip first bar (no return) and any NaN
+    sr = signal_returns[1:]
+    sr = sr[np.isfinite(sr)]
+
+    if len(sr) < 10:
+        return {}
+
+    # Sharpe ratio (annualized, assume 252 trading days for daily-like frequency)
+    mean_r = np.mean(sr)
+    std_r = np.std(sr, ddof=1) if np.std(sr) > 1e-12 else 1e-12
+    sharpe = round(float(mean_r / std_r * np.sqrt(252)), 4)
+
+    # Profit factor (gross profit / gross loss)
+    gross_profit = float(np.sum(sr[sr > 0])) if np.any(sr > 0) else 0.0
+    gross_loss = float(np.abs(np.sum(sr[sr < 0]))) if np.any(sr < 0) else 0.001
+    profit_factor = round(gross_profit / gross_loss, 4)
+
+    # Max drawdown of equity curve
+    equity = np.cumsum(sr)
+    peak = np.maximum.accumulate(equity)
+    drawdown = peak - equity
+    max_dd = round(float(np.max(drawdown)) if len(drawdown) > 0 else 0.0, 4)
+
+    return {
+        "sharpe_ratio": sharpe,
+        "profit_factor": profit_factor,
+        "max_drawdown": max_dd,
+    }
 
 
 def _get_feature_importance(model, feature_names: list[str]) -> dict:

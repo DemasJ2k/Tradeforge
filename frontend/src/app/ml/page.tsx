@@ -199,7 +199,8 @@ export default function MLPage() {
     setLoading(true);
     setError("");
     try {
-      const result = await api.post<MLModelDetail>("/api/ml/train", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await api.post<any>("/api/ml/train", {
         name: tName,
         level: tLevel,
         model_type: tModelType,
@@ -217,12 +218,38 @@ export default function MLPage() {
         ...(tTarget === "triple_barrier" && { sl_atr_mult: tSlAtrMult, tp_atr_mult: tTpAtrMult, max_holding_bars: tMaxHoldBars }),
         ...(tLevel === 3 && { sub_type: l3SubType, seq_len: l3SeqLen, hidden_units: l3Units }),
       });
-      setSelected(result);
-      setView("detail");
-      loadModels();
+
+      // Background training: poll for completion
+      if (result.status === "training" && result.id) {
+        setView("list");
+        loadModels();
+        const pollId = result.id;
+        const poll = setInterval(async () => {
+          try {
+            const m = await api.get<MLModelDetail>(`/api/ml/models/${pollId}`);
+            if (m.status === "ready" || m.status === "failed") {
+              clearInterval(poll);
+              setSelected(m);
+              setView("detail");
+              loadModels();
+              setLoading(false);
+            }
+          } catch {
+            clearInterval(poll);
+            setLoading(false);
+          }
+        }, 3000);
+        // Safety: stop polling after 10 minutes
+        setTimeout(() => { clearInterval(poll); setLoading(false); }, 600000);
+      } else {
+        // Synchronous response (legacy fallback)
+        setSelected(result);
+        setView("detail");
+        loadModels();
+        setLoading(false);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Training failed");
-    } finally {
       setLoading(false);
     }
   };
@@ -299,6 +326,25 @@ export default function MLPage() {
       loadModels();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Walk-forward retrain failed");
+    } finally {
+      setRetraining(false);
+    }
+  };
+
+  /* ── purged k-fold retrain ──────────────────── */
+  const handlePurgedRetrain = async () => {
+    if (!selected) return;
+    setRetraining(true);
+    setError("");
+    try {
+      const result = await api.post<MLModelDetail>(
+        `/api/ml/retrain-purged/${selected.id}?n_folds=5&embargo_pct=0.02`,
+        {}
+      );
+      setSelected(result);
+      loadModels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Purged k-fold retrain failed");
     } finally {
       setRetraining(false);
     }
@@ -767,7 +813,10 @@ export default function MLPage() {
                 {selected.status === "ready" && (
                   <>
                   <Button onClick={handleRetrain} disabled={retraining} variant="outline" className="gap-1.5 border-accent/40 text-accent hover:bg-accent/10">
-                    {retraining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Retraining...</> : <><RefreshCw className="h-3.5 w-3.5" /> Walk-Forward Retrain</>}
+                    {retraining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Retraining...</> : <><RefreshCw className="h-3.5 w-3.5" /> Walk-Forward</>}
+                  </Button>
+                  <Button onClick={handlePurgedRetrain} disabled={retraining} variant="outline" className="gap-1.5 border-blue-500/40 text-blue-400 hover:bg-blue-500/10">
+                    {retraining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Retraining...</> : <><RefreshCw className="h-3.5 w-3.5" /> Purged K-Fold</>}
                   </Button>
                   <Button onClick={() => { setPDsId(0); setPredictions(null); setView("predict"); }} className="gap-1.5">
                     <Play className="h-3.5 w-3.5" /> Run Predictions
@@ -804,12 +853,41 @@ export default function MLPage() {
                 <CardContent className="p-5">
                 <h4 className="text-sm font-medium text-green-400 mb-3">Validation Metrics</h4>
                 <div className="space-y-2">
-                  {Object.entries(selected.val_metrics).map(([k, v]) => (
+                  {Object.entries(selected.val_metrics)
+                    .filter(([, v]) => typeof v === "number" || typeof v === "string")
+                    .map(([k, v]) => (
                     <div key={k} className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground capitalize">{k.replace(/_/g, " ")}</span>
-                      <span className="text-sm font-medium">{typeof v === "number" ? (v < 1 ? pct(v) : v.toFixed(4)) : String(v)}</span>
+                      <span className="text-sm font-medium">{typeof v === "number" ? (Math.abs(v) < 1 ? pct(v) : v.toFixed(4)) : String(v)}</span>
                     </div>
                   ))}
+                  {/* CV summary (walk-forward or purged k-fold) */}
+                  {selected.val_metrics.walk_forward && (
+                    <div className="pt-2 border-t border-card-border">
+                      <span className="text-xs text-blue-400 font-medium">Walk-Forward CV</span>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-muted-foreground">Avg Accuracy</span>
+                        <span>{pct((selected.val_metrics.walk_forward as unknown as {avg_accuracy: number}).avg_accuracy)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Std</span>
+                        <span>{((selected.val_metrics.walk_forward as unknown as {std_accuracy: number}).std_accuracy * 100).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  )}
+                  {selected.val_metrics.purged_kfold && (
+                    <div className="pt-2 border-t border-card-border">
+                      <span className="text-xs text-purple-400 font-medium">Purged K-Fold CV</span>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-muted-foreground">Avg Accuracy</span>
+                        <span>{pct((selected.val_metrics.purged_kfold as unknown as {avg_accuracy: number}).avg_accuracy)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Std</span>
+                        <span>{((selected.val_metrics.purged_kfold as unknown as {std_accuracy: number}).std_accuracy * 100).toFixed(2)}%</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 </CardContent>
               </Card>
