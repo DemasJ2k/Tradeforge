@@ -482,6 +482,7 @@ def _load_news_from_db(category: str) -> list[dict]:
         )
         return [
             {
+                "id": a.id,
                 "external_id": a.external_id,
                 "headline": a.headline,
                 "summary": a.summary,

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { api, API_BASE } from "@/lib/api";
-import { MessageCircle, Sparkles, FolderOpen, Clock, Plus, X, Trash2, Pencil, Send } from "lucide-react";
+import { MessageCircle, Sparkles, FolderOpen, Clock, Plus, X, Trash2, Pencil, Send, Wrench, CheckCircle2, XCircle, ChevronDown, ChevronRight, Zap, Shield } from "lucide-react";
 import type {
   ChatMessage,
   ConversationSummary,
@@ -162,6 +162,107 @@ async function* streamChat(
   }
 }
 
+// ── Copilot SSE streaming helper (tool calling) ──
+
+async function* streamCopilotChat(
+  body: { message: string; conversation_id?: number | null; page_context?: string; context_data?: Record<string, unknown> }
+): AsyncGenerator<{
+  type: string; content?: string; conversation_id?: number;
+  name?: string; args?: Record<string, unknown>; result?: unknown;
+  confirm_id?: string; description?: string;
+  tokens_in?: number; tokens_out?: number; model?: string;
+}> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${API_BASE}/api/llm/copilot/chat/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    // Fallback: if copilot endpoint doesn't exist (404), fall back to regular chat
+    if (res.status === 404) {
+      for await (const event of streamChat(body)) {
+        yield event;
+      }
+      return;
+    }
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try { yield JSON.parse(line.slice(6)); } catch { /* ignore */ }
+      }
+    }
+  }
+}
+
+// ── Tool call card component ──
+
+function ToolCallCard({ tool, onToggle }: {
+  tool: { id: string; name: string; status: string; args?: Record<string, unknown>; result?: unknown; expanded?: boolean };
+  onToggle: () => void;
+}) {
+  const statusIcon = tool.status === "calling" ? (
+    <div className="h-3 w-3 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+  ) : tool.status === "done" ? (
+    <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+  ) : tool.status === "blocked" ? (
+    <Shield className="h-3.5 w-3.5 text-red-400" />
+  ) : (
+    <XCircle className="h-3.5 w-3.5 text-zinc-400" />
+  );
+
+  const friendlyName = tool.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <div className="my-1.5 rounded-lg border border-card-border/60 bg-background/50 text-xs overflow-hidden">
+      <button onClick={onToggle} className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-sidebar-hover/30 transition-colors text-left">
+        {statusIcon}
+        <Wrench className="h-3 w-3 text-muted-foreground" />
+        <span className="font-medium text-foreground/80 flex-1 truncate">{friendlyName}</span>
+        {tool.expanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+      </button>
+      {tool.expanded && (
+        <div className="border-t border-card-border/40 px-2.5 py-2 space-y-1.5">
+          {tool.args && Object.keys(tool.args).length > 0 && (
+            <div>
+              <div className="text-[10px] text-muted-foreground mb-0.5">Arguments</div>
+              <pre className="text-[10px] bg-black/20 rounded p-1.5 overflow-x-auto font-mono text-foreground/70 max-h-24 overflow-y-auto">
+                {JSON.stringify(tool.args, null, 2)}
+              </pre>
+            </div>
+          )}
+          {tool.result !== undefined && (
+            <div>
+              <div className="text-[10px] text-muted-foreground mb-0.5">Result</div>
+              <pre className="text-[10px] bg-black/20 rounded p-1.5 overflow-x-auto font-mono text-foreground/70 max-h-32 overflow-y-auto">
+                {typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // ChatSidebar Component
 // ══════════════════════════════════════════════════════════════════════
@@ -182,6 +283,14 @@ export default function ChatSidebar() {
   const [editValue, setEditValue] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState("");
+  const [copilotMode, setCopilotMode] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    confirm_id: string; name: string; description?: string; args: Record<string, unknown>;
+  } | null>(null);
+  const [toolCalls, setToolCalls] = useState<{
+    id: string; name: string; status: "calling" | "done" | "blocked" | "denied";
+    args?: Record<string, unknown>; result?: unknown; expanded?: boolean;
+  }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -278,6 +387,30 @@ export default function ChatSidebar() {
     } catch { setError("Failed to delete memory"); }
   }, []);
 
+  // Confirm/deny a pending copilot tool call
+  const handleConfirm = useCallback(async (confirmId: string, approved: boolean) => {
+    setPendingConfirmation(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const res = await fetch(`${API_BASE}/api/llm/copilot/confirm/${confirmId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ approved }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Update the tool call status
+        setToolCalls(prev => prev.map(tc =>
+          tc.id === confirmId ? { ...tc, status: approved ? "done" : "denied", result: approved ? data.result : "Denied by user" } : tc
+        ));
+        // If approved and there's a follow-up text, add it as assistant message
+        if (approved && data.text) {
+          setMessages(prev => [...prev, { role: "assistant", content: data.text, timestamp: new Date().toISOString() }]);
+        }
+      }
+    } catch { setError("Failed to process confirmation"); }
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const msg = input.trim();
     if (!msg || loading) return;
@@ -285,6 +418,7 @@ export default function ChatSidebar() {
     setInput("");
     setError("");
     setLoading(true);
+    setToolCalls([]);
 
     const userMsg: ChatMessage = { role: "user", content: msg, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
@@ -303,12 +437,16 @@ export default function ChatSidebar() {
         } catch { /* skip context if fetch fails */ }
       }
 
-      for await (const event of streamChat({
+      const chatBody = {
         message: msg,
         conversation_id: conversationId,
         page_context: pageCtx,
         context_data: contextData,
-      })) {
+      };
+
+      const streamer = copilotMode ? streamCopilotChat(chatBody) : streamChat(chatBody);
+
+      for await (const event of streamer) {
         if (event.type === "error") {
           setError(event.content || "LLM error");
           setStreamingText("");
@@ -316,6 +454,39 @@ export default function ChatSidebar() {
         } else if (event.type === "chunk" && event.content) {
           fullReply += event.content;
           setStreamingText(fullReply);
+        } else if (event.type === "tool_call") {
+          // AI is calling a tool
+          const toolId = event.confirm_id || `tc-${Date.now()}`;
+          setToolCalls(prev => [...prev, {
+            id: toolId, name: event.name || "unknown", status: "calling",
+            args: event.args,
+          }]);
+        } else if (event.type === "tool_result") {
+          // Tool executed successfully
+          setToolCalls(prev => prev.map(tc =>
+            tc.name === event.name && tc.status === "calling"
+              ? { ...tc, status: "done", result: event.result }
+              : tc
+          ));
+        } else if (event.type === "confirm_required") {
+          // Tool needs user approval
+          setPendingConfirmation({
+            confirm_id: event.confirm_id || "",
+            name: event.name || "",
+            description: event.description,
+            args: event.args || {},
+          });
+          setToolCalls(prev => prev.map(tc =>
+            tc.name === event.name && tc.status === "calling"
+              ? { ...tc, id: event.confirm_id || tc.id, status: "calling" }
+              : tc
+          ));
+        } else if (event.type === "tool_blocked") {
+          setToolCalls(prev => prev.map(tc =>
+            tc.name === event.name && tc.status === "calling"
+              ? { ...tc, status: "blocked" }
+              : tc
+          ));
         } else if (event.type === "done") {
           setConversationId(event.conversation_id ?? null);
           setStreamingText("");
@@ -334,7 +505,7 @@ export default function ChatSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, conversationId, pathname]);
+  }, [input, loading, conversationId, pathname, copilotMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -371,15 +542,29 @@ export default function ChatSidebar() {
 
       {/* Sidebar panel */}
       <div
-        className={`fixed right-0 top-0 z-40 h-screen w-full sm:w-[380px] flex flex-col bg-sidebar-bg border-l border-card-border shadow-xl transition-transform duration-200 ${
+        className={`fixed right-0 top-0 z-40 h-[100dvh] w-full sm:w-[380px] flex flex-col bg-sidebar-bg border-l border-card-border shadow-xl transition-transform duration-200 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
+        style={{ height: "100dvh" /* dynamic viewport height — adjusts for mobile keyboard & browser chrome */ }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-accent" />
             <span className="font-semibold text-foreground">AI Assistant</span>
+            {/* Copilot toggle */}
+            <button
+              onClick={() => setCopilotMode(m => !m)}
+              className={`ml-1 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all border ${
+                copilotMode
+                  ? "bg-accent/15 border-accent/40 text-accent"
+                  : "border-card-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              }`}
+              title={copilotMode ? "Copilot ON — AI can use tools" : "Copilot OFF — chat only"}
+            >
+              <Zap className="h-3 w-3" />
+              {copilotMode ? "Copilot" : "Chat"}
+            </button>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -558,6 +743,19 @@ export default function ChatSidebar() {
             </div>
           ))}
 
+          {/* Tool call cards (copilot mode) */}
+          {toolCalls.length > 0 && (
+            <div className="px-1">
+              {toolCalls.map((tc) => (
+                <ToolCallCard
+                  key={tc.id}
+                  tool={tc}
+                  onToggle={() => setToolCalls(prev => prev.map(t => t.id === tc.id ? { ...t, expanded: !t.expanded } : t))}
+                />
+              ))}
+            </div>
+          )}
+
           {/* Streaming text */}
           {streamingText && (
             <div className="flex justify-start">
@@ -591,15 +789,50 @@ export default function ChatSidebar() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Confirmation modal (copilot) */}
+        {pendingConfirmation && (
+          <div className="border-t border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-medium text-amber-400">Confirmation Required</span>
+            </div>
+            <div className="text-xs text-foreground/80">
+              The AI wants to execute: <span className="font-semibold text-foreground">{pendingConfirmation.name.replace(/_/g, " ")}</span>
+            </div>
+            {pendingConfirmation.description && (
+              <div className="text-[10px] text-muted-foreground">{pendingConfirmation.description}</div>
+            )}
+            {Object.keys(pendingConfirmation.args).length > 0 && (
+              <pre className="text-[10px] bg-black/20 rounded p-2 font-mono text-foreground/60 max-h-20 overflow-y-auto">
+                {JSON.stringify(pendingConfirmation.args, null, 2)}
+              </pre>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => handleConfirm(pendingConfirmation.confirm_id, true)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-medium py-2 transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+              </button>
+              <button
+                onClick={() => handleConfirm(pendingConfirmation.confirm_id, false)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-medium py-2 transition-colors"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Deny
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input area */}
-        <div className="border-t border-card-border p-3">
+        <div className="border-t border-card-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
+              placeholder={copilotMode ? "Ask the copilot to do something..." : "Ask anything..."}
               rows={1}
               className="flex-1 resize-none rounded-lg border border-card-border bg-input-bg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:border-accent"
               style={{ maxHeight: "120px" }}
@@ -619,7 +852,10 @@ export default function ChatSidebar() {
           </div>
           <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
             <span>Enter to send · Shift+Enter for new line</span>
-            <span className="capitalize">{getPageContext(pathname)} context</span>
+            <div className="flex items-center gap-2">
+              {copilotMode && <span className="text-accent">⚡ Copilot</span>}
+              <span className="capitalize">{getPageContext(pathname)} context</span>
+            </div>
           </div>
         </div>
       </div>

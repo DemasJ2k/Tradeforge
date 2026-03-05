@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   X,
+  Eye,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Optimize", href: "/optimize", icon: SlidersHorizontal },
   { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Trading", href: "/trading", icon: TrendingUp },
+  { name: "Watchlist", href: "/watchlist", icon: Eye },
   { name: "News", href: "/news", icon: Newspaper },
   { name: "Documents", href: "/knowledge", icon: BookOpen },
   { name: "Settings", href: "/settings", icon: Settings },

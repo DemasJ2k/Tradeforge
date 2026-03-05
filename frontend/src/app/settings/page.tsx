@@ -5,7 +5,7 @@ import type { UserSettings, StorageInfo, Invitation, BrokerCredentialMasked } fr
 import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Palette, Bot, TrendingUp, Link, HardDrive, Cog, ChevronDown, Bell, type LucideIcon } from 'lucide-react';
+import { User, Palette, Bot, TrendingUp, Link, HardDrive, Cog, ChevronDown, Bell, Zap, type LucideIcon } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -261,10 +261,274 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+// ─── Webhook Settings Section ───
+const WEBHOOK_EVENTS = [
+  { value: 'trade_opened', label: 'Trade Opened' },
+  { value: 'trade_closed', label: 'Trade Closed' },
+  { value: 'signal_generated', label: 'Signal Generated' },
+  { value: 'agent_started', label: 'Agent Started' },
+  { value: 'agent_stopped', label: 'Agent Stopped' },
+  { value: 'agent_error', label: 'Agent Error' },
+  { value: 'backtest_complete', label: 'Backtest Complete' },
+  { value: 'optimization_complete', label: 'Optimization Complete' },
+  { value: 'alert_triggered', label: 'Alert Triggered' },
+  { value: 'price_alert', label: 'Price Alert' },
+];
+
+interface WebhookEndpoint {
+  id: number;
+  name: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  has_secret: boolean;
+  last_triggered_at: string | null;
+  last_status_code: number | null;
+  failure_count: number;
+  created_at: string;
+}
+
+interface WebhookLogEntry {
+  id: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  status_code: number;
+  success: boolean;
+  delivered_at: string;
+}
+
+function WebhookSettingsSection() {
+  const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [logsFor, setLogsFor] = useState<number | null>(null);
+  const [logs, setLogs] = useState<WebhookLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ id: number; msg: string; ok: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Form state
+  const [form, setForm] = useState({ name: '', url: '', secret: '', events: [] as string[], enabled: true });
+
+  const loadWebhooks = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/webhooks`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setWebhooks(data.webhooks || []);
+      }
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadWebhooks(); }, [loadWebhooks]);
+
+  const resetForm = () => { setForm({ name: '', url: '', secret: '', events: [], enabled: true }); setShowCreate(false); setEditId(null); };
+
+  const handleSave = async () => {
+    if (!form.name || !form.url) return;
+    setSaving(true);
+    try {
+      const method = editId ? 'PUT' : 'POST';
+      const url = editId ? `${API}/api/webhooks/${editId}` : `${API}/api/webhooks`;
+      const body: Record<string, unknown> = { name: form.name, url: form.url, events: form.events, enabled: form.enabled };
+      if (form.secret) body.secret = form.secret;
+      await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await loadWebhooks();
+      resetForm();
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this webhook endpoint?')) return;
+    await fetch(`${API}/api/webhooks/${id}`, { method: 'DELETE', headers: authHeaders() });
+    await loadWebhooks();
+  };
+
+  const handleTest = async (id: number) => {
+    setTestResult(null);
+    try {
+      const res = await fetch(`${API}/api/webhooks/${id}/test`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      setTestResult({ id, msg: data.message || (data.success ? 'OK' : 'Failed'), ok: data.success });
+    } catch {
+      setTestResult({ id, msg: 'Network error', ok: false });
+    }
+  };
+
+  const handleViewLogs = async (id: number) => {
+    if (logsFor === id) { setLogsFor(null); return; }
+    setLogsFor(id);
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`${API}/api/webhooks/${id}/logs?limit=20`, { headers: authHeaders() });
+      if (res.ok) { const data = await res.json(); setLogs(data.logs || []); }
+    } catch { setLogs([]); }
+    finally { setLogsLoading(false); }
+  };
+
+  const startEdit = (wh: WebhookEndpoint) => {
+    setForm({ name: wh.name, url: wh.url, secret: '', events: wh.events || [], enabled: wh.enabled });
+    setEditId(wh.id);
+    setShowCreate(true);
+  };
+
+  const toggleEvent = (ev: string) => {
+    setForm(f => ({ ...f, events: f.events.includes(ev) ? f.events.filter(e => e !== ev) : [...f.events, ev] }));
+  };
+
+  if (loading) return <div className="text-sm text-muted-foreground py-4">Loading webhooks...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-md font-semibold text-foreground">Webhook Endpoints</h3>
+        {!showCreate && (
+          <button onClick={() => { resetForm(); setShowCreate(true); }} className={btnPrimary + ' text-xs !py-1.5 !px-3'}>
+            + Add Webhook
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Receive HTTP POST notifications when events occur. Supports HMAC-SHA256 signing.
+      </p>
+
+      {/* Create / Edit form */}
+      {showCreate && (
+        <div className="bg-input-bg rounded-lg border border-card-border p-4 space-y-3">
+          <h4 className="text-sm font-medium text-foreground">{editId ? 'Edit Webhook' : 'New Webhook'}</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Name">
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="My Webhook" className={inputCls} />
+            </Field>
+            <Field label="URL">
+              <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                placeholder="https://example.com/webhook" className={inputCls} />
+            </Field>
+          </div>
+          <Field label="Secret (optional — for HMAC-SHA256 signing)">
+            <input value={form.secret} onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
+              placeholder={editId ? '(leave blank to keep existing)' : 'my-secret-key'} className={inputCls} />
+          </Field>
+          <Field label="Events (empty = subscribe to all)">
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {WEBHOOK_EVENTS.map(ev => (
+                <button key={ev.value} onClick={() => toggleEvent(ev.value)}
+                  className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
+                    form.events.includes(ev.value)
+                      ? 'bg-fa-accent/20 border-fa-accent text-fa-accent'
+                      : 'bg-input-bg border-card-border text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {ev.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Toggle value={form.enabled} onChange={v => setForm(f => ({ ...f, enabled: v }))} label="Enabled" />
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSave} disabled={saving || !form.name || !form.url} className={btnPrimary + ' text-xs'}>
+              {saving ? 'Saving...' : editId ? 'Update' : 'Create'}
+            </button>
+            <button onClick={resetForm} className={btnSecondary + ' text-xs'}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Webhook list */}
+      {webhooks.length === 0 && !showCreate ? (
+        <div className="text-center py-6 text-sm text-muted-foreground">
+          No webhook endpoints configured yet. Click &ldquo;Add Webhook&rdquo; to get started.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {webhooks.map(wh => (
+            <div key={wh.id} className="bg-input-bg rounded-lg border border-card-border p-3">
+              <div className="flex items-center gap-3">
+                {/* Status dot */}
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  !wh.enabled ? 'bg-gray-500' :
+                  wh.failure_count > 5 ? 'bg-red-500' :
+                  wh.failure_count > 0 ? 'bg-amber-500' : 'bg-emerald-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground truncate">{wh.name}</span>
+                    {!wh.enabled && <span className="text-[10px] bg-gray-500/20 text-gray-400 px-1.5 py-0.5 rounded">Disabled</span>}
+                    {wh.failure_count > 5 && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">Failing</span>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground truncate mt-0.5">{wh.url}</div>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {(wh.events || []).length === 0 ? (
+                      <span className="text-[10px] text-muted-foreground/60">All events</span>
+                    ) : (
+                      (wh.events || []).map(ev => (
+                        <span key={ev} className="text-[10px] bg-fa-accent/10 text-fa-accent px-1.5 py-0.5 rounded">{ev.replace(/_/g, ' ')}</span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => handleTest(wh.id)} className="text-[11px] px-2 py-1 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">
+                    Test
+                  </button>
+                  <button onClick={() => handleViewLogs(wh.id)} className="text-[11px] px-2 py-1 rounded bg-input-bg text-muted-foreground hover:text-foreground transition-colors border border-card-border">
+                    Logs
+                  </button>
+                  <button onClick={() => startEdit(wh)} className="text-[11px] px-2 py-1 rounded bg-input-bg text-muted-foreground hover:text-foreground transition-colors border border-card-border">
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(wh.id)} className="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              {/* Test result */}
+              {testResult?.id === wh.id && (
+                <div className={`mt-2 text-xs px-3 py-1.5 rounded ${testResult.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {testResult.ok ? '✓' : '✗'} {testResult.msg}
+                </div>
+              )}
+
+              {/* Logs */}
+              {logsFor === wh.id && (
+                <div className="mt-2 border-t border-card-border pt-2">
+                  {logsLoading ? (
+                    <div className="text-xs text-muted-foreground py-2">Loading logs...</div>
+                  ) : logs.length === 0 ? (
+                    <div className="text-xs text-muted-foreground py-2">No delivery logs yet.</div>
+                  ) : (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {logs.map(log => (
+                        <div key={log.id} className="flex items-center gap-2 text-[11px] px-2 py-1 rounded bg-card-bg/50">
+                          <span className={`w-1.5 h-1.5 rounded-full ${log.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                          <span className="text-muted-foreground font-mono w-8">{log.status_code}</span>
+                          <span className="text-foreground/70">{log.event_type.replace(/_/g, ' ')}</span>
+                          <span className="text-muted-foreground/50 ml-auto">
+                            {new Date(log.delivered_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'profile',       label: 'Profile',           icon: User },
   { id: 'appearance',    label: 'Appearance',         icon: Palette },
   { id: 'llm',           label: 'AI / LLM',           icon: Bot },
+  { id: 'copilot',       label: 'AI Copilot',          icon: Zap },
   { id: 'trading',       label: 'Trading Defaults',   icon: TrendingUp },
   { id: 'brokers',       label: 'Brokers',            icon: Link },
   { id: 'data',          label: 'Data Management',    icon: HardDrive },
@@ -1192,6 +1456,100 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ─── AI Copilot ─── */}
+          {tab === 'copilot' && (
+            <div className="space-y-6 max-w-xl">
+              <h2 className="text-lg font-semibold text-foreground">AI Copilot Settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Control how the AI copilot interacts with your account — toggle it on or off, set the autonomy level,
+                and override permissions for individual tools.
+              </p>
+
+              <Toggle
+                value={!!s.copilot_enabled}
+                onChange={v => set('copilot_enabled', v ? 1 : 0)}
+                label="Enable AI Copilot"
+              />
+
+              <Field label="Autonomy Level">
+                <select
+                  value={s.copilot_autonomy ?? 'assisted'}
+                  onChange={e => set('copilot_autonomy', e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="analysis_only">Analysis Only — read-only tools, no side effects</option>
+                  <option value="assisted">Assisted — actions require confirmation</option>
+                  <option value="full_auto">Full Auto — all permitted tools run automatically</option>
+                </select>
+              </Field>
+
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Tool Permissions</h3>
+              <p className="text-xs text-muted-foreground">
+                Override the default permission for each tool. &quot;Default&quot; inherits from the autonomy level above.
+              </p>
+
+              <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-card-border text-muted-foreground text-xs">
+                      <th className="text-left px-3 py-2">Tool</th>
+                      <th className="text-left px-3 py-2">Default</th>
+                      <th className="text-left px-3 py-2">Permission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      { tool: 'list_strategies',  defaultPerm: 'auto' },
+                      { tool: 'list_data_sources', defaultPerm: 'auto' },
+                      { tool: 'list_backtests',   defaultPerm: 'auto' },
+                      { tool: 'get_positions',    defaultPerm: 'auto' },
+                      { tool: 'get_orders',       defaultPerm: 'auto' },
+                      { tool: 'run_backtest',     defaultPerm: 'confirm' },
+                      { tool: 'start_agent',      defaultPerm: 'confirm' },
+                      { tool: 'stop_agent',       defaultPerm: 'confirm' },
+                      { tool: 'place_order',      defaultPerm: 'confirm' },
+                      { tool: 'close_position',   defaultPerm: 'confirm' },
+                    ] as const).map(({ tool, defaultPerm }) => {
+                      const perms = (s.copilot_permissions ?? {}) as Record<string, string>;
+                      return (
+                        <tr key={tool} className="border-b border-card-border last:border-b-0">
+                          <td className="px-3 py-2 text-foreground font-mono text-xs">{tool}</td>
+                          <td className="px-3 py-2 text-muted-foreground text-xs">{defaultPerm}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={perms[tool] ?? 'default'}
+                              onChange={e => {
+                                const updated = { ...perms, [tool]: e.target.value };
+                                set('copilot_permissions', updated);
+                              }}
+                              className={selectCls + ' text-xs py-1'}
+                            >
+                              <option value="default">Default</option>
+                              <option value="auto">Auto</option>
+                              <option value="confirm">Confirm</option>
+                              <option value="blocked">Blocked</option>
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="pt-2">
+                <button onClick={() => save({
+                  copilot_enabled: s.copilot_enabled,
+                  copilot_autonomy: s.copilot_autonomy,
+                  copilot_permissions: s.copilot_permissions,
+                })} disabled={saving} className={btnPrimary}>
+                  {saving ? 'Saving...' : 'Save Copilot Settings'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ─── Trading Defaults ─── */}
           {tab === 'trading' && (
             <div className="space-y-6 max-w-lg">
@@ -1894,6 +2252,10 @@ export default function SettingsPage() {
                   {saving ? 'Saving...' : 'Save Notification Settings'}
                 </button>
               </div>
+
+              {/* ── Webhooks ── */}
+              <hr className="border-card-border" />
+              <WebhookSettingsSection />
             </div>
           )}
 

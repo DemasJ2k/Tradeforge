@@ -25,6 +25,12 @@ import {
   BarChart3,
   Zap,
   Filter,
+  X,
+  Bot,
+  Sparkles,
+  Target,
+  ShieldAlert,
+  ArrowUpRight,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -45,6 +51,7 @@ interface EconomicEvent {
 }
 
 interface NewsArticle {
+  id?: number;
   external_id: string;
   headline: string;
   summary: string;
@@ -56,6 +63,21 @@ interface NewsArticle {
   related_symbols: string;
   sentiment_score: number | null;
   sentiment_label: string | null;
+}
+
+interface ArticleDetail extends NewsArticle {
+  id: number;
+  ai_analysis: AIAnalysis | null;
+  fetched_at: string | null;
+}
+
+interface AIAnalysis {
+  key_points: string[];
+  impact_assessment: string;
+  affected_symbols: string[];
+  recommendation: string;
+  confidence: number;
+  reasoning: string;
 }
 
 interface SentimentData {
@@ -322,9 +344,11 @@ function EconomicCalendar({
 function NewsFeed({
   articles,
   loading,
+  onArticleClick,
 }: {
   articles: NewsArticle[];
   loading: boolean;
+  onArticleClick: (article: NewsArticle) => void;
 }) {
   const [searchFilter, setSearchFilter] = useState("");
 
@@ -367,12 +391,10 @@ function NewsFeed({
       ) : (
         <div className="space-y-2">
           {filtered.map((a, i) => (
-            <a
+            <div
               key={a.external_id || i}
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block"
+              onClick={() => onArticleClick(a)}
+              className="block cursor-pointer"
             >
               <Card className="bg-card-bg border-card-border hover:border-accent/30 transition-colors cursor-pointer">
                 <CardContent className="p-3">
@@ -394,7 +416,7 @@ function NewsFeed({
                       <h4 className="text-sm font-medium text-foreground line-clamp-2 leading-tight">
                         {a.headline}
                       </h4>
-                      <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <Globe className="h-3 w-3" />
                           {a.source}
@@ -421,16 +443,284 @@ function NewsFeed({
                             {a.sentiment_label}
                           </Badge>
                         )}
-                        <ExternalLink className="h-3 w-3 text-muted-foreground/50 ml-auto shrink-0" />
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            </a>
+            </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component: Article Detail Modal
+// ---------------------------------------------------------------------------
+
+function ArticleDetailModal({
+  article,
+  onClose,
+}: {
+  article: NewsArticle;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<ArticleDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+
+  // Fetch full article detail if we have an ID
+  useEffect(() => {
+    if (!article.id) {
+      // No DB id — show what we have from the feed
+      setDetail({
+        ...article,
+        id: 0,
+        ai_analysis: null,
+        fetched_at: null,
+      });
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      try {
+        const data = await api.get<ArticleDetail>(`/api/news/articles/${article.id}`);
+        setDetail(data);
+      } catch {
+        setDetail({ ...article, id: article.id!, ai_analysis: null, fetched_at: null });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [article]);
+
+  const runAnalysis = async () => {
+    if (!detail?.id) return;
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const data = await api.post<{ article_id: number; analysis: AIAnalysis }>(
+        `/api/news/articles/${detail.id}/analyze`
+      );
+      setDetail((prev) => prev ? { ...prev, ai_analysis: data.analysis } : prev);
+    } catch (e: unknown) {
+      setAnalysisError(e instanceof Error ? e.message : "Analysis failed — check LLM settings.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const sentimentColor =
+    article.sentiment_label === "Bullish" ? "text-emerald-400" :
+    article.sentiment_label === "Bearish" ? "text-red-400" : "text-gray-400";
+
+  const sentimentBg =
+    article.sentiment_label === "Bullish" ? "bg-emerald-500/10 border-emerald-500/30" :
+    article.sentiment_label === "Bearish" ? "bg-red-500/10 border-red-500/30" : "bg-gray-500/10 border-gray-500/30";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <div
+        className="relative bg-card-bg border border-card-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-lg hover:bg-input-bg transition-colors z-10">
+          <X className="h-5 w-5 text-muted-foreground" />
+        </button>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-accent" />
+          </div>
+        ) : (
+          <div className="p-6 space-y-5">
+            {/* Image */}
+            {article.image_url && (
+              <div className="w-full h-48 rounded-lg overflow-hidden bg-muted/20 -mt-1">
+                <img
+                  src={article.image_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              </div>
+            )}
+
+            {/* Headline */}
+            <h2 className="text-lg font-semibold text-foreground leading-tight pr-8">
+              {article.headline}
+            </h2>
+
+            {/* Meta row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Globe className="h-3 w-3" /> {article.source}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" /> {timeAgo(article.published_at)}
+              </span>
+              <Badge className="text-[10px] bg-blue-500/10 text-blue-400 border-0">
+                {article.category}
+              </Badge>
+              {article.related_symbols && (
+                <Badge className="bg-purple-500/10 text-purple-400 border-0 text-[10px]">
+                  {article.related_symbols}
+                </Badge>
+              )}
+              {article.url && (
+                <a href={article.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-accent flex items-center gap-1 hover:underline ml-auto">
+                  <ExternalLink className="h-3 w-3" /> Source
+                </a>
+              )}
+            </div>
+
+            {/* Sentiment bar */}
+            {article.sentiment_label && (
+              <div className={`rounded-lg border px-4 py-2.5 flex items-center gap-3 ${sentimentBg}`}>
+                {article.sentiment_label === "Bullish" ? <TrendingUp className={`h-4 w-4 ${sentimentColor}`} /> :
+                 article.sentiment_label === "Bearish" ? <TrendingDown className={`h-4 w-4 ${sentimentColor}`} /> :
+                 <Minus className={`h-4 w-4 ${sentimentColor}`} />}
+                <span className={`text-sm font-medium ${sentimentColor}`}>{article.sentiment_label}</span>
+                {article.sentiment_score != null && (
+                  <span className="text-xs text-muted-foreground">
+                    Score: {article.sentiment_score.toFixed(3)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Summary */}
+            {article.summary && (
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Summary</h3>
+                <p className="text-sm text-foreground/80 leading-relaxed">{article.summary}</p>
+              </div>
+            )}
+
+            {/* AI Analysis section */}
+            <div className="border-t border-card-border pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  AI Trading Analysis
+                </h3>
+                {detail?.id && detail.id > 0 && !detail.ai_analysis && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={runAnalysis}
+                    disabled={analyzing}
+                    className="gap-1.5 text-xs"
+                  >
+                    {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+                    {analyzing ? "Analyzing..." : "Run AI Analysis"}
+                  </Button>
+                )}
+              </div>
+
+              {analysisError && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-400 mb-3">
+                  {analysisError}
+                </div>
+              )}
+
+              {!detail?.ai_analysis && !analyzing && !analysisError && (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  {detail?.id && detail.id > 0
+                    ? 'Click "Run AI Analysis" to get trading insights for this article.'
+                    : "AI analysis requires the article to be stored in the database."}
+                </div>
+              )}
+
+              {detail?.ai_analysis && (
+                <div className="space-y-4">
+                  {/* Key Points */}
+                  {detail.ai_analysis.key_points?.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <Target className="h-3 w-3" /> Key Points
+                      </h4>
+                      <ul className="space-y-1">
+                        {detail.ai_analysis.key_points.map((p, i) => (
+                          <li key={i} className="text-sm text-foreground/80 flex items-start gap-2">
+                            <span className="text-accent mt-0.5">&#8226;</span>
+                            <span>{p}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Impact Assessment */}
+                  {detail.ai_analysis.impact_assessment && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <ShieldAlert className="h-3 w-3" /> Impact Assessment
+                      </h4>
+                      <p className="text-sm text-foreground/80">{detail.ai_analysis.impact_assessment}</p>
+                    </div>
+                  )}
+
+                  {/* Affected Symbols */}
+                  {detail.ai_analysis.affected_symbols?.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1.5">Affected Symbols</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {detail.ai_analysis.affected_symbols.map((s) => (
+                          <Badge key={s} className="bg-purple-500/10 text-purple-400 border-0 text-[11px]">{s}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendation */}
+                  {detail.ai_analysis.recommendation && (
+                    <div className="rounded-lg bg-accent/5 border border-accent/20 px-4 py-3">
+                      <h4 className="text-xs font-medium text-accent mb-1 flex items-center gap-1">
+                        <ArrowUpRight className="h-3 w-3" /> Recommendation
+                      </h4>
+                      <p className="text-sm text-foreground/90">{detail.ai_analysis.recommendation}</p>
+                      {detail.ai_analysis.confidence != null && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">Confidence:</span>
+                          <div className="flex-1 h-1.5 bg-card-border rounded-full max-w-[120px]">
+                            <div className="h-full bg-accent rounded-full" style={{ width: `${Math.round(detail.ai_analysis.confidence * 100)}%` }} />
+                          </div>
+                          <span className="text-[10px] text-foreground/70">{Math.round(detail.ai_analysis.confidence * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reasoning */}
+                  {detail.ai_analysis.reasoning && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1.5">Reasoning</h4>
+                      <p className="text-xs text-foreground/60 leading-relaxed">{detail.ai_analysis.reasoning}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -559,6 +849,7 @@ export default function NewsPage() {
   const [loadingNews, setLoadingNews] = useState(true);
   const [loadingSentiment, setLoadingSentiment] = useState(true);
   const [error, setError] = useState<string>("");
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
 
   const loadCalendar = useCallback(async () => {
     setLoadingCal(true);
@@ -710,7 +1001,7 @@ export default function NewsPage() {
           <EconomicCalendar events={calendarEvents} loading={loadingCal} />
         )}
         {activeTab === "news" && (
-          <NewsFeed articles={newsArticles} loading={loadingNews} />
+          <NewsFeed articles={newsArticles} loading={loadingNews} onArticleClick={setSelectedArticle} />
         )}
         {activeTab === "sentiment" && (
           <div className="space-y-4">
@@ -723,6 +1014,14 @@ export default function NewsPage() {
           </div>
         )}
       </div>
+
+      {/* Article detail modal */}
+      {selectedArticle && (
+        <ArticleDetailModal
+          article={selectedArticle}
+          onClose={() => setSelectedArticle(null)}
+        />
+      )}
 
       <ChatHelpers />
     </div>
