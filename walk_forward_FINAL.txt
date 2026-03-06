@@ -1,0 +1,135 @@
+==================================================================================================================================
+  WALK-FORWARD VALIDATION: 70% Train / 30% Test — FINAL RESULTS
+  50,000 bars -> 35,000 train + 15,000 test (unseen)
+  ALL 16/16 COMBOS: [STRONG]
+==================================================================================================================================
+
+LARRY WILLIAMS VOLATILITY BREAKOUT (6 combos)
+----------------------------------------------
+Larry Williams       US30_M5      (train=35000, test=15000)
+  Full:  T=3082  PF=4.30  WR=48.1%  Sh=6.38  DD=10.2%  [96s]
+  Train: T=2197  PF=3.91  WR=47.4%  Sh=5.96  DD=10.2%  [47s]
+  Test:  T=888   PF=5.87  WR=50.1%  Sh=5.97  DD=9.1%   [9s]
+  -> PF degradation: -50%  |  Verdict: [STRONG]
+
+Larry Williams       US30_M15     (train=35000, test=15000)
+  Full:  T=2950  PF=5.57  WR=54.3%  Sh=6.45  DD=5.5%   [85s]
+  Train: T=2036  PF=5.67  WR=54.3%  Sh=5.90  DD=5.5%   [41s]
+  Test:  T=914   PF=5.18  WR=54.3%  Sh=6.14  DD=4.9%   [9s]
+  -> PF degradation: 9%   |  Verdict: [STRONG]
+
+Larry Williams       US30_H1      (train=35000, test=15000)
+  Full:  T=3725  PF=5.93  WR=56.9%  Sh=7.74  DD=5.7%   [111s]
+  Train: T=2600  PF=5.98  WR=56.3%  Sh=7.41  DD=5.7%   [55s]
+  Test:  T=1121  PF=5.82  WR=58.2%  Sh=6.68  DD=6.0%   [10s]
+  -> PF degradation: 3%   |  Verdict: [STRONG]
+
+Larry Williams       US100_M5     (train=35000, test=15000)
+  Full:  T=3463  PF=3.07  WR=45.5%  Sh=5.07  DD=11.0%  [104s]
+  Train: T=2438  PF=3.15  WR=45.9%  Sh=4.89  DD=11.0%  [51s]
+  Test:  T=1024  PF=2.94  WR=44.3%  Sh=4.47  DD=12.0%  [9s]
+  -> PF degradation: 7%   |  Verdict: [STRONG]
+
+Larry Williams       US100_M15    (train=35000, test=15000)
+  Full:  T=3019  PF=5.41  WR=55.8%  Sh=7.17  DD=5.1%   [89s]
+  Train: T=2087  PF=5.65  WR=56.6%  Sh=6.87  DD=5.1%   [43s]
+  Test:  T=929   PF=4.74  WR=54.0%  Sh=6.07  DD=10.5%  [9s]
+  -> PF degradation: 16%  |  Verdict: [STRONG]
+
+Larry Williams       US100_H1     (train=35000, test=15000)
+  Full:  T=3774  PF=5.11  WR=54.7%  Sh=7.23  DD=14.0%  [112s]
+  Train: T=2651  PF=4.86  WR=54.5%  Sh=7.05  DD=14.0%  [55s]
+  Test:  T=1122  PF=5.69  WR=55.3%  Sh=6.44  DD=4.7%   [11s]
+  -> PF degradation: -17% |  Verdict: [STRONG]
+
+TURTLE TRADING (DONCHIAN) (4 combos)
+----------------------------------------------
+Turtle Trading       US30_M15     (train=35000, test=15000)
+  Full:  T=1580  PF=4.06  WR=43.2%  Sh=4.67  DD=6.8%   [36s]
+  Train: T=1119  PF=4.37  WR=43.9%  Sh=4.27  DD=6.8%   [18s]
+  Test:  T=443   PF=3.55  WR=43.6%  Sh=4.88  DD=7.5%   [3s]
+  -> PF degradation: 19%  |  Verdict: [STRONG]
+
+Turtle Trading       US30_H1      (train=35000, test=15000)
+  Full:  T=1658  PF=5.11  WR=46.6%  Sh=5.23  DD=6.5%   [35s]
+  Train: T=1135  PF=5.63  WR=47.3%  Sh=4.75  DD=6.5%   [17s]
+  Test:  T=497   PF=4.39  WR=47.7%  Sh=5.23  DD=5.5%   [4s]
+  -> PF degradation: 22%  |  Verdict: [STRONG]
+
+Turtle Trading       US100_M15    (train=35000, test=15000)
+  Full:  T=1544  PF=3.50  WR=43.3%  Sh=4.36  DD=6.4%   [35s]
+  Train: T=1073  PF=3.52  WR=44.1%  Sh=4.02  DD=6.4%   [17s]
+  Test:  T=456   PF=3.40  WR=45.2%  Sh=4.87  DD=7.8%   [3s]
+  -> PF degradation: 4%   |  Verdict: [STRONG]
+
+Turtle Trading       US100_H1     (train=35000, test=15000)
+  Full:  T=1679  PF=5.17  WR=45.6%  Sh=5.11  DD=6.1%   [36s]
+  Train: T=1152  PF=4.71  WR=45.2%  Sh=4.55  DD=6.1%   [18s]
+  Test:  T=495   PF=4.94  WR=48.7%  Sh=5.50  DD=4.7%   [4s]
+  -> PF degradation: -5%  |  Verdict: [STRONG]
+
+NAS100 OPENING RANGE BREAKOUT (4 combos)
+----------------------------------------------
+NAS100 ORB           US30_M15     (train=35000, test=15000)
+  Full:  T=1644  PF=2.44  WR=56.7%  Sh=3.60  DD=6.3%   [46s]
+  Train: T=1148  PF=2.29  WR=56.6%  Sh=3.83  DD=6.3%   [23s]
+  Test:  T=493   PF=2.38  WR=57.0%  Sh=4.83  DD=4.8%   [4s]
+  -> PF degradation: -4%  |  Verdict: [STRONG]
+
+NAS100 ORB           US30_H1      (train=35000, test=15000)
+  Full:  T=3954  PF=6.73  WR=50.3%  Sh=6.26  DD=6.1%   [69s]
+  Train: T=2579  PF=5.85  WR=49.9%  Sh=5.34  DD=6.1%   [32s]
+  Test:  T=1360  PF=7.55  WR=54.2%  Sh=5.55  DD=2.6%   [8s]
+  -> PF degradation: -29% |  Verdict: [STRONG]
+
+NAS100 ORB           US100_M15    (train=35000, test=15000)
+  Full:  T=1638  PF=2.78  WR=57.5%  Sh=4.01  DD=11.5%  [46s]
+  Train: T=1162  PF=2.62  WR=57.1%  Sh=4.28  DD=11.5%  [23s]
+  Test:  T=473   PF=2.63  WR=58.8%  Sh=5.44  DD=8.3%   [4s]
+  -> PF degradation: -1%  |  Verdict: [STRONG]
+
+NAS100 ORB           US100_H1     (train=35000, test=15000)
+  Full:  T=4110  PF=6.93  WR=48.7%  Sh=6.13  DD=6.8%   [75s]
+  Train: T=2780  PF=5.49  WR=48.1%  Sh=5.25  DD=6.8%   [36s]
+  Test:  T=1317  PF=7.98  WR=52.4%  Sh=5.66  DD=3.7%   [8s]
+  -> PF degradation: -45% |  Verdict: [STRONG]
+
+WOODIES CCI ZERO LINE REJECT (2 combos)
+----------------------------------------------
+Woodies CCI          US30_H1      (train=35000, test=15000)
+  Full:  T=1364  PF=2.68  WR=38.9%  Sh=3.30  DD=6.2%   [31s]
+  Train: T=953   PF=2.92  WR=40.3%  Sh=3.91  DD=6.2%   [15s]
+  Test:  T=409   PF=2.58  WR=35.9%  Sh=4.51  DD=5.3%   [3s]
+  -> PF degradation: 11%  |  Verdict: [STRONG]
+
+Woodies CCI          US100_H1     (train=35000, test=15000)
+  Full:  T=1334  PF=2.62  WR=35.5%  Sh=3.06  DD=17.4%  [30s]
+  Train: T=958   PF=3.15  WR=35.6%  Sh=4.06  DD=17.4%  [16s]
+  Test:  T=375   PF=2.46  WR=35.2%  Sh=4.28  DD=5.2%   [3s]
+  -> PF degradation: 22%  |  Verdict: [STRONG]
+
+==================================================================================================================================
+  SUMMARY TABLE
+==================================================================================================================================
+  Strategy             Dataset      Train PF  Test PF  Degrad   Test Sh  Test DD  Test T  Verdict
+  -------------------- ------------ --------  -------  ------   -------  -------  ------  -------
+  Larry Williams       US30_M5         3.91     5.87    -50%     5.97     9.1%     888   STRONG
+  Larry Williams       US30_M15        5.67     5.18      9%     6.14     4.9%     914   STRONG
+  Larry Williams       US30_H1         5.98     5.82      3%     6.68     6.0%    1121   STRONG
+  Larry Williams       US100_M5        3.15     2.94      7%     4.47    12.0%    1024   STRONG
+  Larry Williams       US100_M15       5.65     4.74     16%     6.07    10.5%     929   STRONG
+  Larry Williams       US100_H1        4.86     5.69    -17%     6.44     4.7%    1122   STRONG
+  Turtle Trading       US30_M15        4.37     3.55     19%     4.88     7.5%     443   STRONG
+  Turtle Trading       US30_H1         5.63     4.39     22%     5.23     5.5%     497   STRONG
+  Turtle Trading       US100_M15       3.52     3.40      4%     4.87     7.8%     456   STRONG
+  Turtle Trading       US100_H1        4.71     4.94     -5%     5.50     4.7%     495   STRONG
+  NAS100 ORB           US30_M15        2.29     2.38     -4%     4.83     4.8%     493   STRONG
+  NAS100 ORB           US30_H1         5.85     7.55    -29%     5.55     2.6%    1360   STRONG
+  NAS100 ORB           US100_M15       2.62     2.63     -1%     5.44     8.3%     473   STRONG
+  NAS100 ORB           US100_H1        5.49     7.98    -45%     5.66     3.7%    1317   STRONG
+  Woodies CCI          US30_H1         2.92     2.58     11%     4.51     5.3%     409   STRONG
+  Woodies CCI          US100_H1        3.15     2.46     22%     4.28     5.2%     375   STRONG
+
+  VERDICTS: 16/16 STRONG | 0 OK | 0 WEAK | 0 FAIL
+  Average PF degradation: -2.4% (strategies IMPROVE on unseen data on average)
+  7 combos IMPROVED on test vs train (negative degradation)

@@ -1,15 +1,18 @@
 """
-Strategy 23: Awesome Oscillator Saucer
-========================================
+Strategy 23: Awesome Oscillator Saucer (Simplified)
+=====================================================
 Inspired by: Bill Williams — "Trading Chaos" author, creator of AO.
 
 Core idea: The Awesome Oscillator = SMA(5) of median price − SMA(34) of
-median price. The "Saucer" pattern = AO is above zero, dips (one red bar),
-then turns green again → continuation signal.
+median price.
 
-Additional Williams signals:
-  - Twin Peaks: Two AO peaks below zero with a bar between → bullish
-  - Zero Line Cross: AO crosses above/below zero
+Signals (priority order):
+  - Saucer (simplified): AO rising above zero → long, AO falling below zero → short.
+    Only requires ao[i] > ao[i-1] with ao[i] on the correct side of zero.
+  - Zero Line Cross: AO crosses above/below zero — simplest and most frequent signal.
+
+Twin Peaks removed (too rare, overly complex).
+AO zero-cross exit removed — ATR-based SL/TP handles all exits.
 
 Markets : Universal
 Timeframe: 15m / 1H / 4H / Daily
@@ -19,11 +22,10 @@ DEFAULTS = {
     "ao_fast":          5,
     "ao_slow":          34,
     "use_saucer":       True,
-    "use_twin_peaks":   True,
-    "use_zero_cross":   False,  # Disabled — too many false signals in chop
+    "use_zero_cross":   True,   # Enabled — simplest, most frequent AO signal
     "atr_period":       14,
-    "atr_sl_mult":      2.0,    # Widened from 1.5 — momentum needs room
-    "atr_tp_mult":      3.0,    # Widened from 2.5
+    "atr_sl_mult":      1.5,    # Tighter SL for better R:R
+    "atr_tp_mult":      3.0,
     "risk_per_trade":   0.01,
 }
 
@@ -31,11 +33,10 @@ DEFAULTS = {
 SETTINGS = [
     {"key": "ao_fast",        "label": "AO Fast Period",       "type": "int",   "default": 5,    "min": 2,   "max": 20,  "step": 1,   "group": "Indicator Settings", "description": "Fast SMA period for Awesome Oscillator median price"},
     {"key": "ao_slow",        "label": "AO Slow Period",       "type": "int",   "default": 34,   "min": 10,  "max": 60,  "step": 1,   "group": "Indicator Settings", "description": "Slow SMA period for Awesome Oscillator median price"},
-    {"key": "use_saucer",     "label": "Enable Saucer Signal", "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade the AO saucer continuation pattern (dip and recovery above/below zero)"},
-    {"key": "use_twin_peaks", "label": "Enable Twin Peaks",    "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade the twin-peaks divergence pattern on the AO"},
-    {"key": "use_zero_cross", "label": "Enable Zero Cross",    "type": "bool",  "default": False,                                      "group": "Entry Rules",        "description": "Trade AO zero-line crossovers (tends to generate many false signals)"},
+    {"key": "use_saucer",     "label": "Enable Saucer Signal", "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade when AO momentum is increasing on the correct side of zero"},
+    {"key": "use_zero_cross", "label": "Enable Zero Cross",    "type": "bool",  "default": True,                                       "group": "Entry Rules",        "description": "Trade AO zero-line crossovers — simplest momentum signal"},
     {"key": "atr_period",     "label": "ATR Period",           "type": "int",   "default": 14,   "min": 5,   "max": 50,  "step": 1,   "group": "Risk Management",    "description": "Lookback period for Average True Range calculation"},
-    {"key": "atr_sl_mult",    "label": "ATR SL Multiplier",    "type": "float", "default": 2.0,  "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management",    "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_sl_mult",    "label": "ATR SL Multiplier",    "type": "float", "default": 1.5,  "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management",    "description": "Stop-loss distance as a multiple of ATR"},
     {"key": "atr_tp_mult",    "label": "ATR TP Multiplier",    "type": "float", "default": 3.0,  "min": 0.5, "max": 8.0, "step": 0.1, "group": "Risk Management",    "description": "Take-profit distance as a multiple of ATR"},
     {"key": "risk_per_trade", "label": "Risk Per Trade",       "type": "float", "default": 0.01, "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",   "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
 ]
@@ -82,59 +83,9 @@ class AOSaucer:
         self.ao = [sma_fast[i] - sma_slow[i] for i in range(n)]
         self.atr_vals = _atr(bars, self.s["atr_period"])
 
-    def _saucer_bull(self, i):
-        """Bullish saucer: AO > 0, ao[i-2] > ao[i-1] (dip), ao[i] > ao[i-1] (recovery)."""
-        if i < 3:
-            return False
-        return (self.ao[i] > 0 and self.ao[i - 1] > 0 and self.ao[i - 2] > 0 and
-                self.ao[i - 2] > self.ao[i - 1] and self.ao[i] > self.ao[i - 1])
-
-    def _saucer_bear(self, i):
-        """Bearish saucer: AO < 0, dip up then resume down."""
-        if i < 3:
-            return False
-        return (self.ao[i] < 0 and self.ao[i - 1] < 0 and self.ao[i - 2] < 0 and
-                self.ao[i - 2] < self.ao[i - 1] and self.ao[i] < self.ao[i - 1])
-
-    def _twin_peaks_bull(self, i):
-        """Twin Peaks bullish: two AO valleys below zero, second higher than first."""
-        if i < 10:
-            return False
-        # Find two recent valleys below zero
-        valleys = []
-        for j in range(i - 1, max(i - 50, 2) - 1, -1):
-            is_valley = (self.ao[j] < 0 and self.ao[j] < self.ao[j - 1])
-            if is_valley and j + 1 <= i:
-                is_valley = is_valley and (self.ao[j] < self.ao[j + 1])
-            if is_valley:
-                valleys.append((j, self.ao[j]))
-                if len(valleys) == 2:
-                    break
-        if len(valleys) < 2:
-            return False
-        # Second valley (more recent) should be higher (less negative) than first
-        return valleys[0][1] > valleys[1][1]
-
-    def _twin_peaks_bear(self, i):
-        """Twin Peaks bearish: two AO peaks above zero, second lower than first."""
-        if i < 10:
-            return False
-        peaks = []
-        for j in range(i - 1, max(i - 50, 2) - 1, -1):
-            is_peak = (self.ao[j] > 0 and self.ao[j] > self.ao[j - 1])
-            if is_peak and j + 1 <= i:
-                is_peak = is_peak and (self.ao[j] > self.ao[j + 1])
-            if is_peak:
-                peaks.append((j, self.ao[j]))
-                if len(peaks) == 2:
-                    break
-        if len(peaks) < 2:
-            return False
-        return peaks[0][1] < peaks[1][1]
-
     def on_bar(self, i, bar):
         s = self.s
-        warmup = max(s["ao_slow"], s["atr_period"]) + 5
+        warmup = max(s["ao_slow"], s["atr_period"]) + 2
         if i < warmup:
             return
 
@@ -142,34 +93,21 @@ class AOSaucer:
         if atr_val <= 0:
             return
 
-        close = bar["close"]
-
-        # Exit: AO flips to opposite side of zero
-        for t in list(open_trades):
-            if t["direction"] == "long" and self.ao[i] < 0 and self.ao[i - 1] >= 0:
-                close_trade(t, i, close, "ao_zero_cross_exit")
-            elif t["direction"] == "short" and self.ao[i] > 0 and self.ao[i - 1] <= 0:
-                close_trade(t, i, close, "ao_zero_cross_exit")
-
         if len(open_trades) > 0:
             return
 
+        close = bar["close"]
         signal_long = False
         signal_short = False
 
-        # Check signals in priority order
+        # Saucer (simplified): AO rising on the correct side of zero
         if s["use_saucer"]:
-            if self._saucer_bull(i):
+            if self.ao[i] > 0 and self.ao[i] > self.ao[i - 1]:
                 signal_long = True
-            elif self._saucer_bear(i):
+            elif self.ao[i] < 0 and self.ao[i] < self.ao[i - 1]:
                 signal_short = True
 
-        if not signal_long and not signal_short and s["use_twin_peaks"]:
-            if self._twin_peaks_bull(i):
-                signal_long = True
-            elif self._twin_peaks_bear(i):
-                signal_short = True
-
+        # Zero Line Cross: AO crosses above or below zero
         if not signal_long and not signal_short and s["use_zero_cross"]:
             if self.ao[i] > 0 and self.ao[i - 1] <= 0:
                 signal_long = True

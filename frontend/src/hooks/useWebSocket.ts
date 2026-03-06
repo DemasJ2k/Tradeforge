@@ -163,8 +163,8 @@ export const useWebSocket = create<WSState>((set, get) => ({
       }
     };
 
-    ws.onerror = (err) => {
-      console.error("[WS] Error:", err);
+    ws.onerror = () => {
+      console.warn("[WS] Connection error — reconnect will follow");
       // onerror is always followed by onclose, so reconnect is handled there
     };
   },

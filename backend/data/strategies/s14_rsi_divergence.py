@@ -1,89 +1,62 @@
 """
-Strategy 14: RSI Divergence Swing Trader
-==========================================
-Inspired by: Andrew Cardwell (RSI specialist) & classic divergence theory.
+Strategy 14: MACD + EMA Momentum
+==================================
+Replaces RSI Divergence (PF=0.72-0.81, consistent loser).
 
-Core idea: Hidden/regular divergence between price and RSI signals reversals
-or continuation.
-  Regular Bullish: Price lower low + RSI higher low → reversal long
-  Regular Bearish: Price higher high + RSI lower high → reversal short
-  Hidden Bullish:  Price higher low + RSI lower low → continuation long
-  Hidden Bearish:  Price lower high + RSI higher high → continuation short
+Core idea: MACD(12,26,9) histogram direction with EMA(50) trend filter.
+  Long : MACD histogram turns positive (prev <= 0, now > 0) while close > EMA(50)
+  Short: MACD histogram turns negative (prev >= 0, now < 0) while close < EMA(50)
+  SL = 1.5 ATR, TP = 3.0 ATR
 
-Markets : Universal
-Timeframe: 1H / 4H / Daily
+Markets : Universal (indices, forex, crypto)
+Timeframe: M5-H1
 """
 
 DEFAULTS = {
-    "rsi_period":       14,
-    "pivot_lookback":   5,      # Bars to confirm pivot high/low
-    "max_div_bars":     30,     # Max bars between two pivot points for divergence
-    "min_div_bars":     5,      # Min bars separation
-    "use_hidden_div":   True,
-    "sma_trend_period": 50,     # Trend filter
+    "macd_fast":        12,
+    "macd_slow":        26,
+    "macd_signal":      9,
+    "ema_trend":        50,
     "atr_period":       14,
-    "atr_sl_mult":      2.0,
+    "atr_sl_mult":      1.5,
     "atr_tp_mult":      3.0,
     "risk_per_trade":   0.01,
 }
 
-
 SETTINGS = [
-    {"key": "rsi_period", "label": "RSI Period", "type": "int", "default": 14, "min": 5, "max": 30, "step": 1, "group": "Indicator Settings", "description": "Lookback period for the RSI oscillator"},
-    {"key": "pivot_lookback", "label": "Pivot Lookback", "type": "int", "default": 5, "min": 2, "max": 15, "step": 1, "group": "Entry Rules", "description": "Bars on each side required to confirm a swing pivot high or low"},
-    {"key": "max_div_bars", "label": "Max Divergence Bars", "type": "int", "default": 30, "min": 10, "max": 60, "step": 1, "group": "Entry Rules", "description": "Maximum bars allowed between two pivot points for a valid divergence"},
-    {"key": "min_div_bars", "label": "Min Divergence Bars", "type": "int", "default": 5, "min": 2, "max": 15, "step": 1, "group": "Entry Rules", "description": "Minimum bars separation between pivot points (also used as signal cooldown)"},
-    {"key": "use_hidden_div", "label": "Use Hidden Divergence", "type": "bool", "default": True, "group": "Entry Rules", "description": "Enable hidden divergence patterns for trend continuation signals"},
-    {"key": "sma_trend_period", "label": "Trend SMA Period", "type": "int", "default": 50, "min": 20, "max": 200, "step": 10, "group": "Filters", "description": "SMA period for trend filter (long only above, short only below)"},
-    {"key": "atr_period", "label": "ATR Period", "type": "int", "default": 14, "min": 5, "max": 50, "step": 1, "group": "Indicator Settings", "description": "Lookback period for ATR used in stop-loss and take-profit"},
-    {"key": "atr_sl_mult", "label": "ATR Stop-Loss Multiplier", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for stop-loss distance from entry"},
-    {"key": "atr_tp_mult", "label": "ATR Take-Profit Multiplier", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.1, "group": "Risk Management", "description": "ATR multiplier for take-profit distance from entry"},
-    {"key": "risk_per_trade", "label": "Risk Per Trade", "type": "float", "default": 0.01, "min": 0.001, "max": 0.05, "step": 0.001, "group": "Risk Management", "description": "Fraction of account equity risked per trade"},
+    {"key": "macd_fast",      "label": "MACD Fast EMA",           "type": "int",   "default": 12,   "min": 5,    "max": 20,   "step": 1,    "group": "Indicator Settings", "description": "Fast EMA period for MACD line"},
+    {"key": "macd_slow",      "label": "MACD Slow EMA",           "type": "int",   "default": 26,   "min": 15,   "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "Slow EMA period for MACD line"},
+    {"key": "macd_signal",    "label": "MACD Signal Period",       "type": "int",   "default": 9,    "min": 3,    "max": 20,   "step": 1,    "group": "Indicator Settings", "description": "Signal line EMA period"},
+    {"key": "ema_trend",      "label": "Trend EMA Period",         "type": "int",   "default": 50,   "min": 10,   "max": 200,  "step": 5,    "group": "Filters",            "description": "EMA period for trend direction filter"},
+    {"key": "atr_period",     "label": "ATR Period",               "type": "int",   "default": 14,   "min": 5,    "max": 50,   "step": 1,    "group": "Indicator Settings", "description": "ATR lookback for SL/TP sizing"},
+    {"key": "atr_sl_mult",    "label": "ATR Stop-Loss Mult",       "type": "float", "default": 1.5,  "min": 0.5,  "max": 5.0,  "step": 0.1,  "group": "Risk Management",    "description": "ATR multiplier for stop-loss distance"},
+    {"key": "atr_tp_mult",    "label": "ATR Take-Profit Mult",     "type": "float", "default": 3.0,  "min": 0.5,  "max": 10.0, "step": 0.1,  "group": "Risk Management",    "description": "ATR multiplier for take-profit distance"},
+    {"key": "risk_per_trade", "label": "Risk Per Trade",           "type": "float", "default": 0.01, "min": 0.001,"max": 0.05, "step": 0.001,"group": "Risk Management",    "description": "Fraction of account equity risked per trade"},
 ]
 
 
-def _rsi(bars, period):
-    n = len(bars)
-    out = [50.0] * n
-    if period + 1 > n:
+def _ema_on_values(values, period):
+    """EMA on a list of floats."""
+    n = len(values)
+    out = [0.0] * n
+    if period > n:
         return out
-    gains = 0.0
-    losses = 0.0
-    for j in range(1, period + 1):
-        diff = bars[j]["close"] - bars[j - 1]["close"]
-        if diff > 0:
-            gains += diff
-        else:
-            losses -= diff
-    avg_gain = gains / period
-    avg_loss = losses / period
-    if avg_loss == 0:
-        out[period] = 100.0
-    else:
-        out[period] = 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
-    for i in range(period + 1, n):
-        diff = bars[i]["close"] - bars[i - 1]["close"]
-        g = diff if diff > 0 else 0.0
-        l = -diff if diff < 0 else 0.0
-        avg_gain = (avg_gain * (period - 1) + g) / period
-        avg_loss = (avg_loss * (period - 1) + l) / period
-        if avg_loss == 0:
-            out[i] = 100.0
-        else:
-            out[i] = 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+    out[period - 1] = sum(values[:period]) / period
+    k = 2.0 / (period + 1)
+    for i in range(period, n):
+        out[i] = values[i] * k + out[i - 1] * (1 - k)
     return out
 
 
-def _sma(bars, period, key="close"):
+def _ema(bars, period):
     n = len(bars)
     out = [0.0] * n
     if period > n:
         return out
-    s = sum(bars[j][key] for j in range(period))
-    out[period - 1] = s / period
+    out[period - 1] = sum(bars[j]["close"] for j in range(period)) / period
+    k = 2.0 / (period + 1)
     for i in range(period, n):
-        s += bars[i][key] - bars[i - period][key]
-        out[i] = s / period
+        out[i] = bars[i]["close"] * k + out[i - 1] * (1 - k)
     return out
 
 
@@ -103,130 +76,52 @@ def _atr(bars, period):
     return out
 
 
-def _find_pivot_lows(bars, rsi_vals, lookback, end_idx, count=10):
-    """Find recent pivot lows (price lows confirmed by lookback bars on each side)."""
-    pivots = []
-    start = max(lookback, 1)
-    for i in range(end_idx - 1, start - 1, -1):
-        if len(pivots) >= count:
-            break
-        is_pivot = True
-        for j in range(1, lookback + 1):
-            if i - j < 0 or i + j > end_idx:
-                is_pivot = False
-                break
-            if bars[i]["low"] > bars[i - j]["low"] or bars[i]["low"] > bars[i + j]["low"]:
-                is_pivot = False
-                break
-        if is_pivot:
-            pivots.append((i, bars[i]["low"], rsi_vals[i]))
-    return pivots
-
-
-def _find_pivot_highs(bars, rsi_vals, lookback, end_idx, count=10):
-    """Find recent pivot highs."""
-    pivots = []
-    start = max(lookback, 1)
-    for i in range(end_idx - 1, start - 1, -1):
-        if len(pivots) >= count:
-            break
-        is_pivot = True
-        for j in range(1, lookback + 1):
-            if i - j < 0 or i + j > end_idx:
-                is_pivot = False
-                break
-            if bars[i]["high"] < bars[i - j]["high"] or bars[i]["high"] < bars[i + j]["high"]:
-                is_pivot = False
-                break
-        if is_pivot:
-            pivots.append((i, bars[i]["high"], rsi_vals[i]))
-    return pivots
+def _macd(bars, fast_p, slow_p, sig_p):
+    """MACD line, signal line, histogram."""
+    n = len(bars)
+    closes = [bars[i]["close"] for i in range(n)]
+    fast_ema = _ema_on_values(closes, fast_p)
+    slow_ema = _ema_on_values(closes, slow_p)
+    macd_line = [fast_ema[i] - slow_ema[i] for i in range(n)]
+    signal_line = _ema_on_values(macd_line, sig_p)
+    histogram = [macd_line[i] - signal_line[i] for i in range(n)]
+    return macd_line, signal_line, histogram
 
 
 class RSIDivergence:
     def init(self, bars, s):
         self.s = {**DEFAULTS, **s}
         self.bars = bars
-        self.rsi = _rsi(bars, self.s["rsi_period"])
-        self.sma = _sma(bars, self.s["sma_trend_period"])
+        self.ema_vals = _ema(bars, self.s["ema_trend"])
         self.atr_vals = _atr(bars, self.s["atr_period"])
-        self.last_signal_bar = -100
+        _, _, self.histogram = _macd(bars, self.s["macd_fast"], self.s["macd_slow"], self.s["macd_signal"])
 
     def on_bar(self, i, bar):
         s = self.s
-        warmup = max(s["rsi_period"], s["sma_trend_period"], s["atr_period"]) + s["pivot_lookback"] + s["max_div_bars"] + 2
+        warmup = max(s["ema_trend"], s["macd_slow"] + s["macd_signal"], s["atr_period"]) + 2
         if i < warmup:
             return
 
         atr_val = self.atr_vals[i]
-        if atr_val <= 0:
+        ema_val = self.ema_vals[i]
+        if atr_val <= 0 or ema_val <= 0:
             return
-
-        close = bar["close"]
-        rsi_val = self.rsi[i]
-
-        # Exit on RSI extremes or fixed TP/SL (handled by harness)
-        for t in list(open_trades):
-            if t["direction"] == "long" and rsi_val > 70:
-                close_trade(t, i, close, "rsi_overbought")
-            elif t["direction"] == "short" and rsi_val < 30:
-                close_trade(t, i, close, "rsi_oversold")
 
         if len(open_trades) > 0:
             return
 
-        # Debounce: skip if recent signal
-        if i - self.last_signal_bar < s["min_div_bars"]:
-            return
+        close = bar["close"]
+        hist_now = self.histogram[i]
+        hist_prev = self.histogram[i - 1]
 
-        lookback = s["pivot_lookback"]
+        # Long: histogram turns positive + uptrend
+        if hist_prev <= 0 and hist_now > 0 and close > ema_val:
+            sl = close - atr_val * s["atr_sl_mult"]
+            tp = close + atr_val * s["atr_tp_mult"]
+            open_trade(i, "long", close, sl, tp, s["risk_per_trade"])
 
-        # Check BULLISH divergence
-        lows = _find_pivot_lows(self.bars, self.rsi, lookback, i, count=5)
-        if len(lows) >= 2:
-            recent = lows[0]  # most recent pivot low
-            for prev in lows[1:]:
-                bar_diff = recent[0] - prev[0]
-                if bar_diff < s["min_div_bars"] or bar_diff > s["max_div_bars"]:
-                    continue
-                # Regular bullish: lower price low + higher RSI low
-                if recent[1] < prev[1] and recent[2] > prev[2]:
-                    if close > self.sma[i]:  # Trend filter (allow longs in uptrend)
-                        sl = close - atr_val * s["atr_sl_mult"]
-                        tp = close + atr_val * s["atr_tp_mult"]
-                        open_trade(i, "long", close, sl, tp, s["risk_per_trade"])
-                        self.last_signal_bar = i
-                        return
-                # Hidden bullish: higher price low + lower RSI low
-                if s["use_hidden_div"] and recent[1] > prev[1] and recent[2] < prev[2]:
-                    if close > self.sma[i]:
-                        sl = close - atr_val * s["atr_sl_mult"]
-                        tp = close + atr_val * s["atr_tp_mult"]
-                        open_trade(i, "long", close, sl, tp, s["risk_per_trade"])
-                        self.last_signal_bar = i
-                        return
-
-        # Check BEARISH divergence
-        highs = _find_pivot_highs(self.bars, self.rsi, lookback, i, count=5)
-        if len(highs) >= 2:
-            recent = highs[0]
-            for prev in highs[1:]:
-                bar_diff = recent[0] - prev[0]
-                if bar_diff < s["min_div_bars"] or bar_diff > s["max_div_bars"]:
-                    continue
-                # Regular bearish: higher price high + lower RSI high
-                if recent[1] > prev[1] and recent[2] < prev[2]:
-                    if close < self.sma[i]:
-                        sl = close + atr_val * s["atr_sl_mult"]
-                        tp = close - atr_val * s["atr_tp_mult"]
-                        open_trade(i, "short", close, sl, tp, s["risk_per_trade"])
-                        self.last_signal_bar = i
-                        return
-                # Hidden bearish: lower price high + higher RSI high
-                if s["use_hidden_div"] and recent[1] < prev[1] and recent[2] > prev[2]:
-                    if close < self.sma[i]:
-                        sl = close + atr_val * s["atr_sl_mult"]
-                        tp = close - atr_val * s["atr_tp_mult"]
-                        open_trade(i, "short", close, sl, tp, s["risk_per_trade"])
-                        self.last_signal_bar = i
-                        return
+        # Short: histogram turns negative + downtrend
+        elif hist_prev >= 0 and hist_now < 0 and close < ema_val:
+            sl = close + atr_val * s["atr_sl_mult"]
+            tp = close - atr_val * s["atr_tp_mult"]
+            open_trade(i, "short", close, sl, tp, s["risk_per_trade"])

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 import math
+import re
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.services.backtest_engine.bar import Bar as V3Bar
@@ -82,14 +84,49 @@ def _normalize_indicator_configs(raw_configs: list[dict]) -> list[dict]:
     return out
 
 
+def _parse_timestamp(raw) -> float:
+    """Convert a raw timestamp value to Unix epoch float.
+
+    Handles: float/int already, ISO datetime strings, MT5 dot-datetime
+    strings (e.g. '2025.01.08 01:00:00'), and other common formats.
+    Returns 0.0 if parsing fails.
+    """
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str) or not raw.strip():
+        return 0.0
+    s = raw.strip()
+    # MT5 dot-datetime: "2025.01.08 01:00:00"
+    s = s.replace(".", "-", 2)  # only first two dots (date part)
+    # Common datetime formats
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d",
+    ):
+        try:
+            dt = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError:
+            continue
+    # Last resort: try float parse (e.g. "1704672000.0")
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def convert_bars_to_v3(bars: list) -> list[V3Bar]:
     """Convert V1/V2 Bar objects (with .time) to V3 Bar objects (with .timestamp)."""
     v3_bars: list[V3Bar] = []
     for b in bars:
         # Support both dict and object formats
         if isinstance(b, dict):
+            raw_ts = b.get("time", b.get("timestamp", 0))
             v3_bars.append(V3Bar(
-                timestamp=b.get("time", b.get("timestamp", 0)),
+                timestamp=_parse_timestamp(raw_ts),
                 open=b.get("open", 0),
                 high=b.get("high", 0),
                 low=b.get("low", 0),
@@ -97,8 +134,9 @@ def convert_bars_to_v3(bars: list) -> list[V3Bar]:
                 volume=b.get("volume", 0),
             ))
         else:
+            raw_ts = getattr(b, "time", getattr(b, "timestamp", 0))
             v3_bars.append(V3Bar(
-                timestamp=getattr(b, "time", getattr(b, "timestamp", 0)),
+                timestamp=_parse_timestamp(raw_ts),
                 open=b.open,
                 high=b.high,
                 low=b.low,

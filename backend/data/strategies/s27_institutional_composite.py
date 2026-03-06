@@ -1,233 +1,89 @@
 """
-Institutional Composite Strategy (s27)
-======================================
-A comprehensive institutional-grade strategy that combines the most
-proven concepts from ICT, SMC, Wyckoff, and CTA methodologies.
+Institutional Composite Strategy (s27) — Simplified
+====================================================
+EMA trend bias + Fair Value Gap retracement entries.
 
-Core Logic (based on deep institutional research):
-  1. SESSION TIMING (Kill Zone filter)
-     - Only trades during London (02:00-05:00 EST) and NY (07:00-10:00 EST)
-     - Aligns with peak institutional activity and volume
-
-  2. MARKET STRUCTURE (HTF Bias)
-     - Uses BOS/CHoCH detection for trend direction
-     - EMA trend filter as additional confirmation
-
-  3. LIQUIDITY SWEEP DETECTION
-     - Identifies stop hunts at swing highs/lows
-     - Waits for price to wick beyond and close back inside
-     - This is THE signature institutional footprint
-
-  4. ENTRY AT INSTITUTIONAL ZONES
-     - Fair Value Gaps (3-candle imbalance zones)
-     - Order Blocks (last opposing candle before impulse)
-     - Entries at these zones after a confirmed sweep
-
-  5. PREMIUM / DISCOUNT FILTER
-     - Only buy in discount (below 50% of range)
-     - Only sell in premium (above 50% of range)
-     - Based on OTE (Optimal Trade Entry) Fibonacci zones
-
-  6. AMD MODEL (Power of 3)
-     - Asian Range = Accumulation
-     - Kill Zone break of Asian range = Manipulation
-     - Trade the reversal = Distribution
-
-  7. VOLUME ANOMALY DETECTION
-     - Relative volume spikes at key levels confirm institutional activity
-     - Tick volume serves as ~80% correlated proxy
-
-Risk Management:
-  - ATR-based SL/TP
-  - Max concurrent positions limit
-  - Cooldown between trades
-  - Position sizing via risk percentage
+Logic:
+  1. EMA(21) vs EMA(50) determines bullish/bearish bias
+  2. Detect FVGs (3-candle imbalance: bar[i-2].high < bar[i].low for bullish)
+  3. Long: bullish EMA bias + bullish FVG in last N bars + price retraces into gap
+  4. Short: bearish EMA bias + bearish FVG + price retraces into gap
+  5. SL = ATR * 2.0, TP = ATR * 3.0
+  6. Max 1 trade at a time, cooldown of 3 bars
 
 Author: FlowrexAlgo AI
-Version: 2.0 (research-based rebuild)
+Version: 3.0 (simplified)
 """
 
-import math
-
 DEFAULTS = {
-    # --- Session / Kill Zone ---
-    "use_kill_zone": True,
-    "london_start_hour": 7,    # UTC (02:00 EST = 07:00 UTC)
-    "london_end_hour": 10,     # UTC (05:00 EST = 10:00 UTC)
-    "ny_start_hour": 12,       # UTC (07:00 EST = 12:00 UTC)
-    "ny_end_hour": 15,         # UTC (10:00 EST = 15:00 UTC)
-
-    # --- Market Structure ---
-    "swing_length": 15,        # bars to define swing highs/lows
-    "use_ema_filter": True,    # use EMA trend filter
     "ema_fast": 21,
     "ema_slow": 50,
-
-    # --- Liquidity Sweep ---
-    "sweep_lookback": 25,       # bars to look back for swing levels
-    "sweep_threshold_atr": 0.1, # how far past swing = sweep (ATR)
-
-    # --- Fair Value Gaps ---
-    "fvg_min_size_atr": 0.3,   # minimum FVG size in ATR units
-    "fvg_max_age": 25,         # max candles old an FVG can be
-
-    # --- Order Blocks ---
-    "ob_min_impulse_atr": 1.5, # min ATR move after OB to validate
-    "ob_max_age": 30,          # max candles old an OB can be
-
-    # --- Premium / Discount ---
-    "use_pd_filter": True,
-    "pd_range_lookback": 50,   # bars for Fib zone calculation
-    "premium_fib": 0.5,        # above = premium, below = discount
-
-    # --- AMD Model ---
-    "use_amd": False,           # Asian range manipulation
-    "asian_start_hour": 0,     # UTC
-    "asian_end_hour": 7,       # UTC
-
-    # --- Volume Confirmation ---
-    "use_volume_filter": True,
-    "vol_lookback": 20,
-    "vol_spike_mult": 1.3,     # 1.3x = 30% above avg
-
-    # --- Risk Management ---
+    "fvg_lookback": 10,
     "atr_period": 14,
     "atr_sl_mult": 2.0,
-    "atr_tp_mult": 3.5,
+    "atr_tp_mult": 3.0,
     "cooldown_bars": 3,
-    "max_concurrent": 2,
     "risk_per_trade": 0.01,
 }
 
-
 SETTINGS = [
-    # Session / Kill Zones
-    {"key": "use_kill_zone",       "label": "Use Kill Zone Filter",      "type": "bool",  "default": True,                                                "group": "Session / Kill Zones", "description": "Only trade during London and New York kill zones"},
-    {"key": "london_start_hour",   "label": "London Start Hour (UTC)",   "type": "int",   "default": 7,     "min": 0,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the London kill zone begins"},
-    {"key": "london_end_hour",     "label": "London End Hour (UTC)",     "type": "int",   "default": 10,    "min": 1,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the London kill zone ends"},
-    {"key": "ny_start_hour",       "label": "NY Start Hour (UTC)",       "type": "int",   "default": 12,    "min": 0,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the New York kill zone begins"},
-    {"key": "ny_end_hour",         "label": "NY End Hour (UTC)",         "type": "int",   "default": 15,    "min": 1,    "max": 23,  "step": 1,    "group": "Session / Kill Zones", "description": "UTC hour when the New York kill zone ends"},
-
-    # Market Structure
-    {"key": "swing_length",        "label": "Swing Length",              "type": "int",   "default": 15,    "min": 5,    "max": 50,  "step": 1,    "group": "Market Structure",     "description": "Bars on each side to confirm a swing high/low pivot"},
-    {"key": "use_ema_filter",      "label": "Use EMA Filter",           "type": "bool",  "default": True,                                                "group": "Market Structure",     "description": "Use EMA crossover and position as an additional trend filter"},
-    {"key": "ema_fast",            "label": "EMA Fast Period",          "type": "int",   "default": 21,    "min": 5,    "max": 50,  "step": 1,    "group": "Market Structure",     "description": "Fast EMA period for trend detection"},
-    {"key": "ema_slow",            "label": "EMA Slow Period",          "type": "int",   "default": 50,    "min": 20,   "max": 200, "step": 1,    "group": "Market Structure",     "description": "Slow EMA period for trend detection"},
-
-    # Liquidity Sweep
-    {"key": "sweep_lookback",      "label": "Sweep Lookback",           "type": "int",   "default": 25,    "min": 5,    "max": 60,  "step": 1,    "group": "Liquidity Sweep",      "description": "Bars to look back for swing levels when detecting liquidity sweeps"},
-    {"key": "sweep_threshold_atr", "label": "Sweep Threshold (ATR)",    "type": "float", "default": 0.1,   "min": 0.01, "max": 1.0, "step": 0.01, "group": "Liquidity Sweep",      "description": "Minimum wick beyond swing level (in ATR) to qualify as a sweep"},
-
-    # Fair Value Gaps
-    {"key": "fvg_min_size_atr",    "label": "FVG Min Size (ATR)",       "type": "float", "default": 0.3,   "min": 0.1,  "max": 2.0, "step": 0.1,  "group": "Fair Value Gaps",      "description": "Minimum fair value gap size in ATR units"},
-    {"key": "fvg_max_age",         "label": "FVG Max Age (bars)",       "type": "int",   "default": 25,    "min": 5,    "max": 100, "step": 1,    "group": "Fair Value Gaps",      "description": "Maximum candles old an FVG can be to remain valid"},
-
-    # Order Blocks
-    {"key": "ob_min_impulse_atr",  "label": "OB Min Impulse (ATR)",     "type": "float", "default": 1.5,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Order Blocks",         "description": "Minimum ATR move after an order block to validate it"},
-    {"key": "ob_max_age",          "label": "OB Max Age (bars)",        "type": "int",   "default": 30,    "min": 5,    "max": 100, "step": 1,    "group": "Order Blocks",         "description": "Maximum candles old an order block can be to remain valid"},
-
-    # Premium / Discount
-    {"key": "use_pd_filter",       "label": "Use Premium/Discount",     "type": "bool",  "default": True,                                                "group": "Premium/Discount",     "description": "Only buy in discount zone and sell in premium zone"},
-    {"key": "pd_range_lookback",   "label": "P/D Range Lookback",       "type": "int",   "default": 50,    "min": 20,   "max": 200, "step": 1,    "group": "Premium/Discount",     "description": "Bars to look back for the high/low range used in Fibonacci zone calc"},
-    {"key": "premium_fib",         "label": "Premium Fib Level",        "type": "float", "default": 0.5,   "min": 0.3,  "max": 0.8, "step": 0.01, "group": "Premium/Discount",     "description": "Fibonacci level dividing premium from discount (0.5 = equilibrium)"},
-
-    # AMD Model
-    {"key": "use_amd",             "label": "Use AMD Model",            "type": "bool",  "default": False,                                               "group": "AMD Model",            "description": "Enable the Accumulation-Manipulation-Distribution (Power of 3) model"},
-    {"key": "asian_start_hour",    "label": "Asian Start Hour (UTC)",   "type": "int",   "default": 0,     "min": 0,    "max": 23,  "step": 1,    "group": "AMD Model",            "description": "UTC hour when the Asian accumulation range begins"},
-    {"key": "asian_end_hour",      "label": "Asian End Hour (UTC)",     "type": "int",   "default": 7,     "min": 1,    "max": 23,  "step": 1,    "group": "AMD Model",            "description": "UTC hour when the Asian accumulation range ends"},
-
-    # Volume
-    {"key": "use_volume_filter",   "label": "Use Volume Filter",        "type": "bool",  "default": True,                                                "group": "Volume",               "description": "Require volume spike confirmation for non-sweep signals"},
-    {"key": "vol_lookback",        "label": "Volume Lookback",          "type": "int",   "default": 20,    "min": 5,    "max": 60,  "step": 1,    "group": "Volume",               "description": "Bars for calculating average volume"},
-    {"key": "vol_spike_mult",      "label": "Volume Spike Multiplier",  "type": "float", "default": 1.3,   "min": 1.0,  "max": 3.0, "step": 0.1,  "group": "Volume",               "description": "Current volume must exceed average by this factor (1.3 = 30% above)"},
-
-    # Risk Management
-    {"key": "atr_period",          "label": "ATR Period",               "type": "int",   "default": 14,    "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management",      "description": "Lookback period for Average True Range calculation"},
-    {"key": "atr_sl_mult",         "label": "ATR SL Multiplier",        "type": "float", "default": 2.0,   "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Risk Management",      "description": "Stop-loss distance as a multiple of ATR"},
-    {"key": "atr_tp_mult",         "label": "ATR TP Multiplier",        "type": "float", "default": 3.5,   "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Risk Management",      "description": "Take-profit distance as a multiple of ATR"},
-    {"key": "cooldown_bars",       "label": "Cooldown Bars",            "type": "int",   "default": 3,     "min": 0,    "max": 20,  "step": 1,    "group": "Risk Management",      "description": "Minimum bars between consecutive trades"},
-    {"key": "max_concurrent",      "label": "Max Concurrent Trades",    "type": "int",   "default": 2,     "min": 1,    "max": 10,  "step": 1,    "group": "Risk Management",      "description": "Maximum number of simultaneously open positions"},
-    {"key": "risk_per_trade",      "label": "Risk Per Trade",           "type": "float", "default": 0.01,  "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management",      "description": "Fraction of account equity risked per trade (0.01 = 1%)"},
+    {"key": "ema_fast",        "label": "EMA Fast Period",    "type": "int",   "default": 21,   "min": 5,    "max": 50,  "step": 1,    "group": "Trend",           "description": "Fast EMA period for trend bias"},
+    {"key": "ema_slow",        "label": "EMA Slow Period",    "type": "int",   "default": 50,   "min": 20,   "max": 200, "step": 1,    "group": "Trend",           "description": "Slow EMA period for trend bias"},
+    {"key": "fvg_lookback",    "label": "FVG Lookback (bars)","type": "int",   "default": 10,   "min": 3,    "max": 30,  "step": 1,    "group": "Fair Value Gaps", "description": "How many bars back to search for an active FVG"},
+    {"key": "atr_period",      "label": "ATR Period",         "type": "int",   "default": 14,   "min": 5,    "max": 50,  "step": 1,    "group": "Risk Management", "description": "Lookback period for ATR calculation"},
+    {"key": "atr_sl_mult",     "label": "ATR SL Multiplier",  "type": "float", "default": 2.0,  "min": 0.5,  "max": 5.0, "step": 0.1,  "group": "Risk Management", "description": "Stop-loss distance as a multiple of ATR"},
+    {"key": "atr_tp_mult",     "label": "ATR TP Multiplier",  "type": "float", "default": 3.0,  "min": 0.5,  "max": 8.0, "step": 0.1,  "group": "Risk Management", "description": "Take-profit distance as a multiple of ATR"},
+    {"key": "cooldown_bars",   "label": "Cooldown Bars",      "type": "int",   "default": 3,    "min": 0,    "max": 20,  "step": 1,    "group": "Risk Management", "description": "Minimum bars between consecutive trades"},
+    {"key": "risk_per_trade",  "label": "Risk Per Trade",     "type": "float", "default": 0.01, "min": 0.001,"max": 0.05,"step": 0.001,"group": "Risk Management", "description": "Fraction of account equity risked per trade"},
 ]
 
 
 class InstitutionalComposite:
-    """
-    Mimics institutional trading by combining:
-    - Kill Zone timing (trade when institutions trade)
-    - Liquidity sweeps (trade where institutions fill)
-    - FVG/OB entries (trade at institutional price levels)
-    - Premium/Discount filter (trade at institutional value)
-    """
+    """EMA trend + FVG retracement strategy."""
 
     def init(self, bars, settings):
         self.bars = bars
         self.s = {**DEFAULTS, **settings}
         n = len(bars)
 
-        # Pre-compute ATR (Wilder method)
+        # --- ATR (Wilder / EMA-smoothed) ---
         self.atr = [0.0] * n
         p = self.s["atr_period"]
         if n > p + 1:
             tr_sum = 0.0
             for i in range(1, p + 1):
-                tr = max(bars[i]["high"] - bars[i]["low"],
-                         abs(bars[i]["high"] - bars[i - 1]["close"]),
-                         abs(bars[i]["low"] - bars[i - 1]["close"]))
-                tr_sum += tr
+                tr_sum += max(
+                    bars[i]["high"] - bars[i]["low"],
+                    abs(bars[i]["high"] - bars[i - 1]["close"]),
+                    abs(bars[i]["low"] - bars[i - 1]["close"]),
+                )
             self.atr[p] = tr_sum / p
             k = 1.0 / p
             for i in range(p + 1, n):
-                tr = max(bars[i]["high"] - bars[i]["low"],
-                         abs(bars[i]["high"] - bars[i - 1]["close"]),
-                         abs(bars[i]["low"] - bars[i - 1]["close"]))
+                tr = max(
+                    bars[i]["high"] - bars[i]["low"],
+                    abs(bars[i]["high"] - bars[i - 1]["close"]),
+                    abs(bars[i]["low"] - bars[i - 1]["close"]),
+                )
                 self.atr[i] = self.atr[i - 1] * (1 - k) + tr * k
 
-        # Pre-compute EMAs
+        # --- EMAs ---
         self.ema_fast = self._ema(n, self.s["ema_fast"])
         self.ema_slow = self._ema(n, self.s["ema_slow"])
 
-        # Pre-compute volume moving average
-        vl = self.s["vol_lookback"]
-        self.vol_avg = [0.0] * n
-        if n > vl:
-            v_sum = sum(bars[i]["volume"] for i in range(vl))
-            self.vol_avg[vl - 1] = v_sum / vl
-            for i in range(vl, n):
-                v_sum += bars[i]["volume"] - bars[i - vl]["volume"]
-                self.vol_avg[i] = v_sum / vl
-
-        # Detect swing highs/lows
-        sw = self.s["swing_length"]
-        self.swing_highs = {}
-        self.swing_lows = {}
-        for i in range(sw, n - sw):
-            ws = max(0, i - sw)
-            we = min(n, i + sw + 1)
-            is_high = all(bars[i]["high"] >= bars[j]["high"]
-                          for j in range(ws, we) if j != i)
-            is_low = all(bars[i]["low"] <= bars[j]["low"]
-                         for j in range(ws, we) if j != i)
-            if is_high:
-                self.swing_highs[i] = bars[i]["high"]
-            if is_low:
-                self.swing_lows[i] = bars[i]["low"]
-
-        # Detect market structure (BOS tracking)
-        self.structure_bias = [0] * n
-        self._compute_structure(n)
-
-        # Pre-detect Fair Value Gaps
+        # --- Detect all FVGs up front ---
+        # Each entry: (bar_index, zone_top, zone_bottom)
         self.fvg_bull = []
         self.fvg_bear = []
-        self._detect_fvgs(n)
+        for i in range(2, n):
+            # Bullish FVG: gap up — bar[i].low > bar[i-2].high
+            if bars[i]["low"] > bars[i - 2]["high"]:
+                self.fvg_bull.append((i, bars[i]["low"], bars[i - 2]["high"]))
+            # Bearish FVG: gap down — bar[i].high < bar[i-2].low
+            if bars[i]["high"] < bars[i - 2]["low"]:
+                self.fvg_bear.append((i, bars[i - 2]["low"], bars[i]["high"]))
 
-        # Pre-detect Order Blocks
-        self.ob_bull = []
-        self.ob_bear = []
-        self._detect_order_blocks(n)
-
-        # State
+        # --- State ---
         self.last_trade_bar = -100
 
     def _ema(self, n, period):
@@ -241,248 +97,68 @@ class InstitutionalComposite:
             ema[i] = self.bars[i]["close"] * k + ema[i - 1] * (1 - k)
         return ema
 
-    def _compute_structure(self, n):
-        last_sh = 0.0
-        last_sl = float('inf')
-        bias = 0
-        for i in range(n):
-            bar = self.bars[i]
-            if i in self.swing_highs:
-                last_sh = self.swing_highs[i]
-            if i in self.swing_lows:
-                last_sl = self.swing_lows[i]
-            if last_sh > 0 and bar["close"] > last_sh:
-                bias = 1
-            elif last_sl < float('inf') and bar["close"] < last_sl:
-                bias = -1
-            self.structure_bias[i] = bias
-
-    def _detect_fvgs(self, n):
-        min_size = self.s["fvg_min_size_atr"]
-        for i in range(2, n):
-            atr = self.atr[i]
-            if atr <= 0:
-                continue
-            # Bullish FVG
-            gb = self.bars[i - 2]["high"]
-            gt = self.bars[i]["low"]
-            if gt > gb and (gt - gb) >= min_size * atr:
-                self.fvg_bull.append((i, gt, gb))
-            # Bearish FVG
-            gt_b = self.bars[i - 2]["low"]
-            gb_b = self.bars[i]["high"]
-            if gt_b > gb_b and (gt_b - gb_b) >= min_size * atr:
-                self.fvg_bear.append((i, gt_b, gb_b))
-
-    def _detect_order_blocks(self, n):
-        impulse = self.s["ob_min_impulse_atr"]
-        for i in range(2, n):
-            atr = self.atr[i]
-            if atr <= 0:
-                continue
-            prev = self.bars[i - 1]
-            curr = self.bars[i]
-            # Bullish OB
-            if (prev["close"] < prev["open"]
-                    and curr["close"] > curr["open"]
-                    and (curr["close"] - prev["low"]) >= impulse * atr):
-                self.ob_bull.append((i - 1, prev["high"], prev["low"]))
-            # Bearish OB
-            if (prev["close"] > prev["open"]
-                    and curr["close"] < curr["open"]
-                    and (prev["high"] - curr["close"]) >= impulse * atr):
-                self.ob_bear.append((i - 1, prev["high"], prev["low"]))
-
-    def _in_kill_zone(self, bar):
-        time_str = bar.get("time", "")
-        if not time_str:
-            return True
-        hour = self._extract_hour(time_str)
-        if hour < 0:
-            return True
-        ls, le = self.s["london_start_hour"], self.s["london_end_hour"]
-        ns, ne = self.s["ny_start_hour"], self.s["ny_end_hour"]
-        return (ls <= hour < le) or (ns <= hour < ne)
-
-    def _extract_hour(self, time_str):
-        try:
-            ts = time_str.replace("T", " ").replace(".", "-", 2)
-            parts = ts.split(" ")
-            if len(parts) >= 2:
-                return int(parts[1].split(":")[0])
-        except (ValueError, IndexError):
-            pass
-        return -1
-
-    def _check_sweep(self, i):
-        bar = self.bars[i]
-        atr = self.atr[i]
-        if atr <= 0:
-            return 0
-        threshold = self.s["sweep_threshold_atr"] * atr
-        lookback = self.s["sweep_lookback"]
-
-        # Bullish sweep: wick below swing low, close back above
-        for si in range(max(0, i - lookback), i):
-            if si in self.swing_lows:
-                sl_lvl = self.swing_lows[si]
-                if bar["low"] < sl_lvl - threshold and bar["close"] > sl_lvl:
-                    return 1
-
-        # Bearish sweep: wick above swing high, close back below
-        for si in range(max(0, i - lookback), i):
-            if si in self.swing_highs:
-                sh_lvl = self.swing_highs[si]
-                if bar["high"] > sh_lvl + threshold and bar["close"] < sh_lvl:
-                    return -1
-        return 0
-
-    def _price_in_fvg(self, price, i, direction):
-        max_age = self.s["fvg_max_age"]
+    def _recent_fvg(self, i, direction):
+        """Return the most recent FVG zone (top, bottom) within lookback, or None."""
+        lb = self.s["fvg_lookback"]
         fvgs = self.fvg_bull if direction == "long" else self.fvg_bear
-        for (fidx, top, bottom) in reversed(fvgs):
+        # Walk backwards through FVG list for efficiency
+        for j in range(len(fvgs) - 1, -1, -1):
+            fidx, top, bot = fvgs[j]
             if fidx > i:
                 continue
-            if i - fidx > max_age:
-                break
-            if bottom <= price <= top:
-                return True
-        return False
+            if i - fidx > lb:
+                return None
+            return (top, bot)
+        return None
 
-    def _price_in_ob(self, price, i, direction):
-        max_age = self.s["ob_max_age"]
-        obs = self.ob_bull if direction == "long" else self.ob_bear
-        for (oidx, top, bottom) in reversed(obs):
-            if oidx > i:
-                continue
-            if i - oidx > max_age:
-                break
-            if bottom <= price <= top:
-                return True
-        return False
-
-    def _in_correct_zone(self, price, i, direction):
-        if not self.s["use_pd_filter"]:
-            return True
-        lb = self.s["pd_range_lookback"]
-        start = max(0, i - lb)
-        rh = max(self.bars[j]["high"] for j in range(start, i + 1))
-        rl = min(self.bars[j]["low"] for j in range(start, i + 1))
-        tr = rh - rl
-        if tr <= 0:
-            return True
-        pos = (price - rl) / tr
-        fib = self.s["premium_fib"]
-        if direction == "long":
-            return pos < fib
-        else:
-            return pos > (1 - fib)
-
-    def _volume_confirmed(self, i):
-        if not self.s["use_volume_filter"]:
-            return True
-        avg = self.vol_avg[i]
-        if avg <= 0:
-            return True
-        return self.bars[i]["volume"] >= avg * self.s["vol_spike_mult"]
-
-    def _check_amd(self, i):
-        if not self.s["use_amd"]:
-            return 0
-        bar = self.bars[i]
-        hour = self._extract_hour(bar.get("time", ""))
-        if hour < 0:
-            return 0
-        ls, le = self.s["london_start_hour"], self.s["london_end_hour"]
-        if not (ls <= hour < le):
-            return 0
-        # Find Asian range
-        as_h, ae_h = self.s["asian_start_hour"], self.s["asian_end_hour"]
-        a_high, a_low = 0.0, float('inf')
-        for j in range(max(0, i - 60), i):
-            h = self._extract_hour(self.bars[j].get("time", ""))
-            if as_h <= h < ae_h:
-                a_high = max(a_high, self.bars[j]["high"])
-                a_low = min(a_low, self.bars[j]["low"])
-        if a_high <= a_low or a_high == 0:
-            return 0
-        if bar["high"] > a_high and bar["close"] < a_high:
-            return -1
-        if bar["low"] < a_low and bar["close"] > a_low:
-            return 1
-        return 0
-
-    # ============================================================
-    # MAIN SIGNAL LOGIC
-    # ============================================================
+    # ------------------------------------------------------------------
     def on_bar(self, i, bar):
         atr = self.atr[i]
-        if atr <= 0 or i < self.s["ema_slow"] + 10:
+        if atr <= 0 or i < self.s["ema_slow"] + 2:
             return
+
+        # Cooldown
         if i - self.last_trade_bar < self.s["cooldown_bars"]:
             return
-        if len(open_trades) >= self.s["max_concurrent"]:
+
+        # Max 1 trade at a time
+        if len(open_trades) >= 1:
             return
 
         close = bar["close"]
 
-        # FILTER 1: Kill Zone
-        if self.s["use_kill_zone"] and not self._in_kill_zone(bar):
+        # --- Condition 1: EMA trend bias ---
+        if self.ema_fast[i] > self.ema_slow[i]:
+            direction = "long"
+        elif self.ema_fast[i] < self.ema_slow[i]:
+            direction = "short"
+        else:
             return
 
-        # FILTER 2: Trend Direction (structure + EMA confluence)
-        trend = self.structure_bias[i]
-        if self.s["use_ema_filter"]:
-            ema_t = 0
-            if self.ema_fast[i] > self.ema_slow[i] and close > self.ema_slow[i]:
-                ema_t = 1
-            elif self.ema_fast[i] < self.ema_slow[i] and close < self.ema_slow[i]:
-                ema_t = -1
-            if ema_t != 0 and trend != 0 and ema_t != trend:
+        # --- Condition 2: Recent FVG exists ---
+        fvg = self._recent_fvg(i, direction)
+        if fvg is None:
+            return
+
+        zone_top, zone_bot = fvg
+
+        # --- Condition 3: Price retraces into the FVG zone ---
+        # Bar's low dips into a bullish FVG, or bar's high reaches into a bearish FVG
+        if direction == "long":
+            if not (bar["low"] <= zone_top and close >= zone_bot):
                 return
-            if trend == 0:
-                trend = ema_t
-        if trend == 0:
-            return
+        else:
+            if not (bar["high"] >= zone_bot and close <= zone_top):
+                return
 
-        direction = "long" if trend > 0 else "short"
-
-        # SIGNAL: Liquidity Sweep
-        sweep = self._check_sweep(i)
-        primary = (sweep != 0 and sweep == trend)
-
-        # SIGNAL: AMD manipulation reversal
-        amd = self._check_amd(i)
-        secondary = (amd != 0 and amd == trend)
-
-        # SIGNAL: Price at institutional zone + fresh BOS
-        in_zone = (self._price_in_fvg(close, i, direction) or
-                   self._price_in_ob(close, i, direction))
-        fresh_bos = (self.structure_bias[i] == trend and
-                     i > 0 and self.structure_bias[i - 1] != trend)
-        tertiary = in_zone and fresh_bos
-
-        if not (primary or secondary or tertiary):
-            return
-
-        # FILTER 3: Premium/Discount
-        if not self._in_correct_zone(close, i, direction):
-            return
-
-        # FILTER 4: Volume confirmation (required if no sweep)
-        if not primary and not self._volume_confirmed(i):
-            return
-
-        # EXECUTE TRADE
-        sl_m = self.s["atr_sl_mult"]
-        tp_m = self.s["atr_tp_mult"]
+        # --- Execute trade ---
+        sl_dist = self.s["atr_sl_mult"] * atr
+        tp_dist = self.s["atr_tp_mult"] * atr
         risk = self.s["risk_per_trade"]
 
         if direction == "long":
-            open_trade(i, "long", close, close - sl_m * atr,
-                       close + tp_m * atr, risk)
+            open_trade(i, "long", close, close - sl_dist, close + tp_dist, risk)
         else:
-            open_trade(i, "short", close, close + sl_m * atr,
-                       close - tp_m * atr, risk)
+            open_trade(i, "short", close, close + sl_dist, close - tp_dist, risk)
 
         self.last_trade_bar = i

@@ -277,10 +277,13 @@ def _monthly_returns(
     yearly: dict[str, float] = defaultdict(float)
 
     for t in trades:
-        if t.exit_time <= 0:
+        if not t.exit_time or (isinstance(t.exit_time, (int, float)) and t.exit_time <= 0):
             continue
         try:
-            dt = datetime.fromtimestamp(t.exit_time, tz=timezone.utc)
+            exit_ts = float(t.exit_time) if isinstance(t.exit_time, (int, float)) else 0.0
+            if exit_ts <= 0:
+                continue
+            dt = datetime.fromtimestamp(exit_ts, tz=timezone.utc)
         except (OSError, ValueError):
             continue
 

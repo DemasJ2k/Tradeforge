@@ -1,0 +1,17 @@
+strategy,symbol,timeframe,trades,profit_factor,win_rate,sharpe,max_dd_pct,net_profit,grade,wf_train_pf,wf_test_pf,wf_degradation,wf_verdict
+Larry Williams Volatility Breakout,US30,M5,3082,4.298,48.1,6.38,10.2,8554313,ELITE,3.91,5.87,-50,STRONG
+Larry Williams Volatility Breakout,US30,M15,2950,5.570,54.3,6.45,5.5,17655779,ELITE,5.67,5.18,9,STRONG
+Larry Williams Volatility Breakout,US30,H1,3725,5.929,56.9,7.74,5.7,39363668,ELITE,5.98,5.82,3,STRONG
+Larry Williams Volatility Breakout,US100,M5,3463,3.075,45.5,5.07,11.0,5162908,ELITE,3.15,2.94,7,STRONG
+Larry Williams Volatility Breakout,US100,M15,3019,5.407,55.8,7.17,5.1,12889578,ELITE,5.65,4.74,16,STRONG
+Larry Williams Volatility Breakout,US100,H1,3774,5.106,54.7,7.23,14.0,21547084,ELITE,4.86,5.69,-17,STRONG
+Turtle Trading (Donchian),US30,M15,1580,4.060,43.2,4.67,6.8,,ELITE,4.37,3.55,19,STRONG
+Turtle Trading (Donchian),US30,H1,1658,5.110,46.6,5.23,6.5,,ELITE,5.63,4.39,22,STRONG
+Turtle Trading (Donchian),US100,M15,1544,3.500,43.3,4.36,6.4,,ELITE,3.52,3.40,4,STRONG
+Turtle Trading (Donchian),US100,H1,1679,5.170,45.6,5.11,6.1,,ELITE,4.71,4.94,-5,STRONG
+NAS100 Opening Range Breakout,US30,M15,1644,2.440,56.7,3.60,6.3,,ELITE,2.29,2.38,-4,STRONG
+NAS100 Opening Range Breakout,US30,H1,3954,6.730,50.3,6.26,6.1,,ELITE,5.85,7.55,-29,STRONG
+NAS100 Opening Range Breakout,US100,M15,1638,2.780,57.5,4.01,11.5,,ELITE,2.62,2.63,-1,STRONG
+NAS100 Opening Range Breakout,US100,H1,4110,6.930,48.7,6.13,6.8,,ELITE,5.49,7.98,-45,STRONG
+Woodies CCI Zero Line Reject,US30,H1,1364,2.680,38.9,3.30,6.2,,GOOD,2.92,2.58,11,STRONG
+Woodies CCI Zero Line Reject,US100,H1,1334,2.620,35.5,3.06,17.4,,GOOD,3.15,2.46,22,STRONG
