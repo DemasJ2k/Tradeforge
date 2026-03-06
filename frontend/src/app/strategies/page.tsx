@@ -396,12 +396,12 @@ export default function StrategiesPage() {
               <Settings className="h-3.5 w-3.5" />
             </Button>
           )}
-          {(!s.strategy_type || s.strategy_type === "builder") && !s.is_system && (
+          {!s.is_system && (
             <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title="Edit" className="h-7 w-7 text-muted-foreground hover:text-accent">
               <Pencil className="h-3.5 w-3.5" />
             </Button>
           )}
-          {s.strategy_type && s.strategy_type !== "builder" && !s.is_system && (
+          {s.is_system && s.strategy_type && s.strategy_type !== "builder" && (
             <Button variant="ghost" size="icon" onClick={() => setEditing(s)} title="View" className="h-7 w-7 text-muted-foreground hover:text-accent">
               <Eye className="h-3.5 w-3.5" />
             </Button>

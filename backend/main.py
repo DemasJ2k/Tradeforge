@@ -721,6 +721,139 @@ def _seed_all_strategies():
                 "timeframes": "M1 / M5 / M15",
                 "tags": ["news", "defensive", "event_trading", "risk_management"],
             },
+            # ── Wave 2: Asset-specific strategies (s29-s40) ──
+            {
+                "name": "NAS100 Opening Range Breakout",
+                "file": "s29_nas100_opening_range_breakout.py",
+                "description": (
+                    "Classic US equities ORB adapted for NAS100/US100 futures. "
+                    "First 15 minutes (3x M5 bars) after the US cash open define the Opening Range. "
+                    "Breakout beyond OR high/low with volume confirmation triggers entry."
+                ),
+                "timeframes": "M5",
+                "tags": ["nas100", "breakout", "opening_range", "intraday"],
+            },
+            {
+                "name": "NAS100 Gap Fill + VWAP Confirmation",
+                "file": "s30_nas100_gap_fill_vwap.py",
+                "description": (
+                    "Gap-fill mean-reversion on NAS100 with session VWAP confirmation. "
+                    "When price opens with a gap vs previous session close, enter on VWAP cross "
+                    "in the gap-fill direction. Historically high fill rate on equity indices."
+                ),
+                "timeframes": "M5",
+                "tags": ["nas100", "gap_fill", "vwap", "mean_reversion", "intraday"],
+            },
+            {
+                "name": "US500 VWAP Mean Reversion",
+                "file": "s31_us500_vwap_mean_reversion.py",
+                "description": (
+                    "Intraday mean reversion back to session VWAP on US500 (S&P 500). "
+                    "Enters on reversal candle when price deviates from VWAP during "
+                    "ranging conditions (low ADX). Targets snap-back to fair value."
+                ),
+                "timeframes": "M5",
+                "tags": ["us500", "vwap", "mean_reversion", "intraday"],
+            },
+            {
+                "name": "US500 RSI(2) Mean Reversion",
+                "file": "s32_us500_rsi2_mean_reversion.py",
+                "description": (
+                    "Ultra-short RSI(2) mean reversion on US500. Identifies extreme "
+                    "overbought/oversold with EMA trend filter. Buys oversold dips "
+                    "in uptrends, sells overbought rallies in downtrends."
+                ),
+                "timeframes": "M30",
+                "tags": ["us500", "rsi", "mean_reversion", "swing"],
+            },
+            {
+                "name": "XAUUSD London Breakout (Gold-Optimized)",
+                "file": "s33_xauusd_london_breakout.py",
+                "description": (
+                    "Classic London session breakout tuned for XAUUSD. Gold forms a "
+                    "range during Asia (00-07 UTC), then breaks out at London open "
+                    "with institutional momentum. ATR-filtered for range quality."
+                ),
+                "timeframes": "M5 / M15",
+                "tags": ["xauusd", "gold", "london_breakout", "session", "intraday"],
+            },
+            {
+                "name": "XAUUSD NY Momentum (London-to-NY Continuation)",
+                "file": "s34_xauusd_ny_momentum.py",
+                "description": (
+                    "Institutional order-flow continuation from London into NY session. "
+                    "Measures London directional move (07-13 UTC), enters on Fibonacci "
+                    "continuation if move is significant relative to ATR."
+                ),
+                "timeframes": "M15 / H1",
+                "tags": ["xauusd", "gold", "momentum", "session", "continuation"],
+            },
+            {
+                "name": "XAGUSD EMA Momentum Crossover",
+                "file": "s35_xagusd_ema_momentum.py",
+                "description": (
+                    "Fast/slow EMA crossover on silver (XAGUSD) filtered by ADX for "
+                    "momentum confirmation. Enters long on fast EMA crossing above slow "
+                    "with trending ADX, and vice versa for shorts."
+                ),
+                "timeframes": "M5",
+                "tags": ["xagusd", "silver", "ema", "crossover", "momentum"],
+            },
+            {
+                "name": "XAGUSD Bollinger Band Mean Reversion",
+                "file": "s36_xagusd_bb_reversion.py",
+                "description": (
+                    "Bollinger Band touch with reversal candle confirmation on XAGUSD. "
+                    "Enters long on lower band touch with bullish reversal, short on "
+                    "upper band touch with bearish reversal. RSI filter for extremes."
+                ),
+                "timeframes": "H1",
+                "tags": ["xagusd", "silver", "bollinger", "mean_reversion"],
+            },
+            {
+                "name": "BTCUSD CME Gap Fill",
+                "file": "s37_btcusd_cme_gap_fill.py",
+                "description": (
+                    "Exploits BTC CME futures weekend gaps. Bitcoin CME closes Friday "
+                    "17:00 ET, reopens Sunday 18:00 ET. ~70-80% of gaps fill within "
+                    "first hours of Monday trading. Volume and momentum confirmation."
+                ),
+                "timeframes": "M15 / H1",
+                "tags": ["btcusd", "bitcoin", "gap_fill", "cme", "mean_reversion"],
+            },
+            {
+                "name": "BTCUSD SuperTrend Momentum",
+                "file": "s38_btcusd_supertrend_momentum.py",
+                "description": (
+                    "SuperTrend direction + EMA pullback on BTCUSD. Waits for price to "
+                    "pull back to 21 EMA in SuperTrend direction, confirms with RSI "
+                    "(30-70 neutral zone) and ADX (>20 trending) before entry."
+                ),
+                "timeframes": "H1 / H4",
+                "tags": ["btcusd", "bitcoin", "supertrend", "momentum", "pullback"],
+            },
+            {
+                "name": "ETHUSD Momentum Scalper (EMA Cross + Volume + ADX)",
+                "file": "s39_ethusd_momentum_scalper.py",
+                "description": (
+                    "Captures ETH momentum bursts during US/London overlap using "
+                    "fast/slow EMA crossovers confirmed by volume spikes and ADX "
+                    "trend strength. ETH's higher volatility amplifies R:R on breakouts."
+                ),
+                "timeframes": "M5",
+                "tags": ["ethusd", "ethereum", "scalping", "momentum", "ema"],
+            },
+            {
+                "name": "ETHUSD Bollinger Band Mean Reversion",
+                "file": "s40_ethusd_bb_reversion.py",
+                "description": (
+                    "Mean reversion at Bollinger Band extremes on ETHUSD H4. "
+                    "Trades reversals when bands are wide (not in squeeze) and price "
+                    "overextends beyond bands with a reversal candle back inside."
+                ),
+                "timeframes": "H4",
+                "tags": ["ethusd", "ethereum", "bollinger", "mean_reversion"],
+            },
         ]
 
         # Optimized parameters and verified performance from Optuna + Walk-Forward validation
