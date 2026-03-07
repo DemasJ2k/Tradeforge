@@ -1194,8 +1194,10 @@ def _seed_all_strategies():
         # ─────────────────────────────────────────────────────────────────
 
     except Exception as e:
+        import traceback
         db.rollback()
         _log.error("Failed to seed strategies: %s", e)
+        _log.error("Traceback: %s", traceback.format_exc())
     finally:
         db.close()
 
