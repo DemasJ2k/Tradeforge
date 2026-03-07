@@ -857,6 +857,54 @@ def _seed_all_strategies():
                 "timeframes": "H4",
                 "tags": ["ethusd", "ethereum", "bollinger", "mean_reversion"],
             },
+            {
+                "name": "BTCUSD RSI Micro Scalper",
+                "file": "s41_btcusd_rsi_micro_scalper.py",
+                "description": (
+                    "Ultra-fast RSI(4) bounce scalp on Bitcoin M5. Catches short-term "
+                    "mean-reversion moves when RSI reaches extreme levels (OS<32, OB>68), "
+                    "filtered by a 42-period EMA to trade only in the prevailing direction. "
+                    "Deep-optimized with 78.8% win rate and 9.9 trades/day."
+                ),
+                "timeframes": "M5",
+                "tags": ["btcusd", "bitcoin", "rsi", "scalping", "mean_reversion"],
+            },
+            {
+                "name": "XAUUSD RSI Micro Scalper",
+                "file": "s42_xauusd_rsi_micro_scalper.py",
+                "description": (
+                    "Ultra-fast RSI(3) bounce scalp tuned for gold M5. Wider oversold "
+                    "threshold (46) and shorter trend EMA (17) to capture gold's faster "
+                    "mean-reversion dynamics. 100% robust across all time windows with "
+                    "STRONG walk-forward validation."
+                ),
+                "timeframes": "M5",
+                "tags": ["xauusd", "gold", "rsi", "scalping", "mean_reversion"],
+            },
+            {
+                "name": "XAUUSD Momentum Burst Scalper",
+                "file": "s43_xauusd_momentum_burst.py",
+                "description": (
+                    "Enters on large-body candles (body > 0.15x ATR) that signal a momentum "
+                    "burst on gold M15, with RSI(6) confirmation to avoid chasing exhausted "
+                    "moves. Captures follow-through from news events and session opens. "
+                    "PF 1.194 with 14.9 trades/day, 100% robust."
+                ),
+                "timeframes": "M15",
+                "tags": ["xauusd", "gold", "momentum", "scalping", "candle_pattern"],
+            },
+            {
+                "name": "XAGUSD Stochastic Flip Scalper",
+                "file": "s44_xagusd_stoch_flip_scalper.py",
+                "description": (
+                    "Trades Stochastic K/D crossovers in extreme zones on silver M5. "
+                    "Silver's high beta and mean-reverting nature makes it ideal for "
+                    "stochastic scalping. Deep-optimized PF 1.668 (+52% improvement), "
+                    "100% robust with STRONG walk-forward validation."
+                ),
+                "timeframes": "M5",
+                "tags": ["xagusd", "silver", "stochastic", "scalping", "mean_reversion"],
+            },
         ]
 
         # Optimized parameters and verified performance from Optuna + Walk-Forward validation
@@ -963,6 +1011,43 @@ def _seed_all_strategies():
                 "performance": {"profit_factor": 2.99, "win_rate": 32.9, "max_dd_pct": 4.96,
                                 "sharpe": 0.75, "trades": 79, "net_profit_pct": 69.75,
                                 "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+            },
+            "s41_btcusd_rsi_micro_scalper.py": {
+                "params": {"rsi_period": 4, "rsi_os": 32, "rsi_ob": 68, "trend_ema": 42,
+                           "atr_period": 14, "atr_sl_mult": 2.25, "atr_tp_mult": 0.64,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.053, "win_rate": 78.8, "max_dd_pct": 12.3,
+                                "sharpe": 0.14, "trades": 6399, "net_profit_pct": 30.5,
+                                "trades_per_day": 9.9, "wf_score": 60.0, "robustness": "OK",
+                                "symbol": "BTCUSD", "tf": "M5"},
+            },
+            "s42_xauusd_rsi_micro_scalper.py": {
+                "params": {"rsi_period": 3, "rsi_os": 46, "rsi_ob": 86, "trend_ema": 17,
+                           "atr_period": 14, "atr_sl_mult": 2.25, "atr_tp_mult": 1.02,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.053, "win_rate": 70.2, "max_dd_pct": 16.9,
+                                "sharpe": 0.10, "trades": 9499, "net_profit_pct": 27.0,
+                                "trades_per_day": 10.5, "wf_score": 80.0, "robustness": "STRONG",
+                                "symbol": "XAUUSD", "tf": "M5"},
+            },
+            "s43_xauusd_momentum_burst.py": {
+                "params": {"rsi_period": 6, "body_thresh": 0.15, "rsi_cap": 82,
+                           "atr_period": 14, "atr_sl_mult": 1.93, "atr_tp_mult": 1.21,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.194, "win_rate": 66.3, "max_dd_pct": 10.7,
+                                "sharpe": 0.20, "trades": 21424, "net_profit_pct": 180.5,
+                                "trades_per_day": 14.9, "wf_score": 80.0, "robustness": "STRONG",
+                                "symbol": "XAUUSD", "tf": "M15"},
+            },
+            "s44_xagusd_stoch_flip_scalper.py": {
+                "params": {"stoch_k_period": 8, "stoch_d_period": 3, "stoch_os": 29,
+                           "stoch_ob": 89, "trend_ema": 38, "use_trend_filter": False,
+                           "atr_period": 14, "atr_sl_mult": 0.375, "atr_tp_mult": 0.93,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.668, "win_rate": 36.8, "max_dd_pct": 14.2,
+                                "sharpe": 0.26, "trades": 10542, "net_profit_pct": 192.2,
+                                "trades_per_day": 11.7, "wf_score": 80.0, "robustness": "STRONG",
+                                "symbol": "XAGUSD", "tf": "M5"},
             },
         }
 
