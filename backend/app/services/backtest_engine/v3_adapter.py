@@ -461,18 +461,25 @@ def run_v3_walk_forward(
             if not isinstance(settings, dict):
                 settings = {}
 
-            def strategy_factory():
+            def strategy_factory(segment_bars=None):
+                # Walk-forward passes segment_bars (the fold's subset).
+                # Convert Bar objects to dicts so the strategy sees only
+                # the fold's data, fixing the bar-index mismatch bug.
+                if segment_bars is not None:
+                    seg_dicts = [b.to_dict() for b in segment_bars]
+                else:
+                    seg_dicts = bar_dicts  # full dataset for normal backtest
                 return LegacyPythonStrategy(
                     file_path=file_path,
                     settings=settings,
-                    all_bars=bar_dicts,
+                    all_bars=seg_dicts,
                 )
         else:
             logger.warning("Python strategy file not found for WF: %s — falling back to builder", file_path)
-            def strategy_factory():
+            def strategy_factory(segment_bars=None):
                 return BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
     else:
-        def strategy_factory():
+        def strategy_factory(segment_bars=None):
             return BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
 
     return v3_walk_forward(

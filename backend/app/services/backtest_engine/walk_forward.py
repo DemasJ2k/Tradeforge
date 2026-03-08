@@ -72,7 +72,7 @@ class WFResult:
 
 def walk_forward_backtest(
     bars: list[Bar],
-    strategy_factory: Callable[[], StrategyBase],
+    strategy_factory: Callable[..., StrategyBase],
     symbol: str = "ASSET",
     indicator_configs: list[dict] | None = None,
     engine_config: EngineConfig | None = None,
@@ -84,7 +84,10 @@ def walk_forward_backtest(
 
     Args:
         bars:              Full bar dataset
-        strategy_factory:  Callable that creates a fresh StrategyBase each fold
+        strategy_factory:  Callable that creates a fresh StrategyBase each fold.
+                           Accepts an optional ``segment_bars`` keyword arg
+                           (list[Bar]) so Python strategies can receive only
+                           the fold's bars instead of the full dataset.
         symbol:            Trading symbol
         indicator_configs: Indicator definitions for data feed
         engine_config:     Engine configuration
@@ -126,7 +129,7 @@ def walk_forward_backtest(
 
         # In-sample (reference only)
         train_result = _run_segment(
-            train_bars, strategy_factory(), symbol,
+            train_bars, strategy_factory(segment_bars=train_bars), symbol,
             indicator_configs, instrument, cfg, cfg.initial_balance,
         )
         w.train_stats = _result_to_stats(train_result)
@@ -139,7 +142,7 @@ def walk_forward_backtest(
         test_cfg.initial_balance = running_balance
 
         test_result = _run_segment(
-            test_bars, strategy_factory(), symbol,
+            test_bars, strategy_factory(segment_bars=test_bars), symbol,
             indicator_configs, instrument, test_cfg, running_balance,
         )
         w.test_stats = _result_to_stats(test_result)
