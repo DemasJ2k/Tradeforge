@@ -5,12 +5,20 @@
  * Shows OOS (out-of-sample) aggregate metrics + per-fold breakdown table.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
-import { Play } from 'lucide-react';
+import { Play, Database } from 'lucide-react';
+
+interface DataSourceOption {
+  id: number;
+  filename: string;
+  symbol: string;
+  timeframe: string;
+  row_count: number;
+}
 
 interface WFWindowStats {
   fold: number;
@@ -54,13 +62,40 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
   const [trainPct, setTrainPct] = useState(70);
   const [mode, setMode] = useState<'anchored' | 'rolling'>('anchored');
 
+  // Datasource selector
+  const [datasources, setDatasources] = useState<DataSourceOption[]>([]);
+  const [selectedDsId, setSelectedDsId] = useState<number>(datasourceId);
+  const [dsLoading, setDsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<{ items: DataSourceOption[] }>('/api/data/sources');
+        setDatasources(res.items || []);
+        // If the backtest's datasource doesn't exist in the list, default to first available
+        const ids = (res.items || []).map((d: DataSourceOption) => d.id);
+        if (!ids.includes(datasourceId) && ids.length > 0) {
+          setSelectedDsId(ids[0]);
+        }
+      } catch {
+        // ignore — user just won't see options
+      } finally {
+        setDsLoading(false);
+      }
+    })();
+  }, [datasourceId]);
+
   const runWalkForward = useCallback(async () => {
+    if (!selectedDsId) {
+      setError('Please select a data source');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const res = await api.post<WalkForwardResult>('/api/backtest/walk-forward', {
         strategy_id: strategyId,
-        datasource_id: datasourceId,
+        datasource_id: selectedDsId,
         n_folds: nFolds,
         train_pct: trainPct,
         mode,
@@ -72,7 +107,7 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [strategyId, datasourceId, nFolds, trainPct, mode]);
+  }, [strategyId, selectedDsId, nFolds, trainPct, mode]);
 
   const fmt = (v: number, dp = 2) => v?.toFixed(dp) ?? '—';
   const usd = (v: number) => `$${v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}`;
@@ -104,6 +139,32 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
             >
               {loading ? 'Running...' : <><Play className="w-3.5 h-3.5 mr-1" />Run Walk-Forward</>}
             </Button>
+          </div>
+
+          {/* Data Source Selector */}
+          <div className="mb-3">
+            <Label className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <Database className="h-3 w-3" /> Data Source
+            </Label>
+            {dsLoading ? (
+              <div className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-xs text-muted-foreground">
+                Loading data sources...
+              </div>
+            ) : datasources.length > 0 ? (
+              <select
+                value={selectedDsId}
+                onChange={(e) => setSelectedDsId(Number(e.target.value))}
+                className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-xs outline-none focus:border-accent"
+              >
+                {datasources.map((ds) => (
+                  <option key={ds.id} value={ds.id}>
+                    {ds.symbol} {ds.timeframe} — {ds.filename} ({ds.row_count.toLocaleString()} bars)
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-red-400">No data sources available. Upload data first.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
