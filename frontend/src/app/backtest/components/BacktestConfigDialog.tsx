@@ -67,6 +67,11 @@ export default function BacktestConfigDialog({
 
   const handleRun = () => {
     if (!canRun) return;
+    if (balance <= 0) { alert("Initial balance must be greater than 0"); return; }
+    if (spread < 0) { alert("Spread cannot be negative"); return; }
+    if (commission < 0) { alert("Commission cannot be negative"); return; }
+    if (slippage < 0 || slippage > 10) { alert("Slippage must be between 0% and 10%"); return; }
+    if (marginRate < 0 || marginRate > 1) { alert("Margin rate must be between 0 and 1"); return; }
     onRun({
       strategy_id: Number(strategyId),
       datasource_id: Number(datasourceId),

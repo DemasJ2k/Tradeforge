@@ -1,8 +1,47 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Token refresh state — prevents multiple concurrent refresh attempts
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefreshToken(): Promise<boolean> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  if (!token) return false;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.access_token) {
+      localStorage.setItem("token", data.access_token);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  // Store current path for post-login redirect
+  const currentPath = window.location.pathname + window.location.search;
+  if (currentPath !== "/login" && currentPath !== "/register") {
+    localStorage.setItem("redirect_after_login", currentPath);
+  }
+  localStorage.removeItem("token");
+  window.location.href = "/login";
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  isRetry = false,
 ): Promise<T> {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -20,6 +59,22 @@ async function request<T>(
     ...options,
     headers,
   });
+
+  // Handle 401 — try token refresh once, then redirect to login
+  if (res.status === 401 && !isRetry && token) {
+    // Deduplicate concurrent refresh attempts
+    if (!refreshPromise) {
+      refreshPromise = tryRefreshToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const refreshed = await refreshPromise;
+    if (refreshed) {
+      return request<T>(path, options, true);
+    }
+    redirectToLogin();
+    throw new Error("Session expired. Please log in again.");
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
@@ -48,6 +103,21 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
     headers,
     body: form,
   });
+
+  // Handle 401 for uploads too
+  if (res.status === 401 && token) {
+    if (!refreshPromise) {
+      refreshPromise = tryRefreshToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const refreshed = await refreshPromise;
+    if (refreshed) {
+      return uploadFile<T>(path, file);
+    }
+    redirectToLogin();
+    throw new Error("Session expired. Please log in again.");
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));

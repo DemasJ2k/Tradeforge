@@ -16,6 +16,7 @@ from app.models.backtest import Backtest
 from app.models.trade import Trade
 from app.models.agent import TradingAgent, AgentTrade, AgentLog
 from app.models.datasource import DataSource
+from app.models.prop_firm import PropFirmAccount, PropFirmTrade
 from app.services.broker.manager import broker_manager
 from app.core.websocket import manager as ws_manager
 
@@ -186,6 +187,33 @@ async def dashboard_summary(
     recent_trades.sort(key=lambda x: x["time"], reverse=True)
     recent_trades = recent_trades[:10]
 
+    # ── Equity curve (last 30 days, daily aggregated) ─────
+    thirty_days_ago = now - timedelta(days=30)
+    equity_trades = (
+        db.query(AgentTrade.created_at, AgentTrade.pnl)
+        .join(TradingAgent)
+        .filter(
+            TradingAgent.created_by == user.id,
+            AgentTrade.status.in_(["executed", "paper", "closed"]),
+            AgentTrade.created_at >= thirty_days_ago,
+            AgentTrade.pnl.isnot(None),
+        )
+        .order_by(AgentTrade.created_at)
+        .all()
+    )
+    # Group by date, cumulate
+    daily_pnl: dict[str, float] = {}
+    for t_time, t_pnl in equity_trades:
+        if t_time:
+            day = t_time.strftime("%Y-%m-%d")
+            daily_pnl[day] = daily_pnl.get(day, 0) + (t_pnl or 0)
+
+    equity_curve = []
+    cumulative = 0.0
+    for day in sorted(daily_pnl.keys()):
+        cumulative += daily_pnl[day]
+        equity_curve.append({"date": day, "pnl": round(cumulative, 2)})
+
     # ── Backtests ─────────────────────────────────────────
     total_backtests = (
         db.query(func.count(Backtest.id))
@@ -212,6 +240,56 @@ async def dashboard_summary(
         )
         .scalar() or 0
     )
+
+    # ── Prop firm accounts ─────────────────────────────────
+    prop_firm_accounts = (
+        db.query(PropFirmAccount)
+        .filter(PropFirmAccount.user_id == user.id, PropFirmAccount.status == "active")
+        .all()
+    )
+    prop_firm_cards = []
+    for pf in prop_firm_accounts:
+        size = pf.account_size or 0
+        balance = pf.current_balance or size
+        peak = pf.peak_balance or size
+
+        # Reset daily P&L if stale
+        today = now.strftime("%Y-%m-%d")
+        today_pnl_pf = pf.today_pnl or 0.0
+        if pf.today_pnl_date != today:
+            today_pnl_pf = 0.0
+
+        daily_limit = size * (pf.max_daily_loss_pct / 100) if pf.max_daily_loss_pct else 0
+        dd_limit = size * (pf.max_total_loss_pct / 100) if pf.max_total_loss_pct else 0
+        daily_used = abs(min(today_pnl_pf, 0))
+        current_dd = max(peak - balance, 0)
+
+        profit_target = size * (pf.profit_target_pct / 100) if pf.profit_target_pct else 0
+        profit_made = max(balance - size, 0)
+
+        open_trades = db.query(func.count(PropFirmTrade.id)).filter(
+            PropFirmTrade.account_id == pf.id, PropFirmTrade.status == "open"
+        ).scalar() or 0
+
+        prop_firm_cards.append({
+            "id": pf.id,
+            "name": pf.account_name,
+            "firm": pf.firm_name,
+            "phase": pf.phase,
+            "account_size": size,
+            "balance": round(balance, 2),
+            "daily_loss_used": round(daily_used, 2),
+            "daily_loss_limit": round(daily_limit, 2),
+            "daily_loss_pct": round((daily_used / daily_limit * 100) if daily_limit else 0, 1),
+            "drawdown_used": round(current_dd, 2),
+            "drawdown_limit": round(dd_limit, 2),
+            "drawdown_pct": round((current_dd / dd_limit * 100) if dd_limit else 0, 1),
+            "profit_target": round(profit_target, 2),
+            "profit_made": round(profit_made, 2),
+            "profit_pct": round((profit_made / profit_target * 100) if profit_target else 0, 1),
+            "open_trades": open_trades,
+            "days_left": (pf.max_trading_days - (pf.trading_days or 0)) if pf.max_trading_days else None,
+        })
 
     # ── WebSocket clients ─────────────────────────────────
     ws_clients = sum(len(v) for v in ws_manager._connections.values())
@@ -243,6 +321,7 @@ async def dashboard_summary(
             "win_rate": round(today_win_rate, 1),
         },
         "recent_trades": recent_trades,
+        "equity_curve": equity_curve,
         "backtests": {
             "total": total_backtests,
             "last_run": last_backtest.created_at.isoformat() if last_backtest and last_backtest.created_at else None,
@@ -251,6 +330,7 @@ async def dashboard_summary(
         "data_sources": total_datasources,
         "pending_confirmations": pending_confirmations,
         "ws_clients": ws_clients,
+        "prop_firm_accounts": prop_firm_cards,
     }
 
 

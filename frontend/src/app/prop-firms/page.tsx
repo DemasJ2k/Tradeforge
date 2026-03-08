@@ -294,18 +294,34 @@ export default function PropFirmsPage() {
       toast.error("Account name and firm name are required");
       return;
     }
+    const size = parseFloat(formSize);
+    if (!size || size < 1000) {
+      toast.error("Account size must be at least $1,000");
+      return;
+    }
+    const daily = parseFloat(formDailyLoss);
+    const total = parseFloat(formTotalLoss);
+    const profit = parseFloat(formProfitTarget);
+    if (daily <= 0 || daily > 100) { toast.error("Daily loss % must be between 0 and 100"); return; }
+    if (total <= 0 || total > 100) { toast.error("Total loss % must be between 0 and 100"); return; }
+    if (profit <= 0 || profit > 100) { toast.error("Profit target % must be between 0 and 100"); return; }
+    if (daily > total) { toast.error("Daily loss % cannot exceed total loss %"); return; }
+    const minD = parseInt(formMinDays);
+    const maxD = formMaxDays ? parseInt(formMaxDays) : null;
+    if (minD < 0) { toast.error("Min trading days cannot be negative"); return; }
+    if (maxD !== null && maxD < minD) { toast.error("Max trading days must be >= min trading days"); return; }
     setCreating(true);
     try {
       await api.post("/api/prop-firms/", {
         account_name: formName.trim(),
         firm_name: formFirm.trim(),
-        account_size: parseFloat(formSize) || 100000,
+        account_size: size,
         phase: formPhase,
-        max_daily_loss_pct: parseFloat(formDailyLoss) || 5,
-        max_total_loss_pct: parseFloat(formTotalLoss) || 10,
-        profit_target_pct: parseFloat(formProfitTarget) || 8,
-        min_trading_days: parseInt(formMinDays) || 5,
-        max_trading_days: formMaxDays ? parseInt(formMaxDays) : null,
+        max_daily_loss_pct: daily,
+        max_total_loss_pct: total,
+        profit_target_pct: profit,
+        min_trading_days: minD || 5,
+        max_trading_days: maxD,
       });
       toast.success(`Account "${formName}" created`);
       setShowCreate(false);

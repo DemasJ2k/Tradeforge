@@ -35,6 +35,12 @@ export const useAuth = create<AuthState>((set) => ({
       mustChangePassword: resp.must_change_password,
       totpRequired: resp.totp_required,
     });
+    // Redirect to page user was on before session expired
+    const redirect = localStorage.getItem("redirect_after_login");
+    if (redirect) {
+      localStorage.removeItem("redirect_after_login");
+      window.location.href = redirect;
+    }
   },
 
   register: async (username, password) => {

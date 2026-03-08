@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -575,5 +576,50 @@ async def ai_generate_strategy(
     except Exception as e:
         logger.exception("AI strategy generation failed")
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)[:300]}")
+
+    return JSONResponse(content=strategy_json)
+
+
+class AiTextRequest(BaseModel):
+    prompt: str = ""
+
+
+@router.post("/ai-generate-text")
+async def ai_generate_from_text(
+    body: AiTextRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a strategy from a natural language description.
+
+    Example: "Buy when RSI drops below 30 and price is above SMA 200,
+             sell when RSI goes above 70. Use 2x ATR stop loss."
+    """
+    from app.services.strategy.ai_parser import parse_trading_document
+
+    prompt = (body.prompt or "").strip()
+    if len(prompt) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide a strategy description (at least 10 characters).",
+        )
+
+    try:
+        strategy_json = await parse_trading_document(
+            db=db,
+            user_id=current_user.id,
+            file_content=prompt,
+            filename="natural_language_input.txt",
+            user_prompt=prompt,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("AI text-to-strategy generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI generation failed: {str(e)[:300]}",
+        )
 
     return JSONResponse(content=strategy_json)

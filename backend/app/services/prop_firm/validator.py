@@ -84,6 +84,12 @@ def validate_pre_trade(
         if weekday in (5, 6):
             return "No weekend holding: trading blocked on weekends"
 
+    # 6b. News trading restriction — block 30min before/after high-impact events
+    if getattr(account, "no_news_trading", False):
+        reason = _check_news_window(now_utc)
+        if reason:
+            return reason
+
     # 7 & 8. Projected loss checks
     if stop_loss and (account.max_daily_loss_pct or account.max_total_loss_pct):
         # Estimate worst-case loss if SL is hit
@@ -207,3 +213,52 @@ def validate_pre_trade_detailed(
         "max_positions": account.max_open_positions,
         "max_trade_loss": round(max_trade_loss, 2),
     }
+
+
+# ── High-impact news schedule (static, covers major recurring events) ──────
+
+# Each entry: (day_of_week, hour_utc, minute_utc, label)
+# day_of_week: 0=Mon..4=Fri, or None for monthly events
+_HIGH_IMPACT_WEEKLY = [
+    # US session opens / ISM / employment data — typically Tue-Fri 13:30-15:00 UTC
+    (1, 15, 0, "US data release window"),   # Tuesday ISM
+    (2, 13, 30, "US data release window"),  # Wednesday ADP/GDP
+    (3, 13, 30, "US data release window"),  # Thursday claims
+]
+
+# NFP: First Friday of month at 13:30 UTC
+# FOMC: ~every 6 weeks on Wednesday at 19:00 UTC (8 meetings/year)
+_NEWS_BUFFER_MINUTES = 30
+
+
+def _check_news_window(now_utc: datetime) -> str | None:
+    """
+    Check if current time falls within ±30min of a known high-impact news window.
+
+    Returns a reason string if blocked, None if OK.
+    Uses a static schedule of recurring US/EU events.
+    """
+    weekday = now_utc.weekday()
+    current_minutes = now_utc.hour * 60 + now_utc.minute
+
+    # Check weekly recurring events
+    for wd, hour, minute, label in _HIGH_IMPACT_WEEKLY:
+        if weekday == wd:
+            event_minutes = hour * 60 + minute
+            if abs(current_minutes - event_minutes) <= _NEWS_BUFFER_MINUTES:
+                return f"News trading restricted: {label} (±{_NEWS_BUFFER_MINUTES}min buffer)"
+
+    # NFP: First Friday of month at 13:30 UTC
+    if weekday == 4 and now_utc.day <= 7:
+        nfp_minutes = 13 * 60 + 30
+        if abs(current_minutes - nfp_minutes) <= _NEWS_BUFFER_MINUTES:
+            return f"News trading restricted: NFP release (±{_NEWS_BUFFER_MINUTES}min buffer)"
+
+    # FOMC: Wednesdays at 19:00 UTC (check every Wednesday — overly cautious
+    # but better than missing an actual FOMC day)
+    if weekday == 2:
+        fomc_minutes = 19 * 60
+        if abs(current_minutes - fomc_minutes) <= _NEWS_BUFFER_MINUTES:
+            return f"News trading restricted: potential FOMC window (±{_NEWS_BUFFER_MINUTES}min buffer)"
+
+    return None

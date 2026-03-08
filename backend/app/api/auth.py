@@ -61,6 +61,14 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(user)
+
+    # Seed demo data for new users (non-blocking — errors won't stop registration)
+    try:
+        from app.services.demo_setup import setup_demo_data
+        setup_demo_data(user.id, db)
+    except Exception as e:
+        logging.getLogger(__name__).warning("Demo data setup skipped: %s", e)
+
     return user
 
 
@@ -85,6 +93,18 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
         access_token=token,
         must_change_password=bool(user.must_change_password),
         totp_required=bool(user.totp_enabled),
+    )
+
+
+# ─── Refresh token ───
+@router.post("/refresh", response_model=Token)
+def refresh_token(current_user: User = Depends(get_current_user)):
+    """Issue a fresh JWT token (extends session without re-login)."""
+    token = create_access_token({"sub": str(current_user.id)})
+    return Token(
+        access_token=token,
+        must_change_password=bool(current_user.must_change_password),
+        totp_required=False,
     )
 
 

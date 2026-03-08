@@ -223,6 +223,37 @@ def _fix_boolean_columns():
 _fix_boolean_columns()
 
 
+def _create_indexes():
+    """Create performance indexes on frequently queried columns (idempotent)."""
+    from sqlalchemy import text
+    _log = logging.getLogger(__name__)
+
+    indexes = [
+        ("idx_backtests_creator_created", "backtests", "creator_id, created_at DESC"),
+        ("idx_backtests_strategy", "backtests", "strategy_id"),
+        ("idx_prop_trades_account_status", "prop_firm_trades", "account_id, status"),
+        ("idx_agents_creator_active", "trading_agents", "creator_id"),
+        ("idx_strategies_creator", "strategies", "creator_id"),
+        ("idx_datasources_creator", "datasources", "creator_id"),
+        ("idx_trades_user", "trades", "user_id"),
+        ("idx_agent_logs_agent_created", "agent_logs", "agent_id, created_at DESC"),
+    ]
+
+    with engine.connect() as conn:
+        for idx_name, table, columns in indexes:
+            try:
+                conn.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({columns})"
+                ))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+    logging.getLogger(__name__).info("Database indexes verified")
+
+
+_create_indexes()
+
+
 def _remove_incompatible_strategies():
     """Remove strategies that use unsupported indicator types or are python-file
     strategies without V3 engine support.  Also cleans up orphaned agents,
@@ -335,6 +366,24 @@ app.add_middleware(
 
 # GZip compression for responses >500 bytes — reduces equity curve / trade list payloads
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# Request timing middleware — logs slow requests (>2s) for performance monitoring
+import time as _time
+
+
+@app.middleware("http")
+async def request_timing_middleware(request: Request, call_next):
+    start = _time.perf_counter()
+    response = await call_next(request)
+    duration = _time.perf_counter() - start
+    response.headers["X-Response-Time"] = f"{duration:.3f}s"
+    if duration > 2.0:
+        logging.getLogger("timing").warning(
+            "SLOW %s %s took %.2fs", request.method, request.url.path, duration,
+        )
+    return response
+
 
 # Global exception handler — ensures unhandled errors return JSON (visible
 # through CORS) instead of opaque 500 pages, and logs the full traceback.

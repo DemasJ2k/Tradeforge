@@ -548,6 +548,20 @@ class AgentRunner:
                     )
                     if breach:
                         self._log("warn", f"Trade blocked by prop firm rules: {breach}")
+                        # Broadcast to frontend for toast notification
+                        try:
+                            await ws_manager.broadcast_to_channel(
+                                f"agent_{self._agent_id}",
+                                {
+                                    "type": "prop_firm_block",
+                                    "agent_id": self._agent_id,
+                                    "reason": breach,
+                                    "symbol": signal.symbol,
+                                    "direction": signal.direction,
+                                },
+                            )
+                        except Exception:
+                            pass
                         return
             finally:
                 pf_db.close()

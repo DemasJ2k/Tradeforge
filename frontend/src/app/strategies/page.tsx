@@ -39,6 +39,12 @@ export default function StrategiesPage() {
   const [aiResult, setAiResult] = useState<Partial<Strategy> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // AI Describe (text-only) state
+  const [showDescribeModal, setShowDescribeModal] = useState(false);
+  const [describePrompt, setDescribePrompt] = useState("");
+  const [describeLoading, setDescribeLoading] = useState(false);
+  const [describeError, setDescribeError] = useState("");
+
   // File upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -248,6 +254,31 @@ export default function StrategiesPage() {
     setAiFile(null);
     setAiPrompt("");
     setAiError("");
+  };
+
+  /* ── AI Describe (text-only) ──────────────────────── */
+  const handleDescribeGenerate = async () => {
+    if (describePrompt.trim().length < 10) return;
+    setDescribeLoading(true);
+    setDescribeError("");
+    try {
+      const data = await api.post<Partial<Strategy>>("/api/strategies/ai-generate-text", {
+        prompt: describePrompt.trim(),
+      });
+      setAiResult(data);
+      setShowDescribeModal(false);
+      setDescribePrompt("");
+    } catch (e: unknown) {
+      setDescribeError(e instanceof Error ? e.message : "AI generation failed");
+    } finally {
+      setDescribeLoading(false);
+    }
+  };
+
+  const closeDescribeModal = () => {
+    setShowDescribeModal(false);
+    setDescribePrompt("");
+    setDescribeError("");
   };
 
   /* ── File Upload ──────────────────────────────────── */
@@ -517,6 +548,10 @@ export default function StrategiesPage() {
             <Layers className="h-3.5 w-3.5" />
             Templates
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowDescribeModal(true)} className="gap-1.5 text-xs border-purple-500/40 text-purple-400 hover:bg-purple-500/10">
+            <Type className="h-3.5 w-3.5" />
+            Describe
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowAiModal(true)} className="gap-1.5 text-xs border-accent/40 text-accent hover:bg-accent/10">
             <Sparkles className="h-3.5 w-3.5" />
             AI Import
@@ -574,9 +609,12 @@ export default function StrategiesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               No strategies yet. Create your first trading strategy or import one with AI.
             </p>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-3 flex-wrap">
               <Button variant="outline" onClick={openTemplates} className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10">
                 Use Template
+              </Button>
+              <Button variant="outline" onClick={() => setShowDescribeModal(true)} className="border-purple-500/40 text-purple-400 hover:bg-purple-500/10">
+                Describe with AI
               </Button>
               <Button variant="outline" onClick={() => setShowAiModal(true)} className="border-accent/40 text-accent hover:bg-accent/10">
                 AI Import
@@ -888,6 +926,59 @@ export default function StrategiesPage() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Describe Modal ──────────────────────────── */}
+      {showDescribeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-card-border bg-card-bg p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Type className="h-5 w-5 text-purple-400" />
+                Describe Your Strategy
+              </h3>
+              <button onClick={closeDescribeModal} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-muted-foreground mb-4">
+              Describe a trading strategy in plain English and the AI will build it for you.
+              Include details like indicators, entry/exit rules, timeframe, and risk parameters.
+            </p>
+
+            <textarea
+              value={describePrompt}
+              onChange={(e) => setDescribePrompt(e.target.value)}
+              placeholder={`Example:\n"A scalping strategy on XAUUSD M5 that enters long when RSI crosses above 30 and price is above the 200 EMA. Use ATR(14) × 1.5 for stop loss and 2:1 reward-to-risk for take profit. Only trade during London and New York sessions."`}
+              className="w-full rounded-xl border border-card-border bg-card-bg px-4 py-3 text-sm text-foreground placeholder-muted/40 focus:border-purple-500 focus:outline-none resize-none"
+              rows={6}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {describePrompt.trim().length < 10
+                ? `At least 10 characters required (${describePrompt.trim().length}/10)`
+                : `${describePrompt.trim().length} characters`}
+            </p>
+
+            {describeError && (
+              <div className="mt-3 rounded-lg bg-danger/10 border border-danger/30 px-3 py-2 text-sm text-danger">
+                {describeError}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={closeDescribeModal}>Cancel</Button>
+              <Button
+                onClick={handleDescribeGenerate}
+                disabled={describePrompt.trim().length < 10 || describeLoading}
+                className="bg-purple-600 text-white hover:bg-purple-500 gap-2"
+              >
+                {describeLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</> : <><Sparkles className="h-4 w-4" /> Generate Strategy</>}
+              </Button>
+            </div>
           </div>
         </div>
       )}

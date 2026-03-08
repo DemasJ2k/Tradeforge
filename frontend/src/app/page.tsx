@@ -9,8 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock } from "lucide-react";
+import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock, Building2, AlertTriangle } from "lucide-react";
 import WelcomeWizard, { useOnboarding } from "@/components/Onboarding/WelcomeWizard";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { showToast } from "@/lib/toast";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface ActivityItem {
@@ -78,10 +80,30 @@ interface DashboardData {
     status: string;
     time: string;
   }[];
+  equity_curve: { date: string; pnl: number }[];
   backtests: { total: number; last_run: string | null; last_status: string | null };
   data_sources: number;
   pending_confirmations: number;
   ws_clients: number;
+  prop_firm_accounts: {
+    id: number;
+    name: string;
+    firm: string;
+    phase: string;
+    account_size: number;
+    balance: number;
+    daily_loss_used: number;
+    daily_loss_limit: number;
+    daily_loss_pct: number;
+    drawdown_used: number;
+    drawdown_limit: number;
+    drawdown_pct: number;
+    profit_target: number;
+    profit_made: number;
+    profit_pct: number;
+    open_trades: number;
+    days_left: number | null;
+  }[];
 }
 
 /* ─── Helpers ───────────────────────────────────────────── */
@@ -133,6 +155,32 @@ export default function Dashboard() {
     const iv = setInterval(load, 15000);          // refresh every 15s
     return () => clearInterval(iv);
   }, [load]);
+
+  // ── WebSocket: subscribe to running agents for prop firm block alerts ──
+  const { connect: wsConnect, subscribe: wsSubscribe } = useWebSocket();
+  useEffect(() => {
+    wsConnect();
+  }, [wsConnect]);
+
+  useEffect(() => {
+    if (!data?.agents?.items) return;
+    const runningAgents = data.agents.items.filter((a) => a.status === "running");
+    if (runningAgents.length === 0) return;
+
+    const unsubs = runningAgents.map((agent) =>
+      wsSubscribe(`agent_${agent.id}`, (msg) => {
+        if (msg.type === "prop_firm_block") {
+          showToast.warning(
+            `Trade blocked: ${agent.name}`,
+            `${msg.reason} (${msg.symbol} ${msg.direction})`,
+          );
+          // Refresh dashboard data to reflect updated state
+          load();
+        }
+      })
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [data?.agents?.items, wsSubscribe, load]);
 
   if (loading) return <DashSkeleton />;
   if (error) return <div className="p-6 text-danger">{error}</div>;
@@ -298,6 +346,24 @@ export default function Dashboard() {
           color={ag.running > 0 ? "text-success" : "text-muted-foreground"}
         />
       </div>
+
+      {/* ── Equity Curve (30-day P&L) ─────────────────── */}
+      {data.equity_curve && data.equity_curve.length > 1 && (
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                30-Day Equity Curve
+              </h3>
+              <span className={`text-sm font-semibold ${pnlColor(data.equity_curve[data.equity_curve.length - 1].pnl)}`}>
+                {data.equity_curve[data.equity_curve.length - 1].pnl >= 0 ? "+" : ""}
+                ${fmt(data.equity_curve[data.equity_curve.length - 1].pnl)}
+              </span>
+            </div>
+            <MiniEquityChart points={data.equity_curve} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Middle Row: Positions + Quick Stats ─────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -531,6 +597,103 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* ── Prop Firm Status Cards ──────────────────────── */}
+      {data.prop_firm_accounts && data.prop_firm_accounts.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5 text-accent" />
+              Prop Firm Accounts
+            </h3>
+            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1">
+              <Link href="/prop-firms">Manage <ArrowRight className="h-3 w-3" /></Link>
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {data.prop_firm_accounts.map((pf) => (
+              <Card key={pf.id} className="bg-card-bg border-card-border">
+                <CardContent className="p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{pf.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{pf.firm} · {pf.phase}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold">${fmt(pf.balance)}</p>
+                      <p className="text-[10px] text-muted-foreground">${fmt(pf.account_size)} size</p>
+                    </div>
+                  </div>
+
+                  {/* Profit Target */}
+                  {pf.profit_target > 0 && (
+                    <div>
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className="text-muted-foreground">Profit Target</span>
+                        <span className="text-success">${fmt(pf.profit_made)} / ${fmt(pf.profit_target)} ({pf.profit_pct}%)</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
+                        <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.min(pf.profit_pct, 100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily Loss */}
+                  {pf.daily_loss_limit > 0 && (
+                    <div>
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className="text-muted-foreground">Daily Loss</span>
+                        <span className={pf.daily_loss_pct > 80 ? "text-danger" : pf.daily_loss_pct > 50 ? "text-yellow-400" : "text-muted-foreground"}>
+                          ${fmt(pf.daily_loss_used)} / ${fmt(pf.daily_loss_limit)} ({pf.daily_loss_pct}%)
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${pf.daily_loss_pct > 80 ? "bg-danger" : pf.daily_loss_pct > 50 ? "bg-yellow-500" : "bg-accent/60"}`}
+                          style={{ width: `${Math.min(pf.daily_loss_pct, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Max Drawdown */}
+                  {pf.drawdown_limit > 0 && (
+                    <div>
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className="text-muted-foreground">Max Drawdown</span>
+                        <span className={pf.drawdown_pct > 80 ? "text-danger" : pf.drawdown_pct > 50 ? "text-yellow-400" : "text-muted-foreground"}>
+                          ${fmt(pf.drawdown_used)} / ${fmt(pf.drawdown_limit)} ({pf.drawdown_pct}%)
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${pf.drawdown_pct > 80 ? "bg-danger" : pf.drawdown_pct > 50 ? "bg-yellow-500" : "bg-accent/60"}`}
+                          style={{ width: `${Math.min(pf.drawdown_pct, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alert badge */}
+                  {(pf.daily_loss_pct > 80 || pf.drawdown_pct > 80) && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-danger">
+                      <AlertTriangle className="h-3 w-3" />
+                      Approaching {pf.daily_loss_pct > 80 ? "daily loss" : "drawdown"} limit
+                    </div>
+                  )}
+
+                  {/* Footer stats */}
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1 border-t border-card-border">
+                    <span>{pf.open_trades} open trades</span>
+                    {pf.days_left !== null && <span>{pf.days_left} days left</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <ChatHelpers />
     </div>
   );
@@ -561,6 +724,41 @@ function StatRow({ label, value, icon }: { label: string; value: string; icon?: 
       </span>
       <span className="font-medium">{value}</span>
     </div>
+  );
+}
+
+function MiniEquityChart({ points }: { points: { date: string; pnl: number }[] }) {
+  if (points.length < 2) return null;
+  const W = 800;
+  const H = 120;
+  const PAD = 4;
+  const vals = points.map((p) => p.pnl);
+  const minV = Math.min(0, ...vals);
+  const maxV = Math.max(0, ...vals);
+  const range = maxV - minV || 1;
+
+  const toX = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
+  const toY = (v: number) => H - PAD - ((v - minV) / range) * (H - PAD * 2);
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(p.pnl).toFixed(1)}`).join(" ");
+  const lastPnl = points[points.length - 1].pnl;
+  const color = lastPnl >= 0 ? "#22c55e" : "#ef4444";
+  const zeroY = toY(0);
+
+  // Area fill
+  const areaD = `${pathD} L${toX(points.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${toX(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24" preserveAspectRatio="none">
+      {/* Zero line */}
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="currentColor" strokeOpacity={0.15} strokeDasharray="4 4" />
+      {/* Area fill */}
+      <path d={areaD} fill={color} fillOpacity={0.1} />
+      {/* Line */}
+      <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      {/* End dot */}
+      <circle cx={toX(points.length - 1)} cy={toY(lastPnl)} r={3} fill={color} />
+    </svg>
   );
 }
 
