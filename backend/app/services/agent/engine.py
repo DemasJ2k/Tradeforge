@@ -46,7 +46,7 @@ class AgentRunner:
         self._mode = "paper"
         self._symbol = ""
         self._timeframe = ""
-        self._broker_name = "mt5"
+        self._broker_name = ""
         self._bar_buffer: list[dict] = []
         self._strategy_type: str = "mss"
         # Position tracking (mirrors backtester behavior)
@@ -79,7 +79,15 @@ class AgentRunner:
                 self._mode = "paper"
             self._symbol = agent.symbol
             self._timeframe = agent.timeframe
-            self._broker_name = agent.broker_name or "mt5"
+            # Resolve broker: use agent's stored broker, or auto-detect from active connection
+            raw_broker = agent.broker_name or ""
+            if not raw_broker:
+                from app.services.broker.manager import broker_manager
+                raw_broker = broker_manager.default_broker or "mt5"
+                # Persist resolved broker so it doesn't re-resolve next time
+                if raw_broker != "mt5":
+                    agent.broker_name = raw_broker
+            self._broker_name = raw_broker
             self._created_by = agent.created_by  # for notifications
             self._prop_firm_account_id = getattr(agent, "prop_firm_account_id", None)
 
@@ -200,7 +208,7 @@ class AgentRunner:
         data comes from the correct broker — not from MT5 ticks.
         """
         # Non-MT5 brokers: use REST polling (avoids using MT5 price data for Oanda/Coinbase)
-        if self._broker_name not in ("mt5", ""):
+        if self._broker_name != "mt5":
             await self._run_polling_loop()
             return
 

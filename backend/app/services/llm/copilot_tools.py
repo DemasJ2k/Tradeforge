@@ -855,12 +855,17 @@ async def create_agent(
     **kwargs,
 ) -> dict:
     from app.models.agent import TradingAgent
+    from app.services.broker.manager import broker_manager
+
+    # Auto-detect broker from active connection
+    broker_name = broker_manager.default_broker or ""
 
     agent = TradingAgent(
         name=name,
         strategy_id=strategy_id,
         symbol=symbol,
         timeframe=timeframe,
+        broker_name=broker_name,
         mode=mode,
         status="stopped",
         created_by=user_id,
@@ -870,8 +875,9 @@ async def create_agent(
     db.commit()
     db.refresh(agent)
     return {
-        "message": f"Agent '{name}' created.",
+        "message": f"Agent '{name}' created (broker: {broker_name or 'auto'}).",
         "agent_id": agent.id,
+        "broker_name": broker_name,
         "status": "stopped",
     }
 

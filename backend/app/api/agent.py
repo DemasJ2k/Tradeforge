@@ -28,7 +28,7 @@ def _agent_to_response(a: TradingAgent) -> AgentResponse:
         id=a.id,
         name=a.name,
         strategy_id=a.strategy_id,
-        broker_name=a.broker_name or "mt5",
+        broker_name=a.broker_name or "",
         symbol=a.symbol,
         timeframe=a.timeframe,
         mode=a.mode,
@@ -66,12 +66,18 @@ def create_agent(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # Auto-detect broker from active connection when not explicitly set
+    broker_name = payload.broker_name
+    if not broker_name:
+        from app.services.broker.manager import broker_manager
+        broker_name = broker_manager.default_broker or ""
+
     agent = TradingAgent(
         name=payload.name,
         strategy_id=payload.strategy_id,
         symbol=payload.symbol,
         timeframe=payload.timeframe,
-        broker_name=payload.broker_name,
+        broker_name=broker_name,
         mode=payload.mode,
         risk_config=payload.risk_config,
         ml_model_id=payload.ml_model_id,

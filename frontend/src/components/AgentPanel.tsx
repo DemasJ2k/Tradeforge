@@ -214,7 +214,7 @@ export default function AgentPanel() {
         mode: cMode,
         ml_model_id: cMlModelId,
         prop_firm_account_id: cPropFirmId,
-        broker_name: cBroker || activeBroker || undefined,
+        broker_name: cBroker || activeBroker || "",
         risk_config: {
           position_size_type: cSizeType,
           position_size_value: parseFloat(cSizeValue) || 0.01,
