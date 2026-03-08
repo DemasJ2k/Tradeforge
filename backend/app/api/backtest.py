@@ -870,8 +870,8 @@ def run_walk_forward(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Run walk-forward validation for realistic OOS performance."""
-    from app.services.backtest.walk_forward import walk_forward_backtest
+    """Run walk-forward validation for realistic OOS performance (V3 engine)."""
+    from app.services.backtest_engine.v3_adapter import run_v3_walk_forward
 
     # Load strategy
     strategy = (
@@ -885,30 +885,23 @@ def run_walk_forward(
     if not strategy:
         raise HTTPException(status_code=404, detail="Strategy not found")
 
-    # Determine strategy type and build full config for V2 routing (Phase 6D)
+    # Build full strategy config — must match run-v3 endpoint format
     filters = strategy.filters or {}
-    mss_config = filters.get("mss_config")
-    gold_bt_config = filters.get("gold_bt_config")
-
-    if mss_config:
-        strategy_type = "mss"
-    elif gold_bt_config:
-        strategy_type = "gold_bt"
-    else:
-        strategy_type = "builder"
-
-    # Build full strategy config (V2 unified runner detects type from this)
     strategy_config = {
         "indicators": strategy.indicators or [],
         "entry_rules": strategy.entry_rules or [],
         "exit_rules": strategy.exit_rules or [],
         "risk_params": strategy.risk_params or {},
         "filters": dict(filters),
+        "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
+        "file_path": getattr(strategy, "file_path", "") or "",
+        "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
     }
 
-    # Merge user settings_values overrides into mss_config for chart-data path
+    # Merge user settings_values overrides into mss_config
+    mss_config = filters.get("mss_config")
     if mss_config:
-        sv_cd = _ensure_dict(getattr(strategy, "settings_values", {}) or {})
+        sv_cd = strategy_config.get("settings_values") or {}
         if sv_cd:
             merged_mss_cd = dict(mss_config)
             for k in ("swing_lb", "tp1_pct", "tp2_pct", "sl_pct",
@@ -931,12 +924,12 @@ def run_walk_forward(
     if len(bars) < 200:
         raise HTTPException(status_code=400, detail=f"Need 200+ bars for walk-forward, got {len(bars)}")
 
-    # Run walk-forward (Phase 6D: all strategy types supported via V2)
+    # Run walk-forward via V3 engine (matches run-v3 backtest engine)
     symbol = getattr(datasource, "symbol", None) or "UNKNOWN"
-    wf_result = walk_forward_backtest(
+    wf_result = run_v3_walk_forward(
         bars=bars,
-        strategy_type=strategy_type,
         strategy_config=strategy_config,
+        symbol=symbol,
         n_folds=payload.n_folds,
         train_pct=payload.train_pct,
         mode=payload.mode,
@@ -944,10 +937,9 @@ def run_walk_forward(
         spread_points=payload.spread_points,
         commission_per_lot=payload.commission_per_lot,
         point_value=payload.point_value,
-        symbol=symbol,
     )
 
-    # Build response
+    # Build response — V3 trades are dicts, not Trade objects
     window_stats = [
         WFWindowStats(
             fold=w.fold,
@@ -961,19 +953,19 @@ def run_walk_forward(
 
     trades_out = [
         TradeResult(
-            entry_bar=t.entry_bar,
-            entry_time=t.entry_time,
-            entry_price=round(t.entry_price, 5),
-            direction=t.direction,
-            size=t.size,
-            stop_loss=round(t.stop_loss, 5),
-            take_profit=round(t.take_profit, 5),
-            exit_bar=t.exit_bar,
-            exit_time=t.exit_time,
-            exit_price=round(t.exit_price, 5) if t.exit_price else None,
-            exit_reason=t.exit_reason,
-            pnl=round(t.pnl, 2),
-            pnl_pct=round(t.pnl_pct, 2),
+            entry_bar=t.get("entry_bar", 0),
+            entry_time=t.get("entry_time", 0),
+            entry_price=round(t.get("entry_price", 0), 5),
+            direction=t.get("direction", "long"),
+            size=t.get("size", 0.01),
+            stop_loss=round(t.get("stop_loss", 0), 5),
+            take_profit=round(t.get("take_profit", 0), 5),
+            exit_bar=t.get("exit_bar"),
+            exit_time=t.get("exit_time"),
+            exit_price=round(t["exit_price"], 5) if t.get("exit_price") else None,
+            exit_reason=t.get("exit_reason", ""),
+            pnl=round(t.get("pnl", 0), 2),
+            pnl_pct=round(t.get("pnl_pct", 0), 2),
         )
         for t in wf_result.oos_trades
     ]

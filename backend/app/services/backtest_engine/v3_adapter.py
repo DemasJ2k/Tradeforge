@@ -398,13 +398,36 @@ def run_v3_walk_forward(
     margin_rate: float = 0.01,
     tick_mode: str = "ohlc_pessimistic",
 ) -> WFResult:
-    """Run walk-forward validation with V3 engine."""
+    """Run walk-forward validation with V3 engine.
+
+    Mirrors run_v3_backtest config: sizing, Python strategy support, etc.
+    """
     v3_bars = convert_bars_to_v3(bars)
     indicator_configs = _normalize_indicator_configs(
         strategy_config.get("indicators", [])
     )
 
+    # Build sizing config from risk_params (matches run_v3_backtest)
     risk_params = strategy_config.get("risk_params", {})
+    sizing_method = SizingMethod.RISK_PERCENT
+    sizing_params = {"risk_pct": 1.0, "fixed_lot": 0.01}
+
+    sm = risk_params.get("sizing_method", "risk_percent")
+    if sm == "fixed_lot":
+        sizing_method = SizingMethod.FIXED_LOT
+        sizing_params["fixed_lot"] = risk_params.get("lot_size", 0.01)
+    elif sm == "risk_percent":
+        sizing_method = SizingMethod.RISK_PERCENT
+        sizing_params["risk_pct"] = risk_params.get("risk_percent", 1.0)
+    elif sm == "risk_amount":
+        sizing_method = SizingMethod.RISK_AMOUNT
+        sizing_params["risk_amount"] = risk_params.get("risk_amount", 100)
+    elif sm == "kelly":
+        sizing_method = SizingMethod.KELLY
+    elif sm == "atr_based":
+        sizing_method = SizingMethod.ATR_BASED
+        sizing_params["atr_multiplier"] = risk_params.get("atr_multiplier", 1.5)
+
     config = EngineConfig(
         initial_balance=initial_balance,
         spread_points=spread_points,
@@ -413,10 +436,44 @@ def run_v3_walk_forward(
         margin_rate=margin_rate,
         tick_mode=_resolve_tick_mode(tick_mode),
         max_positions=risk_params.get("max_positions", 1),
+        allow_pyramiding=risk_params.get("allow_pyramiding", False),
+        close_on_opposite=risk_params.get("close_on_opposite", True),
+        close_at_end=True,
+        sizing_method=sizing_method,
+        sizing_params=sizing_params,
     )
 
-    def strategy_factory():
-        return BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
+    # Detect strategy type — Python vs Builder (matches run_v3_backtest)
+    strategy_type = strategy_config.get("strategy_type", "builder")
+    file_path = strategy_config.get("file_path", "")
+
+    if strategy_type == "python" and file_path:
+        import os
+        if os.path.isfile(file_path):
+            bar_dicts = [b.to_dict() for b in v3_bars]
+            settings = strategy_config.get("settings_values", {})
+            if isinstance(settings, str):
+                import json as _json
+                try:
+                    settings = _json.loads(settings)
+                except Exception:
+                    settings = {}
+            if not isinstance(settings, dict):
+                settings = {}
+
+            def strategy_factory():
+                return LegacyPythonStrategy(
+                    file_path=file_path,
+                    settings=settings,
+                    all_bars=bar_dicts,
+                )
+        else:
+            logger.warning("Python strategy file not found for WF: %s — falling back to builder", file_path)
+            def strategy_factory():
+                return BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
+    else:
+        def strategy_factory():
+            return BuilderStrategy(strategy_config=strategy_config, symbol=symbol)
 
     return v3_walk_forward(
         bars=v3_bars,

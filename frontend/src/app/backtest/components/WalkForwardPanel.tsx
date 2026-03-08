@@ -87,11 +87,11 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
               Walk-Forward Validation
               {result && (
                 <span className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  result.consistency_score >= 0.7 ? 'bg-green-500/20 text-green-400'
-                  : result.consistency_score >= 0.5 ? 'bg-yellow-500/20 text-yellow-400'
+                  result.consistency_score >= 70 ? 'bg-green-500/20 text-green-400'
+                  : result.consistency_score >= 50 ? 'bg-yellow-500/20 text-yellow-400'
                   : 'bg-red-500/20 text-red-400'
                 }`}>
-                  Consistency: {(result.consistency_score * 100).toFixed(0)}%
+                  Consistency: {result.consistency_score.toFixed(0)}%
                 </span>
               )}
             </h3>
@@ -147,7 +147,7 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
               { label: 'OOS Expectancy', value: usd(result.oos_expectancy), color: result.oos_expectancy >= 0 ? 'text-green-400' : 'text-red-400' },
               { label: 'OOS Avg Win', value: usd(result.oos_avg_win), color: 'text-green-400' },
               { label: 'OOS Avg Loss', value: usd(result.oos_avg_loss), color: 'text-red-400' },
-              { label: 'Consistency', value: `${(result.consistency_score * 100).toFixed(0)}%`, color: result.consistency_score >= 0.7 ? 'text-green-400' : 'text-yellow-400' },
+              { label: 'Consistency', value: `${result.consistency_score.toFixed(0)}%`, color: result.consistency_score >= 70 ? 'text-green-400' : 'text-yellow-400' },
             ].map(({ label, value, color }) => (
               <Card key={label} className="bg-card-bg border-card-border">
                 <CardContent className="p-3 text-center">
@@ -183,7 +183,7 @@ export default function WalkForwardPanel({ strategyId, datasourceId }: Props) {
                         const ts = w.test_stats || {};
                         return (
                           <tr key={w.fold} className="border-b border-card-border/50">
-                            <td className="py-1.5 px-2 text-muted-foreground">{w.fold + 1}</td>
+                            <td className="py-1.5 px-2 text-muted-foreground">{w.fold}</td>
                             <td className="py-1.5 px-2 text-right">{w.train_bars}</td>
                             <td className="py-1.5 px-2 text-right">{w.test_bars}</td>
                             <td className="py-1.5 px-2 text-right">{ts.total_trades ?? result.fold_net_profits?.length ?? '—'}</td>
