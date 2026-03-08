@@ -159,7 +159,7 @@ class StorageInfo(BaseModel):
 
 class BrokerCredentialEntry(BaseModel):
     """Credential fields for a single broker (stored encrypted)."""
-    broker: str  # "mt5", "oanda", "coinbase", "tradovate"
+    broker: str  # "mt5", "oanda", "coinbase", "tradovate", "ctrader"
     # MT5 fields
     server: str = ""
     login: str = ""
@@ -174,6 +174,9 @@ class BrokerCredentialEntry(BaseModel):
     app_id: str = ""
     cid: str = ""
     sec: str = ""
+    # cTrader OAuth fields (per-user)
+    access_token: str = ""
+    refresh_token: str = ""
     # Auto-connect toggle
     auto_connect: bool = False
 

@@ -26,3 +26,4 @@ MetaTrader5>=5.0.45; platform_system == "Windows"
 optuna>=3.0.0
 deap>=1.4.0
 databento>=0.44.0
+websockets>=13.0

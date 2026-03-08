@@ -106,6 +106,16 @@ async def connect_broker(
             sec=payload.extra.get("sec", payload.account_id),
             demo=payload.practice,
         )
+    elif payload.broker == "ctrader":
+        import os
+        from app.services.broker.ctrader import CTraderAdapter
+        adapter = CTraderAdapter(
+            client_id=payload.extra.get("client_id", os.getenv("CTRADER_CLIENT_ID", "")),
+            client_secret=payload.extra.get("client_secret", os.getenv("CTRADER_CLIENT_SECRET", "")),
+            access_token=payload.access_token or payload.extra.get("access_token", ""),
+            account_id=payload.account_id,
+            server=payload.extra.get("server", "demo" if payload.practice else "live"),
+        )
     else:
         raise HTTPException(400, f"Unsupported broker: {payload.broker}")
 

@@ -340,7 +340,7 @@ async def get_broker_credentials(
     status = await broker_manager.get_status()
 
     brokers = []
-    for broker_name in ["mt5", "oanda", "coinbase", "tradovate"]:
+    for broker_name in ["mt5", "oanda", "coinbase", "tradovate", "ctrader"]:
         entry = creds.get(broker_name, {})
         configured = bool(entry)
         fields_set = [k for k, v in entry.items() if v and k not in ("broker", "auto_connect", "practice")] if entry else []
@@ -427,6 +427,16 @@ async def connect_saved_broker(
             app_id=entry.get("app_id", ""),
             cid=entry.get("cid", ""),
             sec=entry.get("sec", ""),
+        )
+    elif broker_name == "ctrader":
+        import os
+        from app.services.broker.ctrader import CTraderAdapter
+        adapter = CTraderAdapter(
+            client_id=os.getenv("CTRADER_CLIENT_ID", ""),
+            client_secret=os.getenv("CTRADER_CLIENT_SECRET", ""),
+            access_token=entry.get("access_token", ""),
+            account_id=entry.get("account_id", ""),
+            server="demo" if entry.get("practice", True) else "live",
         )
     else:
         raise HTTPException(400, f"Unsupported broker: {broker_name}")

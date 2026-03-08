@@ -27,6 +27,7 @@ _POLL_INTERVALS: dict[str, float] = {
     "oanda": 1.0,
     "coinbase": 2.0,
     "tradovate": 1.5,
+    "ctrader": 1.0,
 }
 _DEFAULT_POLL_INTERVAL = 2.0
 

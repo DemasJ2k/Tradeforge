@@ -29,6 +29,9 @@ class TradingAgent(Base):
     # Optional ML model for signal filtering/enhancement
     ml_model_id = Column(Integer, ForeignKey("ml_models.id"), nullable=True)
 
+    # Optional prop firm account link for pre-trade rule validation
+    prop_firm_account_id = Column(Integer, ForeignKey("prop_firm_accounts.id"), nullable=True)
+
     # Agent mode: paper | confirmation | auto
     mode = Column(String(20), nullable=False, default="paper")
 

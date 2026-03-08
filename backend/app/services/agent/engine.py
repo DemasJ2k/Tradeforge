@@ -51,6 +51,8 @@ class AgentRunner:
         self._strategy_type: str = "mss"
         # Position tracking (mirrors backtester behavior)
         self._active_direction: int = 0  # 0=flat, 1=long, -1=short
+        # Prop firm account link (for pre-trade rule validation)
+        self._prop_firm_account_id: int | None = None
 
     async def start(self):
         """Load agent config from DB and start the evaluation loop."""
@@ -79,6 +81,7 @@ class AgentRunner:
             self._timeframe = agent.timeframe
             self._broker_name = agent.broker_name or "mt5"
             self._created_by = agent.created_by  # for notifications
+            self._prop_firm_account_id = getattr(agent, "prop_firm_account_id", None)
 
             # Initialize evaluator based on strategy type
             strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
@@ -523,6 +526,31 @@ class AgentRunner:
             return
 
         lot_size = risk_decision.adjusted_lot_size or 0.01
+
+        # ── Prop firm pre-trade validation ──
+        if self._prop_firm_account_id:
+            pf_db = SessionLocal()
+            try:
+                from app.models.prop_firm import PropFirmAccount
+                from app.services.prop_firm.validator import validate_pre_trade
+                pf_account = pf_db.query(PropFirmAccount).filter_by(
+                    id=self._prop_firm_account_id
+                ).first()
+                if pf_account:
+                    breach = validate_pre_trade(
+                        account=pf_account,
+                        symbol=self._symbol,
+                        direction=direction,
+                        entry_price=signal.entry_price,
+                        stop_loss=signal.stop_loss,
+                        lot_size=lot_size,
+                        db=pf_db,
+                    )
+                    if breach:
+                        self._log("warn", f"Trade blocked by prop firm rules: {breach}")
+                        return
+            finally:
+                pf_db.close()
 
         # ── Create trade and track position ──
         await self._create_trade(signal, direction, lot_size)

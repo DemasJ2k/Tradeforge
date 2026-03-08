@@ -372,6 +372,14 @@ def record_trade_open(
     if account.max_lots_per_trade and payload.lot_size > account.max_lots_per_trade:
         raise HTTPException(400, f"Lot size {payload.lot_size} exceeds max {account.max_lots_per_trade}")
 
+    # Pre-trade loss projection: block if worst-case SL hit would breach rules
+    _reset_daily_pnl_if_needed(account)
+    if payload.stop_loss and (account.max_daily_loss_pct or account.max_total_loss_pct):
+        max_trade_loss = abs(payload.entry_price - payload.stop_loss) * payload.lot_size
+        breach = _check_rules(account, trade_pnl=-max_trade_loss)
+        if breach:
+            raise HTTPException(400, f"Trade would breach rules: {breach}")
+
     trade = PropFirmTrade(
         account_id=account_id,
         symbol=payload.symbol,

@@ -36,6 +36,7 @@ from app.api import watchlist as watchlist_api
 from app.api import webhook as webhook_api
 from app.api import telegram_webhook as telegram_webhook_api
 from app.api import prop_firm as prop_firm_api
+from app.api import ctrader_oauth as ctrader_oauth_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -127,6 +128,8 @@ def _run_schema_migrations():
         # 2FA Email OTP columns
         ("users", "otp_code",       "VARCHAR(10) DEFAULT ''"),
         ("users", "otp_expires_at", "TIMESTAMP"),
+        # Prop firm account link on trading agents
+        ("trading_agents", "prop_firm_account_id", "INTEGER"),
     ]
 
     insp = inspect(engine)
@@ -359,6 +362,7 @@ app.include_router(watchlist_api.router)
 app.include_router(webhook_api.router)
 app.include_router(telegram_webhook_api.router)
 app.include_router(prop_firm_api.router)
+app.include_router(ctrader_oauth_api.router)
 
 
 def _seed_admin_user():

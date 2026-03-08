@@ -7,11 +7,14 @@ from pydantic import BaseModel
 # ── Connection ─────────────────────────────────────────
 
 class BrokerConnectRequest(BaseModel):
-    broker: str                        # "oanda", "coinbase", etc.
-    api_key: str
+    broker: str                        # "oanda", "coinbase", "ctrader", etc.
+    api_key: str = ""
     account_id: str = ""
     practice: bool = True              # Oanda: practice vs live
     extra: dict = {}                   # broker-specific extra config
+    auth_method: str = "credentials"   # "credentials" or "oauth"
+    access_token: str = ""             # for OAuth-based brokers (cTrader)
+    refresh_token: str = ""            # for token refresh
 
 
 class BrokerStatusResponse(BaseModel):
