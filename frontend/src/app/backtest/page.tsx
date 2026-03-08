@@ -48,18 +48,20 @@ export default function BacktestPage() {
     Promise.all([
       api.get<{ items: Strategy[] }>('/api/strategies').catch(() => ({ items: [] })),
       api.get<{ items: DataSource[] }>('/api/data/sources').catch(() => ({ items: [] })),
-      api.get<BacktestListItem[]>('/api/backtest').catch(() => []),
+      api.get<BacktestListItem[] | { items: BacktestListItem[] }>('/api/backtest').catch(() => []),
     ]).then(([strats, ds, hist]) => {
       setStrategies(Array.isArray(strats) ? strats : (strats as { items: Strategy[] }).items || []);
       setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
-      setHistory(Array.isArray(hist) ? hist : []);
+      const histItems = Array.isArray(hist) ? hist : (hist as { items: BacktestListItem[] }).items || [];
+      setHistory(histItems);
     });
   }, []);
 
   const refreshHistory = useCallback(async () => {
     try {
-      const hist = await api.get<BacktestListItem[]>('/api/backtest');
-      setHistory(Array.isArray(hist) ? hist : []);
+      const hist = await api.get<BacktestListItem[] | { items: BacktestListItem[] }>('/api/backtest');
+      const histItems = Array.isArray(hist) ? hist : (hist as { items: BacktestListItem[] }).items || [];
+      setHistory(histItems);
     } catch { /* ignore */ }
   }, []);
 

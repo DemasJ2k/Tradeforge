@@ -250,7 +250,7 @@ export default function PropFirmsPage() {
     try {
       const [acct, tradeList, curve] = await Promise.all([
         api.get<AccountDetail>(`/api/prop-firms/${id}`),
-        api.get<Trade[]>(`/api/prop-firms/${id}/trades`),
+        api.get<Trade[] | { items: Trade[] }>(`/api/prop-firms/${id}/trades`).then(r => Array.isArray(r) ? r : (r as { items: Trade[] }).items || []),
         api.get<EquityCurve>(`/api/prop-firms/${id}/equity-curve`),
       ]);
       setDetail(acct);

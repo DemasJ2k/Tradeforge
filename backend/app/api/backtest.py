@@ -1001,24 +1001,36 @@ def run_walk_forward(
     )
 
 
-@router.get("", response_model=list[dict])
+@router.get("")
 def list_backtests(
+    page: int = 1,
+    per_page: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    backtests = (
+    """List backtests with pagination. Default 20 per page, max 100."""
+    per_page = max(1, min(per_page, 100))
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
+    base_q = (
         db.query(Backtest)
         .filter(Backtest.creator_id == current_user.id)
         .filter(Backtest.deleted_at.is_(None))
+    )
+    total = base_q.count()
+    backtests = (
+        base_q
         .order_by(Backtest.created_at.desc())
-        .limit(50)
+        .offset(offset)
+        .limit(per_page)
         .all()
     )
     # Batch-load strategy names
     strat_ids = {bt.strategy_id for bt in backtests}
     strats = db.query(Strategy.id, Strategy.name).filter(Strategy.id.in_(strat_ids)).all() if strat_ids else []
     strat_map = {s.id: s.name for s in strats}
-    return [
+    items = [
         {
             "id": bt.id,
             "strategy_id": bt.strategy_id,
@@ -1031,6 +1043,13 @@ def list_backtests(
         }
         for bt in backtests
     ]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": math.ceil(total / per_page) if total > 0 else 1,
+    }
 
 
 @router.get("/{backtest_id}")

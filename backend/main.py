@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 # Configure root logger to show INFO for our application modules
@@ -331,6 +332,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip compression for responses >500 bytes — reduces equity curve / trade list payloads
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Global exception handler — ensures unhandled errors return JSON (visible
 # through CORS) instead of opaque 500 pages, and logs the full traceback.

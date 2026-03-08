@@ -551,16 +551,18 @@ def close_trade(
     return PropFirmTradeResponse.model_validate(trade)
 
 
-@router.get("/{account_id}/trades", response_model=list[PropFirmTradeResponse])
+@router.get("/{account_id}/trades")
 def list_trades(
     account_id: int,
     status: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    page: int = 1,
+    per_page: int = 20,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List trades for a prop firm account."""
+    """List trades for a prop firm account with pagination."""
+    import math as _math
+
     account = db.query(PropFirmAccount).filter(
         PropFirmAccount.id == account_id,
         PropFirmAccount.user_id == user.id,
@@ -569,11 +571,22 @@ def list_trades(
     if not account:
         raise HTTPException(404, "Account not found")
 
+    per_page = max(1, min(per_page, 100))
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
     q = db.query(PropFirmTrade).filter(PropFirmTrade.account_id == account_id)
     if status:
         q = q.filter(PropFirmTrade.status == status)
-    trades = q.order_by(PropFirmTrade.opened_at.desc()).offset(offset).limit(limit).all()
-    return [PropFirmTradeResponse.model_validate(t) for t in trades]
+    total = q.count()
+    trades = q.order_by(PropFirmTrade.opened_at.desc()).offset(offset).limit(per_page).all()
+    return {
+        "items": [PropFirmTradeResponse.model_validate(t).model_dump() for t in trades],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": _math.ceil(total / per_page) if total > 0 else 1,
+    }
 
 
 @router.get("/{account_id}/equity-curve")
