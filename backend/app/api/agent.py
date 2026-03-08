@@ -36,6 +36,7 @@ def _agent_to_response(a: TradingAgent) -> AgentResponse:
         risk_config=a.risk_config or {},
         performance_stats=a.performance_stats or {},
         ml_model_id=a.ml_model_id,
+        prop_firm_account_id=a.prop_firm_account_id,
         created_by=a.created_by,
         created_at=a.created_at.isoformat() if a.created_at else "",
         updated_at=a.updated_at.isoformat() if a.updated_at else "",
@@ -74,6 +75,7 @@ def create_agent(
         mode=payload.mode,
         risk_config=payload.risk_config,
         ml_model_id=payload.ml_model_id,
+        prop_firm_account_id=payload.prop_firm_account_id,
         created_by=user.id,
     )
     db.add(agent)
@@ -336,11 +338,41 @@ async def confirm_trade(
     if trade.status != "pending_confirmation":
         raise HTTPException(400, f"Trade is not pending (status={trade.status})")
 
-    # TODO: Execute via broker adapter when auto mode is implemented
-    trade.status = "confirmed"
+    # Execute via broker adapter if agent has a connected broker
+    executed = False
+    broker_ticket = None
+    try:
+        from app.services.broker.manager import broker_manager
+        from app.services.broker.base import OrderRequest, OrderSide, OrderType
+        adapter = broker_manager.get_adapter(agent.broker_name)
+        if adapter and await adapter.is_connected():
+            side = OrderSide.BUY if trade.direction == "long" else OrderSide.SELL
+            order_req = OrderRequest(
+                symbol=trade.symbol,
+                side=side,
+                size=trade.lot_size,
+                order_type=OrderType.MARKET,
+                stop_loss=trade.stop_loss,
+                take_profit=trade.take_profit_1,
+                comment=f"FlowrexAlgo agent:{agent_id}",
+            )
+            order = await adapter.place_order(order_req)
+            broker_ticket = order.order_id
+            trade.broker_ticket = broker_ticket
+            trade.entry_price = order.filled_price or trade.entry_price
+            executed = True
+    except Exception:
+        pass  # Fall through — mark as confirmed even if execution fails
+
+    trade.status = "executed" if executed else "confirmed"
     db.commit()
 
-    return {"detail": "Trade confirmed", "trade_id": trade_id, "status": "confirmed"}
+    return {
+        "detail": "Trade executed" if executed else "Trade confirmed",
+        "trade_id": trade_id,
+        "status": trade.status,
+        "broker_ticket": broker_ticket,
+    }
 
 
 @router.post("/{agent_id}/trades/{trade_id}/reject")

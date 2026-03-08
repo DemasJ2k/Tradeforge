@@ -15,6 +15,7 @@ class AgentCreate(BaseModel):
     mode: AGENT_MODES = "paper"  # paper | confirmation | auto
     risk_config: dict = {}
     ml_model_id: Optional[int] = None  # Optional ML model for signal filtering
+    prop_firm_account_id: Optional[int] = None  # Link to prop firm account for rule enforcement
 
 
 class AgentUpdate(BaseModel):
@@ -22,6 +23,7 @@ class AgentUpdate(BaseModel):
     mode: Optional[str] = None
     risk_config: Optional[dict] = None
     ml_model_id: Optional[int] = None
+    prop_firm_account_id: Optional[int] = None
 
 
 class AgentResponse(BaseModel):
@@ -36,6 +38,7 @@ class AgentResponse(BaseModel):
     risk_config: dict
     performance_stats: dict
     ml_model_id: Optional[int] = None
+    prop_firm_account_id: Optional[int] = None
     created_by: int
     created_at: str
     updated_at: str

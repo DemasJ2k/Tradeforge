@@ -31,11 +31,14 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
   refreshAccounts: async () => {
     set({ loading: true });
     try {
-      // Get list of all connected brokers
-      const status = await api.get<{
-        brokers: Record<string, { connected: boolean; broker_name?: string }>;
-        default_broker: string | null;
-      }>("/api/broker/status");
+      // Get list of all connected brokers + today's P&L from dashboard
+      const [status, dashboard] = await Promise.all([
+        api.get<{
+          brokers: Record<string, { connected: boolean; broker_name?: string }>;
+          default_broker: string | null;
+        }>("/api/broker/status"),
+        api.get<{ today: { pnl: number } }>("/api/dashboard/summary").catch(() => ({ today: { pnl: 0 } })),
+      ]);
 
       const connectedBrokers = Object.entries(status.brokers)
         .filter(([, info]) => info.connected)
@@ -45,6 +48,8 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
         set({ accounts: [], activeBroker: null, loading: false });
         return;
       }
+
+      const todayPnl = dashboard.today?.pnl ?? 0;
 
       // Fetch account info for each connected broker in parallel
       const accountResults = await Promise.allSettled(
@@ -67,7 +72,7 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
               balance: info.balance ?? 0,
               equity: info.equity ?? 0,
               unrealizedPnl: info.unrealized_pnl ?? 0,
-              todayPnl: 0, // TODO: calculate from trade history
+              todayPnl: connectedBrokers.length === 1 ? todayPnl : todayPnl / connectedBrokers.length,
             }))
         )
       );

@@ -2174,8 +2174,28 @@ export default function SettingsPage() {
                   }} className={btnSecondary}>
                     {notifTesting === 'telegram' ? 'Sending...' : 'Send Test Message'}
                   </button>
+
+                  {/* Disconnect Telegram */}
+                  {s.notification_telegram_connected && (
+                    <button onClick={async () => {
+                      if (!confirm('Disconnect Telegram? You will stop receiving notifications.')) return;
+                      try {
+                        await fetch(`${API}/api/settings`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                          body: JSON.stringify({ notification_telegram_chat_id: '', notification_telegram_username: '' }),
+                        });
+                        set('notification_telegram_username', '');
+                        set('notification_telegram_connected', false);
+                        setNotifTestResult({ telegram: 'Disconnected' });
+                      } catch { setNotifTestResult({ telegram: 'Failed to disconnect' }); }
+                    }} className={`${btnSecondary} !text-red-400 !border-red-500/30 hover:!bg-red-500/10`}>
+                      Disconnect
+                    </button>
+                  )}
+
                   {notifTestResult.telegram && (
-                    <span className={`text-xs ${notifTestResult.telegram.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`text-xs ${notifTestResult.telegram.includes('sent') || notifTestResult.telegram.includes('Disconnected') ? 'text-green-400' : 'text-red-400'}`}>
                       {notifTestResult.telegram}
                     </span>
                   )}

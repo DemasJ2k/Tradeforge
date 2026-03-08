@@ -1,14 +1,13 @@
-Full rebrand: TradeForge → FlowrexAlgo
+Wire up remaining gaps: alerts, Monte Carlo, walk-forward, auto-execute
 
-- APP_NAME, secret key prefix, SQLite DB name all updated
-- Admin credentials: FlowrexAdmin / Flowrex2025!
-- All notification messages, bot commands, webhook headers
-- LLM system prompts, agent trade comments, strategy authors
-- Broker trade comments (mt5_bridge, mt5_remote)
-- Frontend: backup filename, settings page, indicator libs
-- Docs: all 7 markdown files updated
-- render.yaml: service names updated
-- Telegram bot messages reference FlowrexAlgo
-- Rust module kept as tradeforge_core (binary compat)
+- Fix Daily P&L: fetch from /api/dashboard/summary instead of hardcoding 0
+- Add prop_firm_account_id to agent schemas, create/update API, and frontend dropdown
+- Add auto-execute broker logic: confirmed trades now place orders via broker adapter
+- Add Monte Carlo simulation button + percentile visualization in backtest Analysis tab
+- Add Walk-Forward validation tab in backtest dashboard with per-fold breakdown
+- Add Telegram disconnect button in settings notification tab
+- Create AlertChecker background service: checks watchlist price alerts every 15s
+- Register alert_checker in startup/shutdown lifecycle
+- Clean up old uploaded CSV data files
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

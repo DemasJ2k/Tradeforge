@@ -89,6 +89,8 @@ export default function AgentPanel() {
   const [cMlModelId, setCMlModelId] = useState<number | null>(null);
   const [cBroker, setCBroker] = useState<string>("");
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
+  const [propFirmAccounts, setPropFirmAccounts] = useState<{ id: number; account_name: string; firm_name: string; status: string }[]>([]);
+  const [cPropFirmId, setCPropFirmId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Symbol combobox state for create form
@@ -143,6 +145,10 @@ export default function AgentPanel() {
     api
       .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>("/api/ml/models?status=ready")
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
+      .catch(() => {});
+    api
+      .get<{ id: number; account_name: string; firm_name: string; status: string }[]>("/api/prop-firms/")
+      .then((accts) => setPropFirmAccounts(Array.isArray(accts) ? accts : []))
       .catch(() => {});
   }, []);
 
@@ -207,6 +213,7 @@ export default function AgentPanel() {
         timeframe: cTimeframe,
         mode: cMode,
         ml_model_id: cMlModelId,
+        prop_firm_account_id: cPropFirmId,
         broker_name: cBroker || activeBroker || undefined,
         risk_config: {
           position_size_type: cSizeType,
@@ -222,6 +229,7 @@ export default function AgentPanel() {
       setCName("");
       setCStrategyId(null);
       setCMlModelId(null);
+      setCPropFirmId(null);
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -723,6 +731,29 @@ export default function AgentPanel() {
                   ))}
               </select>
             </div>
+
+            {/* Prop Firm Account (optional) */}
+            {propFirmAccounts.length > 0 && (
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">
+                  Prop Firm Account <span className="text-zinc-500">(optional — enforces firm rules pre-trade)</span>
+                </Label>
+                <select
+                  value={cPropFirmId ?? ""}
+                  onChange={(e) => setCPropFirmId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">No prop firm</option>
+                  {propFirmAccounts
+                    .filter((a) => a.status === "active")
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.firm_name} — {a.account_name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
 
             {/* ── Risk Configuration ── */}
             <div className="border-t border-card-border pt-3">

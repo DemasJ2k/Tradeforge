@@ -8,15 +8,27 @@
  *   - Exit reason breakdown
  */
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
 import type { BacktestStats, TradeResult } from '@/types';
+
+interface MonteCarloResult {
+  n_simulations: number;
+  final_equity: { p5: number; p25: number; p50: number; p75: number; p95: number };
+  max_drawdown: { p5: number; p25: number; p50: number; p75: number; p95: number };
+  max_drawdown_pct: { p5: number; p25: number; p50: number; p75: number; p95: number };
+  prob_ruin: number;
+  equity_paths: number[][];
+}
 
 interface Props {
   stats: BacktestStats;
   v2Stats: Record<string, unknown>;
   trades: TradeResult[];
   equityCurve: number[];
+  backtestId?: number;
 }
 
 /* ──────────────────────────────────────────────────────────────────── */
@@ -325,16 +337,124 @@ function MetricRow({ label, value, highlight }: { label: string; value: string; 
 }
 
 /* ──────────────────────────────────────────────────────────────────── */
+/*  Monte Carlo Equity Paths Chart                                     */
+/* ──────────────────────────────────────────────────────────────────── */
+
+function MonteCarloChart({ paths, initial }: { paths: number[][]; initial: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || paths.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = '#0f1219';
+    ctx.fillRect(0, 0, w, h);
+
+    // Find global min/max
+    let gMin = initial, gMax = initial;
+    for (const path of paths) {
+      for (const v of path) {
+        if (v < gMin) gMin = v;
+        if (v > gMax) gMax = v;
+      }
+    }
+    const range = gMax - gMin || 1;
+    const maxLen = Math.max(...paths.map(p => p.length));
+
+    // Grid
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 0.5;
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#6b7280';
+    for (let i = 0; i <= 4; i++) {
+      const y = h - (i / 4) * h;
+      ctx.beginPath();
+      ctx.moveTo(50, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+      const val = gMin + (i / 4) * range;
+      ctx.fillText(`$${val.toFixed(0)}`, 2, y + 3);
+    }
+
+    // Draw paths
+    const colors = ['rgba(59,130,246,0.3)', 'rgba(34,197,94,0.25)', 'rgba(168,85,247,0.25)', 'rgba(249,115,22,0.25)', 'rgba(236,72,153,0.25)'];
+    for (let p = 0; p < paths.length; p++) {
+      const path = paths[p];
+      ctx.beginPath();
+      for (let i = 0; i < path.length; i++) {
+        const x = 50 + (i / (maxLen - 1)) * (w - 50);
+        const y = h - ((path[i] - gMin) / range) * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = colors[p % colors.length];
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Initial balance line
+    const initY = h - ((initial - gMin) / range) * h;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#6b7280';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(50, initY);
+    ctx.lineTo(w, initY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }, [paths, initial]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full rounded-lg border border-card-border"
+      style={{ height: 200 }}
+    />
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────── */
 /*  Main Component                                                     */
 /* ──────────────────────────────────────────────────────────────────── */
 
-export default function TearsheetPanel({ stats, v2Stats, trades, equityCurve }: Props) {
+export default function TearsheetPanel({ stats, v2Stats, trades, equityCurve, backtestId }: Props) {
   const derived = useMemo(
     () => computeDerived(stats, v2Stats, trades, equityCurve),
     [stats, v2Stats, trades, equityCurve],
   );
 
   const v2 = v2Stats;
+
+  // Monte Carlo state
+  const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null);
+  const [mcLoading, setMcLoading] = useState(false);
+  const [mcError, setMcError] = useState('');
+
+  const runMonteCarlo = useCallback(async () => {
+    if (!backtestId) return;
+    setMcLoading(true);
+    setMcError('');
+    try {
+      const result = await api.post<MonteCarloResult>('/api/backtest/monte-carlo', {
+        backtest_id: backtestId,
+        n_simulations: 1000,
+      });
+      setMcResult(result);
+    } catch (e) {
+      setMcError(e instanceof Error ? e.message : 'Monte Carlo failed');
+    } finally {
+      setMcLoading(false);
+    }
+  }, [backtestId]);
 
   return (
     <div className="space-y-4">
@@ -480,6 +600,92 @@ export default function TearsheetPanel({ stats, v2Stats, trades, equityCurve }: 
                   </div>
                 ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Row 5: Monte Carlo Simulation ────────────────────── */}
+      {backtestId && (
+        <Card className="bg-card-bg border-card-border">
+          <CardHeader className="pb-2 pt-3 px-4 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Monte Carlo Simulation</CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={runMonteCarlo}
+              disabled={mcLoading}
+              className="h-7 text-xs"
+            >
+              {mcLoading ? 'Running...' : mcResult ? 'Re-run (1,000 sims)' : 'Run Monte Carlo'}
+            </Button>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            {mcError && <p className="text-xs text-red-400 mb-2">{mcError}</p>}
+            {!mcResult && !mcLoading && (
+              <p className="text-xs text-muted-foreground">
+                Shuffles trade order 1,000 times to estimate the range of possible outcomes (drawdown, final equity, ruin probability).
+              </p>
+            )}
+            {mcResult && (
+              <div className="space-y-4">
+                {/* Equity paths chart */}
+                {mcResult.equity_paths?.length > 0 && (
+                  <MonteCarloChart
+                    paths={mcResult.equity_paths}
+                    initial={Number(v2.initial_balance) || equityCurve[0] || 10000}
+                  />
+                )}
+
+                {/* Percentile tables */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Final Equity */}
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Final Equity</h4>
+                    {(['p5', 'p25', 'p50', 'p75', 'p95'] as const).map(k => (
+                      <MetricRow
+                        key={k}
+                        label={k.toUpperCase()}
+                        value={usd(mcResult.final_equity[k])}
+                        highlight={mcResult.final_equity[k] >= (Number(v2.initial_balance) || 10000) ? 'green' : 'red'}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Max Drawdown % */}
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Max Drawdown %</h4>
+                    {(['p5', 'p25', 'p50', 'p75', 'p95'] as const).map(k => (
+                      <MetricRow
+                        key={k}
+                        label={k.toUpperCase()}
+                        value={pct(mcResult.max_drawdown_pct[k])}
+                        highlight="red"
+                      />
+                    ))}
+                  </div>
+
+                  {/* Max Drawdown $ */}
+                  <div className="space-y-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Max Drawdown $</h4>
+                    {(['p5', 'p25', 'p50', 'p75', 'p95'] as const).map(k => (
+                      <MetricRow
+                        key={k}
+                        label={k.toUpperCase()}
+                        value={usd(mcResult.max_drawdown[k])}
+                        highlight="red"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Probability of Ruin */}
+                <MetricRow
+                  label="Probability of Ruin (50% drawdown)"
+                  value={pct(mcResult.prob_ruin * 100)}
+                  highlight={mcResult.prob_ruin > 0.05 ? 'red' : 'green'}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

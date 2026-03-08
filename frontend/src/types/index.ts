@@ -836,6 +836,7 @@ export interface Agent {
   risk_config: AgentRiskConfig;
   performance_stats: Record<string, number>;
   ml_model_id?: number | null;
+  prop_firm_account_id?: number | null;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -855,6 +856,7 @@ export interface AgentCreateRequest {
   mode?: AgentMode;
   risk_config?: AgentRiskConfig;
   ml_model_id?: number | null;
+  prop_firm_account_id?: number | null;
 }
 
 export interface AgentUpdateRequest {

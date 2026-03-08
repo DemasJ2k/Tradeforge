@@ -4,11 +4,12 @@
  * BacktestDashboard — Full results dashboard with tab navigation.
  *
  * Tabs:
- *  1. Overview  — Stats cards + equity curve
- *  2. Trades    — Full trade log table
- *  3. Monthly   — Monthly/yearly returns heatmap
- *  4. Charts   — Equity + trade markers, P/L waterfall
- *  5. Analysis  — Extended tearsheet metrics
+ *  1. Overview     — Stats cards + equity curve
+ *  2. Trades       — Full trade log table
+ *  3. Charts       — Equity + trade markers, P/L waterfall
+ *  4. Monthly      — Monthly/yearly returns heatmap
+ *  5. Analysis     — Extended tearsheet metrics + Monte Carlo
+ *  6. Walk-Forward — Out-of-sample validation
  */
 
 import type { BacktestResponse } from '@/types';
@@ -22,6 +23,7 @@ import TradeLogTable from './TradeLogTable';
 import MonthlyHeatmap from './MonthlyHeatmap';
 import TearsheetPanel from './TearsheetPanel';
 import TradeChartOverlay from './TradeChartOverlay';
+import WalkForwardPanel from './WalkForwardPanel';
 
 interface Props {
   result: BacktestResponse;
@@ -70,6 +72,7 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
           <TabsTrigger value="charts">Charts</TabsTrigger>
           <TabsTrigger value="monthly">Monthly</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="walkforward">Walk-Forward</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -105,6 +108,15 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
             v2Stats={v2}
             trades={result.trades}
             equityCurve={result.equity_curve}
+            backtestId={result.id}
+          />
+        </TabsContent>
+
+        {/* Walk-Forward Tab */}
+        <TabsContent value="walkforward" className="mt-4">
+          <WalkForwardPanel
+            strategyId={result.strategy_id}
+            datasourceId={result.datasource_id}
           />
         </TabsContent>
       </Tabs>

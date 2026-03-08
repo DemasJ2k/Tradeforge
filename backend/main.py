@@ -44,6 +44,7 @@ from app.services.market.broker_stream import broker_price_streamer
 from app.services.market.databento_stream import databento_streamer
 from app.services.agent.engine import algo_engine
 from app.services.agent.trade_monitor import trade_monitor
+from app.services.alert_checker import alert_checker
 
 # Import all models so Base.metadata knows about them
 from app.models import user, strategy, backtest, optimization, trade, datasource, knowledge, settings as settings_model  # noqa: F401
@@ -1236,6 +1237,8 @@ async def startup_event():
     # Start paper trade monitor (simulates SL/TP exits for agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
     await trade_monitor.start()
+    # Start watchlist alert checker (evaluates price alerts periodically)
+    await alert_checker.start()
     # Register Telegram bot webhook (so /start commands auto-link users)
     if settings.TELEGRAM_BOT_TOKEN:
         from app.api.telegram_webhook import setup_telegram_webhook
@@ -1258,6 +1261,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    await alert_checker.stop()
     await trade_monitor.stop()
     await algo_engine.stop()
     from app.services.news.aggregator import stop_background_refresh as stop_news_refresh
