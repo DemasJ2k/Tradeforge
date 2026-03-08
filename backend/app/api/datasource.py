@@ -328,16 +328,21 @@ def delete_source(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from datetime import datetime, timezone
+    import os
 
     ds = db.query(DataSource).filter(DataSource.id == source_id).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
-    if ds.creator_id and ds.creator_id != user.id:
-        raise HTTPException(status_code=403, detail="Not your data source")
 
-    # Soft-delete: mark as deleted but keep the file on disk
-    ds.deleted_at = datetime.now(timezone.utc)
+    # Delete the file from disk
+    if ds.filepath and os.path.exists(ds.filepath):
+        try:
+            os.remove(ds.filepath)
+        except OSError:
+            pass  # file already gone or permission issue
+
+    # Hard-delete from database
+    db.delete(ds)
     db.commit()
     return {"status": "deleted", "id": source_id}
 
