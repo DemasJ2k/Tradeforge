@@ -33,11 +33,12 @@ def validate_pre_trade(
     Checks (in order):
       1. Account status must be "active"
       2. Symbol must be in allowed_symbols (if set)
-      3. Open positions must not exceed max_open_positions
-      4. Lot size must not exceed max_lots_per_trade
-      5. Restricted hours check
-      6. Projected daily loss (worst-case from SL)
-      7. Projected total drawdown (worst-case from SL)
+      3. Max open positions
+      4. Max lot size per trade
+      5. Restricted hours
+      6. Weekend holding restriction
+      7. Projected daily loss (worst-case from SL)
+      8. Projected total drawdown (worst-case from SL)
     """
     # 1. Account status
     if account.status != "active":
@@ -60,9 +61,10 @@ def validate_pre_trade(
     if account.max_lots_per_trade and lot_size > account.max_lots_per_trade:
         return f"Lot size {lot_size} exceeds max {account.max_lots_per_trade}"
 
+    now_utc = datetime.now(timezone.utc)
+
     # 5. Restricted hours
     if account.restricted_hours:
-        now_utc = datetime.now(timezone.utc)
         hour_str = now_utc.strftime("%H:%M")
         start = account.restricted_hours.get("start", "")
         end = account.restricted_hours.get("end", "")
@@ -74,7 +76,15 @@ def validate_pre_trade(
                 if hour_str >= start or hour_str <= end:
                     return f"Trading restricted between {start}-{end} UTC"
 
-    # 6 & 7. Projected loss checks
+    # 6. Weekend holding restriction — block new trades after Friday 21:00 UTC
+    if getattr(account, "no_weekend_holding", False):
+        weekday = now_utc.weekday()  # 0=Mon ... 4=Fri, 5=Sat, 6=Sun
+        if weekday == 4 and now_utc.hour >= 21:
+            return "No weekend holding: new trades blocked after Friday 21:00 UTC"
+        if weekday in (5, 6):
+            return "No weekend holding: trading blocked on weekends"
+
+    # 7 & 8. Projected loss checks
     if stop_loss and (account.max_daily_loss_pct or account.max_total_loss_pct):
         # Estimate worst-case loss if SL is hit
         max_trade_loss = abs(entry_price - stop_loss) * lot_size
@@ -83,12 +93,12 @@ def validate_pre_trade(
         balance = account.current_balance
 
         # Reset daily pnl if needed
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = now_utc.strftime("%Y-%m-%d")
         today_pnl = account.today_pnl or 0.0
         if account.today_pnl_date != today:
             today_pnl = 0.0
 
-        # 6. Daily loss projection
+        # 7. Daily loss projection
         if account.max_daily_loss_pct and account.max_daily_loss_pct > 0:
             daily_limit = size * (account.max_daily_loss_pct / 100)
             projected_daily_loss = abs(min(today_pnl - max_trade_loss, 0))
@@ -99,7 +109,7 @@ def validate_pre_trade(
                     f"${daily_limit:,.2f} ({account.max_daily_loss_pct}%)"
                 )
 
-        # 7. Total drawdown projection
+        # 8. Total drawdown projection
         if account.max_total_loss_pct and account.max_total_loss_pct > 0:
             total_limit = size * (account.max_total_loss_pct / 100)
             peak = account.peak_balance or size
@@ -112,3 +122,88 @@ def validate_pre_trade(
                 )
 
     return None
+
+
+def validate_pre_trade_detailed(
+    account: PropFirmAccount,
+    symbol: str,
+    direction: str,
+    entry_price: float,
+    stop_loss: float | None,
+    lot_size: float,
+    db: Session,
+) -> dict:
+    """
+    Detailed pre-trade validation with budget information.
+
+    Returns a dict with:
+      - allowed (bool): Whether the trade is permitted
+      - reason (str | None): Block reason if not allowed
+      - projected_daily_loss (float): Worst-case daily loss after this trade
+      - projected_drawdown (float): Worst-case total drawdown after this trade
+      - remaining_daily_budget (float): $ remaining before daily limit hit
+      - remaining_drawdown_budget (float): $ remaining before max DD hit
+      - daily_limit (float): Total daily loss limit in $
+      - drawdown_limit (float): Total drawdown limit in $
+      - open_positions (int): Current open position count
+      - max_positions (int | None): Max positions allowed
+    """
+    now_utc = datetime.now(timezone.utc)
+    size = account.account_size or 0
+    balance = account.current_balance or size
+    peak = account.peak_balance or size
+
+    # Reset daily pnl if needed
+    today = now_utc.strftime("%Y-%m-%d")
+    today_pnl = account.today_pnl or 0.0
+    if account.today_pnl_date != today:
+        today_pnl = 0.0
+
+    # Compute budget numbers
+    daily_limit = size * (account.max_daily_loss_pct / 100) if account.max_daily_loss_pct else 0
+    drawdown_limit = size * (account.max_total_loss_pct / 100) if account.max_total_loss_pct else 0
+
+    daily_used = abs(min(today_pnl, 0))
+    remaining_daily = max(daily_limit - daily_used, 0)
+
+    current_dd = max(peak - balance, 0)
+    remaining_dd = max(drawdown_limit - current_dd, 0)
+
+    # Worst-case projections from SL
+    max_trade_loss = 0.0
+    if stop_loss and entry_price:
+        max_trade_loss = abs(entry_price - stop_loss) * lot_size
+
+    projected_daily_loss = abs(min(today_pnl - max_trade_loss, 0))
+    projected_dd = peak - (balance - max_trade_loss)
+
+    # Open positions count
+    open_count = db.query(PropFirmTrade).filter(
+        PropFirmTrade.account_id == account.id,
+        PropFirmTrade.status == "open",
+    ).count()
+
+    # Run the standard validation
+    breach = validate_pre_trade(
+        account=account,
+        symbol=symbol,
+        direction=direction,
+        entry_price=entry_price,
+        stop_loss=stop_loss,
+        lot_size=lot_size,
+        db=db,
+    )
+
+    return {
+        "allowed": breach is None,
+        "reason": breach,
+        "projected_daily_loss": round(projected_daily_loss, 2),
+        "projected_drawdown": round(max(projected_dd, 0), 2),
+        "remaining_daily_budget": round(remaining_daily, 2),
+        "remaining_drawdown_budget": round(remaining_dd, 2),
+        "daily_limit": round(daily_limit, 2),
+        "drawdown_limit": round(drawdown_limit, 2),
+        "open_positions": open_count,
+        "max_positions": account.max_open_positions,
+        "max_trade_loss": round(max_trade_loss, 2),
+    }

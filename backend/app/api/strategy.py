@@ -22,6 +22,171 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 
 
+# ── Pre-built strategy templates ──────────────────────────────────
+STRATEGY_TEMPLATES = [
+    {
+        "id": "sma_crossover",
+        "name": "SMA Crossover",
+        "description": "Classic trend-following strategy. Buy when fast SMA crosses above slow SMA, sell on the opposite cross. Works best on trending markets (H1/H4/D1).",
+        "category": "trend",
+        "indicators": [
+            {"id": "sma_fast", "type": "SMA", "params": {"period": 20, "source": "close"}, "overlay": True},
+            {"id": "sma_slow", "type": "SMA", "params": {"period": 50, "source": "close"}, "overlay": True},
+        ],
+        "entry_rules": [
+            {"left": "sma_fast", "operator": "crosses_above", "right": "sma_slow", "logic": "AND", "direction": "long"},
+            {"left": "sma_fast", "operator": "crosses_below", "right": "sma_slow", "logic": "AND", "direction": "short"},
+        ],
+        "exit_rules": [
+            {"left": "sma_fast", "operator": "crosses_below", "right": "sma_slow", "logic": "AND", "direction": "long"},
+            {"left": "sma_fast", "operator": "crosses_above", "right": "sma_slow", "logic": "AND", "direction": "short"},
+        ],
+        "risk_params": {
+            "stop_loss_type": "atr_multiple",
+            "stop_loss_value": 2.0,
+            "take_profit_type": "rr_ratio",
+            "take_profit_value": 2.0,
+            "position_size_type": "percent_risk",
+            "position_size_value": 1.0,
+            "trailing_stop": False,
+            "max_positions": 1,
+        },
+        "filters": {
+            "min_adx": 20,
+        },
+    },
+    {
+        "id": "rsi_mean_reversion",
+        "name": "RSI Mean Reversion",
+        "description": "Counter-trend strategy buying oversold and selling overbought conditions. Best on ranging markets or lower timeframes (M15/H1). Uses RSI with trend filter.",
+        "category": "mean_reversion",
+        "indicators": [
+            {"id": "rsi_14", "type": "RSI", "params": {"period": 14, "source": "close"}, "overlay": False},
+            {"id": "ema_200", "type": "EMA", "params": {"period": 200, "source": "close"}, "overlay": True},
+        ],
+        "entry_rules": [
+            {"left": "rsi_14", "operator": "crosses_above", "right": "30", "logic": "AND", "direction": "long"},
+            {"left": "rsi_14", "operator": "crosses_below", "right": "70", "logic": "AND", "direction": "short"},
+        ],
+        "exit_rules": [
+            {"left": "rsi_14", "operator": ">", "right": "65", "logic": "AND", "direction": "long"},
+            {"left": "rsi_14", "operator": "<", "right": "35", "logic": "AND", "direction": "short"},
+        ],
+        "risk_params": {
+            "stop_loss_type": "atr_multiple",
+            "stop_loss_value": 1.5,
+            "take_profit_type": "rr_ratio",
+            "take_profit_value": 1.5,
+            "position_size_type": "percent_risk",
+            "position_size_value": 0.5,
+            "trailing_stop": False,
+            "max_positions": 2,
+        },
+        "filters": {
+            "max_adx": 30,
+        },
+    },
+    {
+        "id": "bollinger_breakout",
+        "name": "Bollinger Band Breakout",
+        "description": "Volatility breakout strategy. Enters when price closes outside Bollinger Bands with strong momentum (ATR filter). Best on H1/H4 with volatile instruments.",
+        "category": "breakout",
+        "indicators": [
+            {"id": "bb_20", "type": "Bollinger", "params": {"period": 20, "std_dev": 2.0, "source": "close"}, "overlay": True},
+            {"id": "atr_14", "type": "ATR", "params": {"period": 14}, "overlay": False},
+        ],
+        "entry_rules": [
+            {"left": "price.close", "operator": ">", "right": "bb_20.upper", "logic": "AND", "direction": "long"},
+            {"left": "price.close", "operator": "<", "right": "bb_20.lower", "logic": "AND", "direction": "short"},
+        ],
+        "exit_rules": [
+            {"left": "price.close", "operator": "<", "right": "bb_20.middle", "logic": "AND", "direction": "long"},
+            {"left": "price.close", "operator": ">", "right": "bb_20.middle", "logic": "AND", "direction": "short"},
+        ],
+        "risk_params": {
+            "stop_loss_type": "atr_multiple",
+            "stop_loss_value": 2.0,
+            "take_profit_type": "atr_multiple",
+            "take_profit_value": 3.0,
+            "position_size_type": "percent_risk",
+            "position_size_value": 1.0,
+            "trailing_stop": True,
+            "trailing_stop_type": "atr_multiple",
+            "trailing_stop_value": 1.5,
+            "max_positions": 1,
+        },
+        "filters": {},
+    },
+    {
+        "id": "macd_rsi_confirm",
+        "name": "MACD + RSI Confirmation",
+        "description": "Dual-confirmation momentum strategy. Enters on MACD crossover confirmed by RSI direction. Reduces false signals versus single-indicator approaches. Best on H1/H4.",
+        "category": "momentum",
+        "indicators": [
+            {"id": "macd_12_26_9", "type": "MACD", "params": {"fast": 12, "slow": 26, "signal": 9, "source": "close"}, "overlay": False},
+            {"id": "rsi_14", "type": "RSI", "params": {"period": 14, "source": "close"}, "overlay": False},
+        ],
+        "entry_rules": [
+            {"left": "macd_12_26_9.macd", "operator": "crosses_above", "right": "macd_12_26_9.signal", "logic": "AND", "direction": "long"},
+            {"left": "rsi_14", "operator": ">", "right": "50", "logic": "AND", "direction": "long"},
+            {"left": "macd_12_26_9.macd", "operator": "crosses_below", "right": "macd_12_26_9.signal", "logic": "AND", "direction": "short"},
+            {"left": "rsi_14", "operator": "<", "right": "50", "logic": "AND", "direction": "short"},
+        ],
+        "exit_rules": [
+            {"left": "macd_12_26_9.macd", "operator": "crosses_below", "right": "macd_12_26_9.signal", "logic": "AND", "direction": "long"},
+            {"left": "macd_12_26_9.macd", "operator": "crosses_above", "right": "macd_12_26_9.signal", "logic": "AND", "direction": "short"},
+        ],
+        "risk_params": {
+            "stop_loss_type": "atr_multiple",
+            "stop_loss_value": 2.0,
+            "take_profit_type": "rr_ratio",
+            "take_profit_value": 2.5,
+            "position_size_type": "percent_risk",
+            "position_size_value": 1.0,
+            "trailing_stop": False,
+            "max_positions": 1,
+        },
+        "filters": {
+            "min_adx": 20,
+        },
+    },
+    {
+        "id": "atr_trailing_momentum",
+        "name": "ATR Trailing Momentum",
+        "description": "Trend-riding strategy with ATR-based trailing stop. Enters on EMA alignment + ADX strength, rides the trend with a dynamic trailing stop. Best on trending pairs (H1/H4/D1).",
+        "category": "trend",
+        "indicators": [
+            {"id": "ema_20", "type": "EMA", "params": {"period": 20, "source": "close"}, "overlay": True},
+            {"id": "ema_50", "type": "EMA", "params": {"period": 50, "source": "close"}, "overlay": True},
+            {"id": "adx_14", "type": "ADX", "params": {"period": 14}, "overlay": False},
+            {"id": "atr_14", "type": "ATR", "params": {"period": 14}, "overlay": False},
+        ],
+        "entry_rules": [
+            {"left": "ema_20", "operator": "crosses_above", "right": "ema_50", "logic": "AND", "direction": "long"},
+            {"left": "adx_14", "operator": ">", "right": "25", "logic": "AND", "direction": "long"},
+            {"left": "ema_20", "operator": "crosses_below", "right": "ema_50", "logic": "AND", "direction": "short"},
+            {"left": "adx_14", "operator": ">", "right": "25", "logic": "AND", "direction": "short"},
+        ],
+        "exit_rules": [],
+        "risk_params": {
+            "stop_loss_type": "atr_multiple",
+            "stop_loss_value": 2.0,
+            "take_profit_type": "atr_multiple",
+            "take_profit_value": 4.0,
+            "position_size_type": "percent_risk",
+            "position_size_value": 1.0,
+            "trailing_stop": True,
+            "trailing_stop_type": "atr_multiple",
+            "trailing_stop_value": 2.5,
+            "max_positions": 1,
+        },
+        "filters": {
+            "min_adx": 20,
+        },
+    },
+]
+
+
 def _safe_json(val, fallback):
     """Ensure JSON column value is deserialized (SQLite stores JSON as TEXT)."""
     if val is None:
@@ -55,6 +220,43 @@ def _to_response(s: Strategy) -> dict:
         "created_at": s.created_at.isoformat() if s.created_at else "",
         "updated_at": s.updated_at.isoformat() if s.updated_at else "",
     }
+
+
+@router.get("/templates")
+def get_strategy_templates():
+    """Return pre-built strategy templates that users can use as starting points."""
+    return JSONResponse(content={"templates": STRATEGY_TEMPLATES})
+
+
+@router.post("/templates/{template_id}/use", status_code=status.HTTP_201_CREATED)
+def use_strategy_template(
+    template_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new strategy from a template. User can then customize it."""
+    template = next((t for t in STRATEGY_TEMPLATES if t["id"] == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found")
+
+    import copy as _copy
+
+    strat = Strategy(
+        name=template["name"],
+        description=template["description"],
+        indicators=_copy.deepcopy(template["indicators"]),
+        entry_rules=_copy.deepcopy(template["entry_rules"]),
+        exit_rules=_copy.deepcopy(template["exit_rules"]),
+        risk_params=_copy.deepcopy(template["risk_params"]),
+        filters=_copy.deepcopy(template["filters"]),
+        strategy_type="builder",
+        is_system=False,
+        creator_id=current_user.id,
+    )
+    db.add(strat)
+    db.commit()
+    db.refresh(strat)
+    return JSONResponse(content=_to_response(strat), status_code=201)
 
 
 @router.get("")

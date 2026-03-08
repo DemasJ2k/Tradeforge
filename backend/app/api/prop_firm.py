@@ -335,6 +335,49 @@ def delete_account(
     return {"message": f"Account '{account.account_name}' deleted"}
 
 
+# ── Pre-Trade Validation ──
+
+@router.post("/{account_id}/validate-trade")
+def validate_trade(
+    account_id: int,
+    payload: PropFirmTradeCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate a potential trade against prop firm rules WITHOUT executing it.
+
+    Returns detailed validation result including:
+    - Whether the trade is allowed
+    - Projected daily loss and drawdown if SL is hit
+    - Remaining daily loss budget and drawdown budget
+    - Open position count vs limit
+    """
+    from app.services.prop_firm.validator import validate_pre_trade_detailed
+
+    account = db.query(PropFirmAccount).filter(
+        PropFirmAccount.id == account_id,
+        PropFirmAccount.user_id == user.id,
+        PropFirmAccount.deleted_at.is_(None),
+    ).first()
+    if not account:
+        raise HTTPException(404, "Account not found")
+
+    _reset_daily_pnl_if_needed(account)
+    db.commit()
+
+    result = validate_pre_trade_detailed(
+        account=account,
+        symbol=payload.symbol,
+        direction=payload.direction,
+        entry_price=payload.entry_price,
+        stop_loss=payload.stop_loss,
+        lot_size=payload.lot_size,
+        db=db,
+    )
+    return result
+
+
 # ── Trade Recording ──
 
 @router.post("/{account_id}/trades", response_model=PropFirmTradeResponse)
