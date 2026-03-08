@@ -38,6 +38,7 @@ from app.api import webhook as webhook_api
 from app.api import telegram_webhook as telegram_webhook_api
 from app.api import prop_firm as prop_firm_api
 from app.api import ctrader_oauth as ctrader_oauth_api
+from app.api import broadcast as broadcast_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -58,6 +59,7 @@ from app.models import optimization_phase as optimization_phase_model  # noqa: F
 from app.models import news as news_model  # noqa: F401
 from app.models import watchlist as watchlist_model  # noqa: F401
 from app.models import prop_firm as prop_firm_model  # noqa: F401
+from app.models import broadcast as broadcast_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -424,6 +426,7 @@ app.include_router(webhook_api.router)
 app.include_router(telegram_webhook_api.router)
 app.include_router(prop_firm_api.router)
 app.include_router(ctrader_oauth_api.router)
+app.include_router(broadcast_api.router)
 
 
 def _seed_admin_user():

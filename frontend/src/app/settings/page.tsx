@@ -590,6 +590,18 @@ export default function SettingsPage() {
   const [deleteMsg, setDeleteMsg] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Admin: broadcast
+  const [bcCategory, setBcCategory] = useState('update');
+  const [bcSubject, setBcSubject] = useState('');
+  const [bcBody, setBcBody] = useState('');
+  const [bcSending, setBcSending] = useState(false);
+  const [bcMsg, setBcMsg] = useState('');
+  const [bcHistory, setBcHistory] = useState<Array<{
+    id: number; category: string; subject: string; body: string;
+    recipients_count: number; email_sent: number; telegram_sent: number;
+    admin_username: string; created_at: string;
+  }>>([]);
+
   // Broker credentials state
   const [brokerCreds, setBrokerCreds] = useState<BrokerCredentialMasked[]>([]);
   const [brokerForms, setBrokerForms] = useState<Record<string, Record<string, string>>>({});
@@ -628,6 +640,10 @@ export default function SettingsPage() {
       fetch(`${API}/api/auth/admin/users`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setRegisteredUsers(d); })
+        .catch(() => {});
+      fetch(`${API}/api/admin/broadcasts`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setBcHistory(d); })
         .catch(() => {});
     }
   }, [user, tab]);
@@ -1342,6 +1358,108 @@ export default function SettingsPage() {
                       </div>
                     );
                   })()}
+
+                  {/* ─── Admin: Broadcast Announcements ─── */}
+                  <hr className="border-card-border" />
+                  <h3 className="text-md font-semibold text-foreground">Broadcast Announcements (Admin)</h3>
+                  <p className="text-xs text-muted-foreground -mt-2">Send announcements to all users via email and Telegram.</p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Field label="Category">
+                      <select value={bcCategory} onChange={e => setBcCategory(e.target.value)} className={selectCls}>
+                        <option value="update">🚀 Update</option>
+                        <option value="maintenance">🔧 Maintenance</option>
+                        <option value="new_feature">✨ New Feature</option>
+                        <option value="alert">⚠️ Alert</option>
+                      </select>
+                    </Field>
+                    <Field label="Subject">
+                      <input type="text" value={bcSubject} onChange={e => setBcSubject(e.target.value)} className={inputCls} placeholder="Announcement subject..." />
+                    </Field>
+                  </div>
+                  <Field label="Message">
+                    <textarea
+                      value={bcBody}
+                      onChange={e => setBcBody(e.target.value)}
+                      className={`${inputCls} min-h-[100px] resize-y`}
+                      placeholder="Write your announcement message here..."
+                      rows={4}
+                    />
+                  </Field>
+                  <button
+                    onClick={async () => {
+                      if (!bcSubject.trim() || !bcBody.trim()) { setBcMsg('Subject and message are required'); return; }
+                      setBcSending(true); setBcMsg('');
+                      try {
+                        const r = await fetch(`${API}/api/admin/broadcast`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                          body: JSON.stringify({ category: bcCategory, subject: bcSubject.trim(), body: bcBody.trim() }),
+                        });
+                        const d = await r.json();
+                        if (r.ok) {
+                          setBcMsg(`Broadcast sent to ${d.recipients_count} user(s) — ${d.email_sent} email(s), ${d.telegram_sent} Telegram`);
+                          setBcSubject(''); setBcBody('');
+                          // Refresh history
+                          const hr = await fetch(`${API}/api/admin/broadcasts`, { headers: authHeaders() });
+                          const hd = await hr.json();
+                          if (Array.isArray(hd)) setBcHistory(hd);
+                        } else {
+                          setBcMsg(d.detail || 'Failed to send broadcast');
+                        }
+                      } catch { setBcMsg('Failed to send broadcast'); }
+                      setBcSending(false);
+                    }}
+                    disabled={bcSending || !bcSubject.trim() || !bcBody.trim()}
+                    className={btnPrimary}
+                  >
+                    {bcSending ? 'Sending...' : 'Send Broadcast'}
+                  </button>
+                  {bcMsg && (
+                    <p className={`text-sm ${bcMsg.includes('sent to') ? 'text-green-400' : 'text-red-400'}`}>{bcMsg}</p>
+                  )}
+
+                  {/* Broadcast History */}
+                  {bcHistory.length > 0 && (
+                    <>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">Broadcast History</h4>
+                      <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-card-border text-muted-foreground text-xs">
+                              <th className="text-left px-3 py-2">Category</th>
+                              <th className="text-left px-3 py-2">Subject</th>
+                              <th className="text-right px-3 py-2">Recipients</th>
+                              <th className="text-right px-3 py-2">Email</th>
+                              <th className="text-right px-3 py-2">Telegram</th>
+                              <th className="text-left px-3 py-2">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bcHistory.map(b => (
+                              <tr key={b.id} className="border-b border-card-border/50">
+                                <td className="px-3 py-2">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                    b.category === 'alert' ? 'bg-red-900/30 text-red-400' :
+                                    b.category === 'maintenance' ? 'bg-yellow-900/30 text-yellow-400' :
+                                    b.category === 'new_feature' ? 'bg-green-900/30 text-green-400' :
+                                    'bg-blue-900/30 text-blue-400'
+                                  }`}>
+                                    {b.category === 'new_feature' ? 'New Feature' : b.category.charAt(0).toUpperCase() + b.category.slice(1)}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-foreground max-w-[200px] truncate" title={b.subject}>{b.subject}</td>
+                                <td className="px-3 py-2 text-right text-foreground">{b.recipients_count}</td>
+                                <td className="px-3 py-2 text-right text-muted-foreground">{b.email_sent}</td>
+                                <td className="px-3 py-2 text-right text-muted-foreground">{b.telegram_sent}</td>
+                                <td className="px-3 py-2 text-muted-foreground text-xs">{new Date(b.created_at).toLocaleDateString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
 
                   {/* Manual Reset Modal */}
                   {manualResetUserId !== null && (
