@@ -927,6 +927,9 @@ function DetailView({
         </Card>
       </div>
 
+      {/* Pre-Trade Validation */}
+      {d.status === "active" && <PreTradeCheck accountId={d.id} />}
+
       {/* Stats + Rules Row */}
       <div className="grid md:grid-cols-2 gap-3">
         {/* Trading Stats */}
@@ -1101,6 +1104,176 @@ function StatRow({
 }
 
 // ── Equity Chart (simple SVG) ──
+
+// ── Pre-Trade Check ──
+
+interface PreTradeResult {
+  allowed: boolean;
+  reason: string | null;
+  projected_daily_loss: number;
+  projected_drawdown: number;
+  remaining_daily_budget: number;
+  remaining_drawdown_budget: number;
+  daily_limit: number;
+  drawdown_limit: number;
+  open_positions: number;
+  max_positions: number | null;
+}
+
+function PreTradeCheck({ accountId }: { accountId: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const [symbol, setSymbol] = useState("XAUUSD");
+  const [direction, setDirection] = useState("BUY");
+  const [entryPrice, setEntryPrice] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
+  const [lotSize, setLotSize] = useState("0.1");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<PreTradeResult | null>(null);
+  const [error, setError] = useState("");
+
+  const handleCheck = async () => {
+    if (!entryPrice || !lotSize) return;
+    setChecking(true);
+    setError("");
+    setResult(null);
+    try {
+      const data = await api.post<PreTradeResult>(`/api/prop-firms/${accountId}/validate-trade`, {
+        symbol,
+        direction,
+        entry_price: parseFloat(entryPrice),
+        stop_loss: stopLoss ? parseFloat(stopLoss) : null,
+        lot_size: parseFloat(lotSize),
+      });
+      setResult(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Validation failed");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (!expanded) {
+    return (
+      <Card className="bg-card-bg border-card-border">
+        <CardContent className="p-4">
+          <button
+            onClick={() => setExpanded(true)}
+            className="w-full flex items-center justify-between text-sm"
+          >
+            <span className="flex items-center gap-2 font-semibold text-foreground">
+              <Shield className="h-4 w-4 text-accent" />
+              Pre-Trade Check
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Simulate a trade to check rules →
+            </span>
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-card-bg border-card-border">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Shield className="h-4 w-4 text-accent" />
+            Pre-Trade Check
+          </h3>
+          <button onClick={() => { setExpanded(false); setResult(null); }} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-1">Symbol</label>
+            <Input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="h-8 text-xs bg-card-bg border-card-border" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-1">Direction</label>
+            <Select value={direction} onValueChange={setDirection}>
+              <SelectTrigger className="h-8 text-xs bg-card-bg border-card-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BUY">BUY</SelectItem>
+                <SelectItem value="SELL">SELL</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-1">Entry Price</label>
+            <Input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} placeholder="2345.50" className="h-8 text-xs bg-card-bg border-card-border" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-1">Stop Loss</label>
+            <Input type="number" step="any" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Optional" className="h-8 text-xs bg-card-bg border-card-border" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-1">Lot Size</label>
+            <Input type="number" step="0.01" value={lotSize} onChange={(e) => setLotSize(e.target.value)} className="h-8 text-xs bg-card-bg border-card-border" />
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" onClick={handleCheck} disabled={checking || !entryPrice || !lotSize} className="bg-accent text-black hover:bg-accent/90 text-xs h-8 gap-1.5">
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shield className="h-3.5 w-3.5" />}
+            {checking ? "Checking..." : "Validate Trade"}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mt-3 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-400">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className={`mt-3 rounded-lg border px-4 py-3 ${result.allowed ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/10 border-red-500/30"}`}>
+            <div className="flex items-center gap-2 mb-2">
+              {result.allowed ? (
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs gap-1">
+                  <Shield className="h-3 w-3" /> Trade Allowed
+                </Badge>
+              ) : (
+                <Badge className="bg-red-500/20 text-red-400 border-0 text-xs gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Trade Blocked
+                </Badge>
+              )}
+              {result.reason && (
+                <span className="text-xs text-red-400">{result.reason}</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Daily Budget</span>
+                <span className="text-foreground font-medium">${result.remaining_daily_budget.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">DD Budget</span>
+                <span className="text-foreground font-medium">${result.remaining_drawdown_budget.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Proj. Daily Loss</span>
+                <span className={result.projected_daily_loss > result.daily_limit * 0.8 ? "text-red-400 font-medium" : "text-foreground font-medium"}>
+                  ${result.projected_daily_loss.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Open Positions</span>
+                <span className="text-foreground font-medium">
+                  {result.open_positions}{result.max_positions ? ` / ${result.max_positions}` : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function EquityChart({ curve }: { curve: EquityCurve }) {
   const history = curve.history;

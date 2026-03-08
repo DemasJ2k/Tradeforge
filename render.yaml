@@ -35,6 +35,23 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      # Market data APIs
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: ALPHAVANTAGE_API_KEY
+        sync: false
+      - key: DATABENTO_API_KEY
+        sync: false
+      # cTrader OAuth2
+      - key: CTRADER_CLIENT_ID
+        sync: false
+      - key: CTRADER_CLIENT_SECRET
+        sync: false
+      # MT5 Remote Bridge
+      - key: MT5_BRIDGE_URL
+        sync: false
+      - key: MT5_BRIDGE_KEY
+        sync: false
 
   # Frontend (Next.js)
   - type: web

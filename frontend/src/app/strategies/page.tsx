@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type } from "lucide-react";
+import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type, ArrowRight, Zap, Activity, BarChart2 } from "lucide-react";
 import { ListSkeleton } from "@/components/Skeletons";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -53,6 +53,12 @@ export default function StrategiesPage() {
   // Rename state
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Templates state
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<Array<{id: string; name: string; description: string; category: string; indicators: unknown[]; entry_rules: unknown[]; exit_rules: unknown[]; risk_params: Record<string, unknown>; filters: Record<string, unknown>}>>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateUsing, setTemplateUsing] = useState<string | null>(null);
 
   // Search filter
   const [search, setSearch] = useState("");
@@ -288,6 +294,41 @@ export default function StrategiesPage() {
     setSettingsStrategy(null);
   };
 
+  /* ── Strategy Templates ───────────────────────────── */
+  const openTemplates = async () => {
+    setShowTemplates(true);
+    if (templates.length > 0) return;
+    setTemplatesLoading(true);
+    try {
+      const data = await api.get<{ templates: typeof templates }>("/api/strategies/templates");
+      setTemplates(data.templates);
+    } catch {
+      /* ignore */
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
+  const useTemplate = async (templateId: string) => {
+    setTemplateUsing(templateId);
+    try {
+      await api.post(`/api/strategies/templates/${templateId}/use`, {});
+      setShowTemplates(false);
+      await load();
+    } catch {
+      /* ignore */
+    } finally {
+      setTemplateUsing(null);
+    }
+  };
+
+  const CATEGORY_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
+    trend: { icon: <TrendingUp className="h-5 w-5" />, color: "text-emerald-400" },
+    mean_reversion: { icon: <Activity className="h-5 w-5" />, color: "text-blue-400" },
+    breakout: { icon: <Zap className="h-5 w-5" />, color: "text-amber-400" },
+    momentum: { icon: <BarChart2 className="h-5 w-5" />, color: "text-purple-400" },
+  };
+
   // Get all existing folder names for move-to menu
   const allFolderNames = useMemo(() => {
     const names = new Set<string>();
@@ -472,6 +513,10 @@ export default function StrategiesPage() {
             <Upload className="h-3.5 w-3.5" />
             Upload
           </Button>
+          <Button variant="outline" size="sm" onClick={openTemplates} className="gap-1.5 text-xs border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10">
+            <Layers className="h-3.5 w-3.5" />
+            Templates
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowAiModal(true)} className="gap-1.5 text-xs border-accent/40 text-accent hover:bg-accent/10">
             <Sparkles className="h-3.5 w-3.5" />
             AI Import
@@ -530,6 +575,9 @@ export default function StrategiesPage() {
               No strategies yet. Create your first trading strategy or import one with AI.
             </p>
             <div className="flex items-center justify-center gap-3">
+              <Button variant="outline" onClick={openTemplates} className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10">
+                Use Template
+              </Button>
               <Button variant="outline" onClick={() => setShowAiModal(true)} className="border-accent/40 text-accent hover:bg-accent/10">
                 AI Import
               </Button>
@@ -758,6 +806,88 @@ export default function StrategiesPage() {
                 {uploadLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : "Upload Strategy"}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Templates Modal ─────────────────────────────── */}
+      {showTemplates && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl border border-card-border bg-card-bg p-6 shadow-2xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Layers className="h-5 w-5 text-emerald-400" />
+                Strategy Templates
+              </h3>
+              <button onClick={() => setShowTemplates(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-muted-foreground mb-5">
+              Start with a pre-built strategy template. Each includes indicators, entry/exit rules, and risk parameters — fully editable after creation.
+            </p>
+
+            {templatesLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-accent" />
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {templates.map((t) => {
+                  const cat = CATEGORY_ICONS[t.category] || { icon: <BarChart3 className="h-5 w-5" />, color: "text-muted-foreground" };
+                  return (
+                    <div
+                      key={t.id}
+                      className="rounded-xl border border-card-border bg-card-bg/50 p-4 hover:border-accent/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cat.color}>{cat.icon}</span>
+                            <h4 className="font-semibold text-sm">{t.name}</h4>
+                            <Badge className="bg-muted/30 text-muted-foreground border-0 text-[10px] capitalize">
+                              {t.category.replace("_", " ")}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{t.description}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            <Badge className="bg-accent/10 text-accent border-0 text-[10px]">
+                              {t.indicators.length} indicator{t.indicators.length !== 1 ? "s" : ""}
+                            </Badge>
+                            <Badge className="bg-success/10 text-success border-0 text-[10px]">
+                              {t.entry_rules.length} entry rule{t.entry_rules.length !== 1 ? "s" : ""}
+                            </Badge>
+                            {t.exit_rules.length > 0 && (
+                              <Badge className="bg-danger/10 text-danger border-0 text-[10px]">
+                                {t.exit_rules.length} exit rule{t.exit_rules.length !== 1 ? "s" : ""}
+                              </Badge>
+                            )}
+                            {Boolean((t.risk_params as Record<string, unknown>).trailing_stop) && (
+                              <Badge className="bg-amber-500/10 text-amber-400 border-0 text-[10px]">
+                                Trailing Stop
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => useTemplate(t.id)}
+                          disabled={templateUsing === t.id}
+                          className="bg-accent text-black hover:bg-accent/90 gap-1.5 shrink-0 text-xs"
+                        >
+                          {templateUsing === t.id ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Adding...</>
+                          ) : (
+                            <><ArrowRight className="h-3.5 w-3.5" /> Use</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
