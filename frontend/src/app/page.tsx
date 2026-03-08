@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap } from "lucide-react";
+import WelcomeWizard, { useOnboarding } from "@/components/Onboarding/WelcomeWizard";
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface DashboardData {
@@ -97,6 +98,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { accounts: brokerAccounts, activeBroker, setActiveBroker } = useBrokerAccounts();
+  const { showOnboarding, dismissOnboarding } = useOnboarding();
 
   const load = useCallback(async () => {
     try {
@@ -122,8 +124,15 @@ export default function Dashboard() {
 
   const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos } = data;
 
+  // Show onboarding for new users (no user strategies and no data sources)
+  const isNewUser = s.user === 0 && data.data_sources === 0;
+
   return (
     <div className="space-y-6">
+      {/* Onboarding wizard for first-time users */}
+      {showOnboarding && isNewUser && (
+        <WelcomeWizard onDismiss={dismissOnboarding} />
+      )}
       {/* ── Header Row ─────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">Dashboard</h2>
