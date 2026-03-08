@@ -9,10 +9,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap } from "lucide-react";
+import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock } from "lucide-react";
 import WelcomeWizard, { useOnboarding } from "@/components/Onboarding/WelcomeWizard";
 
 /* ─── Types ─────────────────────────────────────────────── */
+interface ActivityItem {
+  id: number;
+  agent_id: number;
+  agent_name: string;
+  level: string;
+  message: string;
+  created_at: string;
+}
+
 interface DashboardData {
   account: {
     balance: number;
@@ -97,13 +106,20 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const { accounts: brokerAccounts, activeBroker, setActiveBroker } = useBrokerAccounts();
   const { showOnboarding, dismissOnboarding } = useOnboarding();
 
   const load = useCallback(async () => {
     try {
-      const d = await api.get<DashboardData>("/api/dashboard/summary");
+      const [d, act] = await Promise.all([
+        api.get<DashboardData>("/api/dashboard/summary"),
+        api.get<{ items: ActivityItem[] }>("/api/dashboard/activity").catch(() => ({ items: [] })),
+      ]);
       setData(d);
+      setActivity(act.items || []);
+      setLastRefresh(new Date());
       setError("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -206,6 +222,48 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* ── Live P&L Ticker Bar ──────────────────────────── */}
+      {(a.broker_connected || t.trades > 0) && (
+        <div className="flex items-center gap-4 rounded-lg border border-card-border bg-card-bg/50 px-4 py-2 text-xs overflow-x-auto">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Radio className="h-3 w-3 text-success animate-pulse" />
+            <span className="text-muted-foreground font-medium">LIVE</span>
+          </div>
+          <div className="h-4 w-px bg-card-border" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-muted-foreground">Balance</span>
+            <span className="font-semibold text-foreground">${fmt(a.balance)}</span>
+          </div>
+          <div className="h-4 w-px bg-card-border" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-muted-foreground">Today</span>
+            <span className={`font-semibold ${pnlColor(t.pnl)}`}>
+              {t.pnl >= 0 ? "+" : ""}${fmt(t.pnl)}
+            </span>
+            {t.trades > 0 && (
+              <span className="text-muted-foreground/60">({t.trades} trades)</span>
+            )}
+          </div>
+          {a.unrealized_pnl !== 0 && (
+            <>
+              <div className="h-4 w-px bg-card-border" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-muted-foreground">Open P&L</span>
+                <span className={`font-semibold ${pnlColor(a.unrealized_pnl)}`}>
+                  {a.unrealized_pnl >= 0 ? "+" : ""}${fmt(a.unrealized_pnl)}
+                </span>
+              </div>
+            </>
+          )}
+          <div className="ml-auto flex items-center gap-1.5 shrink-0 text-muted-foreground/50">
+            <Clock className="h-3 w-3" />
+            <span>
+              {lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          </div>
         </div>
       )}
 
@@ -433,6 +491,45 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Agent Activity Feed ───────────────────────── */}
+      {activity.length > 0 && (
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Radio className="h-3 w-3 text-accent" />
+                Agent Activity
+              </h3>
+              <span className="text-[10px] text-muted-foreground/50">
+                Auto-refreshes every 15s
+              </span>
+            </div>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {activity.slice(0, 10).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted/10 transition-colors"
+                >
+                  <span className={`mt-0.5 inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                    item.level === "error" ? "bg-danger" :
+                    item.level === "warning" ? "bg-yellow-500" :
+                    item.level === "trade" ? "bg-success" :
+                    "bg-accent/50"
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-foreground">{item.agent_name}</span>
+                    <span className="text-muted-foreground ml-1.5">{item.message}</span>
+                  </div>
+                  <span className="text-muted-foreground/50 text-[10px] shrink-0">
+                    {item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <ChatHelpers />
     </div>

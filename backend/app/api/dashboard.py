@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.strategy import Strategy
 from app.models.backtest import Backtest
 from app.models.trade import Trade
-from app.models.agent import TradingAgent, AgentTrade
+from app.models.agent import TradingAgent, AgentTrade, AgentLog
 from app.models.datasource import DataSource
 from app.services.broker.manager import broker_manager
 from app.core.websocket import manager as ws_manager
@@ -251,4 +251,47 @@ async def dashboard_summary(
         "data_sources": total_datasources,
         "pending_confirmations": pending_confirmations,
         "ws_clients": ws_clients,
+    }
+
+
+@router.get("/activity")
+def get_recent_activity(
+    limit: int = 15,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return recent agent activity logs across all agents for the activity feed."""
+    agent_ids = [
+        a.id for a in
+        db.query(TradingAgent.id).filter(TradingAgent.created_by == user.id).all()
+    ]
+    if not agent_ids:
+        return {"items": []}
+
+    logs = (
+        db.query(AgentLog)
+        .filter(AgentLog.agent_id.in_(agent_ids))
+        .order_by(AgentLog.created_at.desc())
+        .limit(min(limit, 50))
+        .all()
+    )
+
+    # Build agent name map
+    agents = db.query(TradingAgent.id, TradingAgent.name).filter(
+        TradingAgent.id.in_(agent_ids)
+    ).all()
+    name_map = {a.id: a.name for a in agents}
+
+    return {
+        "items": [
+            {
+                "id": log.id,
+                "agent_id": log.agent_id,
+                "agent_name": name_map.get(log.agent_id, "Unknown"),
+                "level": log.level,
+                "message": log.message,
+                "created_at": log.created_at.isoformat() if log.created_at else "",
+            }
+            for log in logs
+        ]
     }
