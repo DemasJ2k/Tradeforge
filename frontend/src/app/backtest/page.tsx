@@ -21,6 +21,8 @@ import type {
 } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket } from 'lucide-react';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { PageSkeleton } from '@/components/Skeletons';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import BacktestConfigDialog from './components/BacktestConfigDialog';
 import BacktestDashboard from './components/BacktestDashboard';
@@ -35,6 +37,7 @@ export default function BacktestPage() {
   const [history, setHistory] = useState<BacktestListItem[]>([]);
   const [result, setResult] = useState<BacktestResponse | null>(null);
   const [compareResult, setCompareResult] = useState<BacktestResponse | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(!isMobile);
@@ -54,7 +57,7 @@ export default function BacktestPage() {
       setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
       const histItems = Array.isArray(hist) ? hist : (hist as { items: BacktestListItem[] }).items || [];
       setHistory(histItems);
-    });
+    }).finally(() => setInitialLoading(false));
   }, []);
 
   const refreshHistory = useCallback(async () => {
@@ -220,7 +223,10 @@ export default function BacktestPage() {
   const hasSettings = activeStrategy && activeStrategy.settings_schema?.length > 0;
   const isProfitable = result && result.stats?.net_profit > 0;
 
+  if (initialLoading) return <PageSkeleton />;
+
   return (
+    <ErrorBoundary section="Backtesting">
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-card-border bg-card-bg/50">
@@ -360,5 +366,6 @@ export default function BacktestPage() {
         />
       )}
     </div>
+    </ErrorBoundary>
   );
 }

@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type } from "lucide-react";
+import { ListSkeleton } from "@/components/Skeletons";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -24,6 +26,7 @@ const STALE_STRATEGY_NAMES = [
 
 export default function StrategiesPage() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [editing, setEditing] = useState<Strategy | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -102,6 +105,8 @@ export default function StrategiesPage() {
       setStrategies(data.items);
     } catch {
       /* ignore */
+    } finally {
+      setInitialLoading(false);
     }
   }, []);
 
@@ -444,7 +449,17 @@ export default function StrategiesPage() {
     );
   }
 
+  if (initialLoading) {
+    return (
+      <div className="space-y-5">
+        <div className="h-7 w-32 rounded bg-card-border/30 animate-pulse" />
+        <ListSkeleton count={6} />
+      </div>
+    );
+  }
+
   return (
+    <ErrorBoundary section="Strategies">
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg sm:text-xl font-semibold">Strategies</h2>
@@ -847,5 +862,6 @@ export default function StrategiesPage() {
         </div>
       )}
     </div>
+    </ErrorBoundary>
   );
 }

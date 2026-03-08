@@ -8,6 +8,7 @@ import ChatSidebar from "@/components/ChatSidebar";
 import CommandPalette from "@/components/CommandPalette";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import PageErrorBoundary from "@/components/PageErrorBoundary";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -47,7 +48,7 @@ export default function RootLayout({
               <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                 <TopBar />
                 <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-                  {children}
+                  <PageErrorBoundary>{children}</PageErrorBoundary>
                 </main>
               </div>
             </div>
