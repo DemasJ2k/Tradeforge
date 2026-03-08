@@ -315,12 +315,19 @@ app = FastAPI(
     version=settings.APP_VERSION,
 )
 
-# CORS — allow all origins.  Auth is via JWT Bearer tokens (not cookies),
-# so wildcard CORS is safe and avoids env-var misconfiguration on Render.
+# CORS — explicit origins to avoid browser issues with wildcard + credentials.
+_cors_origins = [
+    settings.FRONTEND_URL,                   # local dev: http://localhost:3000
+    "https://flowrexalgo.onrender.com",      # production frontend
+    "https://tradeforge.onrender.com",       # legacy frontend URL
+]
+if settings.DEBUG:
+    _cors_origins += ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,   # JWT Bearer tokens don't need credentials
     allow_methods=["*"],
     allow_headers=["*"],
 )
