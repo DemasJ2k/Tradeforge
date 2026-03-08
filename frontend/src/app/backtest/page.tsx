@@ -88,11 +88,60 @@ export default function BacktestPage() {
     setCompareResult(null);
     setLastRunConfig(config);
     try {
-      const res = await api.post<BacktestResponse>('/api/backtest/run-v3', {
+      const res = await api.post<{ id: number; status: string }>('/api/backtest/run-v3', {
         ...config,
         engine_version: 'v3',
       });
-      setResult(res);
+
+      // Async backtest: poll until completed or failed
+      if (res.status === 'running' && res.id) {
+        const btId = res.id;
+        const poll = async () => {
+          for (let i = 0; i < 600; i++) {  // max ~30 min (3s intervals)
+            await new Promise(r => setTimeout(r, 3000));
+            try {
+              const check = await api.get<{
+                id: number; strategy_id: number; status: string;
+                results: Record<string, unknown>;
+              }>(`/api/backtest/${btId}`);
+              if (check.status === 'completed') {
+                const r = check.results || {};
+                setResult({
+                  id: check.id,
+                  strategy_id: check.strategy_id,
+                  datasource_id: (r.datasource_id as number) || config.datasource_id,
+                  status: 'completed',
+                  stats: (r.stats || r.v2_stats || {}) as BacktestResponse['stats'],
+                  trades: (r.trades || []) as BacktestResponse['trades'],
+                  equity_curve: (r.equity_curve || []) as number[],
+                  engine_version: (r.engine_version as string) || 'v3',
+                  v2_stats: r.v2_stats as Record<string, unknown>,
+                  tearsheet: r.tearsheet as Record<string, unknown>,
+                  elapsed_seconds: r.elapsed_seconds as number,
+                });
+                refreshHistory();
+                setLoading(false);
+                return;
+              }
+              if (check.status === 'failed') {
+                const errMsg = (check.results as Record<string, unknown>)?.error;
+                alert(`Backtest failed: ${errMsg || 'Unknown error'}`);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // network blip — keep polling
+            }
+          }
+          alert('Backtest timed out after 30 minutes');
+          setLoading(false);
+        };
+        poll();
+        return;  // don't setLoading(false) yet — poll() handles it
+      }
+
+      // Fallback: if backend returned completed synchronously
+      setResult(res as unknown as BacktestResponse);
       refreshHistory();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Backtest failed';

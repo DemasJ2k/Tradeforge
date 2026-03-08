@@ -535,16 +535,13 @@ def run_backtest(
     raise HTTPException(status_code=500, detail="Unexpected routing error")
 
 
-@router.post("/run-v3", response_model=BacktestResponse)
+@router.post("/run-v3")
 def run_backtest_v3(
     payload: BacktestRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Run a backtest using the V3 engine (hybrid architecture)."""
-    from app.services.backtest_engine.v3_adapter import (
-        run_v3_backtest, v3_result_to_api_response,
-    )
+    """Run a backtest using the V3 engine (async — returns immediately, polls for results)."""
 
     # Load strategy (user-owned OR system)
     strategy = (
@@ -568,11 +565,7 @@ def run_backtest_v3(
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    bars = _load_bars_from_csv(str(file_path))
-    if len(bars) < 50:
-        raise HTTPException(status_code=400, detail=f"Not enough data: {len(bars)} bars (need 50+)")
-
-    # Build strategy config
+    # Build strategy config before spawning thread (read DB objects while session alive)
     filters = strategy.filters or {}
     strategy_config = {
         "indicators": strategy.indicators or [],
@@ -580,7 +573,6 @@ def run_backtest_v3(
         "exit_rules": strategy.exit_rules or [],
         "risk_params": strategy.risk_params or {},
         "filters": filters,
-        # Python strategy support — pass type, file path, and settings
         "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
         "file_path": getattr(strategy, "file_path", "") or "",
         "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
@@ -600,28 +592,7 @@ def run_backtest_v3(
 
     symbol = datasource.symbol or "ASSET"
 
-    try:
-        v3_result = run_v3_backtest(
-            bars=bars,
-            strategy_config=strategy_config,
-            symbol=symbol,
-            initial_balance=payload.initial_balance,
-            spread_points=payload.spread_points,
-            commission_per_lot=payload.commission_per_lot,
-            point_value=payload.point_value,
-            slippage_pct=payload.slippage_pct,
-            margin_rate=payload.margin_rate,
-            tick_mode=getattr(payload, "tick_mode", "ohlc_pessimistic"),
-            latency_ms=getattr(payload, "latency_ms", 0.0),
-        )
-    except Exception as e:
-        logger.exception("V3 backtest failed")
-        raise HTTPException(status_code=500, detail=f"V3 engine error: {str(e)}")
-
-    elapsed = v3_result.execution_time_ms / 1000
-    api_data = v3_result_to_api_response(v3_result, payload.initial_balance, len(bars))
-
-    # Save to DB
+    # Create DB record immediately with status "running"
     bt = Backtest(
         strategy_id=strategy.id,
         symbol=symbol,
@@ -629,46 +600,106 @@ def run_backtest_v3(
         date_from=datasource.date_from or "",
         date_to=datasource.date_to or "",
         initial_balance=payload.initial_balance,
-        status="completed",
-        results={
-            "engine_version": "v3",
-            "stats": api_data["stats"],
-            "v2_stats": api_data["v2_stats"],
-            "trades": api_data["trades"],
-            "equity_curve": api_data["equity_curve"],
-            "elapsed_seconds": round(elapsed, 3),
-        },
+        status="running",
+        results={"engine_version": "v3"},
         creator_id=current_user.id,
     )
     db.add(bt)
     db.commit()
     db.refresh(bt)
 
-    stats = BacktestStats(**api_data["stats"])
-    trades_out = [TradeResult(**t) for t in api_data["trades"]]
+    bt_id = bt.id
+    user_id = current_user.id
+    csv_path = str(file_path)
 
-    _fire_notification(
-        current_user.id,
-        f"Backtest completed – {symbol}",
-        f"V3 backtest on {symbol} finished in {round(elapsed, 1)}s. "
-        f"Net P/L: {api_data['stats'].get('net_profit', 0):.2f}, "
-        f"Win rate: {api_data['stats'].get('win_rate', 0):.1f}%, "
-        f"Trades: {api_data['stats'].get('total_trades', 0)}",
-    )
+    # Capture all payload values for the background thread
+    _payload = {
+        "initial_balance": payload.initial_balance,
+        "spread_points": payload.spread_points,
+        "commission_per_lot": payload.commission_per_lot,
+        "point_value": payload.point_value,
+        "slippage_pct": payload.slippage_pct,
+        "margin_rate": payload.margin_rate,
+        "tick_mode": getattr(payload, "tick_mode", "ohlc_pessimistic"),
+        "latency_ms": getattr(payload, "latency_ms", 0.0),
+        "datasource_id": payload.datasource_id,
+    }
 
-    return BacktestResponse(
-        id=bt.id,
-        strategy_id=bt.strategy_id,
-        datasource_id=payload.datasource_id,
-        status="completed",
-        stats=stats,
-        trades=trades_out,
-        equity_curve=api_data["equity_curve"],
-        engine_version="v3",
-        v2_stats=api_data["v2_stats"],
-        tearsheet=api_data["tearsheet"],
-        elapsed_seconds=api_data["elapsed_seconds"],
-    )
+    def _run_in_background():
+        """Execute backtest in background thread with its own DB session."""
+        _db = SessionLocal()
+        try:
+            from app.services.backtest_engine.v3_adapter import (
+                run_v3_backtest, v3_result_to_api_response,
+            )
+
+            bars = _load_bars_from_csv(csv_path)
+            if len(bars) < 50:
+                raise ValueError(f"Not enough data: {len(bars)} bars")
+
+            v3_result = run_v3_backtest(
+                bars=bars,
+                strategy_config=strategy_config,
+                symbol=symbol,
+                initial_balance=_payload["initial_balance"],
+                spread_points=_payload["spread_points"],
+                commission_per_lot=_payload["commission_per_lot"],
+                point_value=_payload["point_value"],
+                slippage_pct=_payload["slippage_pct"],
+                margin_rate=_payload["margin_rate"],
+                tick_mode=_payload["tick_mode"],
+                latency_ms=_payload["latency_ms"],
+            )
+
+            elapsed = v3_result.execution_time_ms / 1000
+            api_data = v3_result_to_api_response(v3_result, _payload["initial_balance"], len(bars))
+
+            # Update DB record with results
+            _bt = _db.query(Backtest).filter(Backtest.id == bt_id).first()
+            if _bt:
+                _bt.status = "completed"
+                _bt.results = {
+                    "engine_version": "v3",
+                    "stats": api_data["stats"],
+                    "v2_stats": api_data["v2_stats"],
+                    "trades": api_data["trades"],
+                    "equity_curve": api_data["equity_curve"],
+                    "tearsheet": api_data.get("tearsheet"),
+                    "elapsed_seconds": round(elapsed, 3),
+                    "datasource_id": _payload["datasource_id"],
+                }
+                _db.commit()
+
+            _fire_notification(
+                user_id,
+                f"Backtest completed – {symbol}",
+                f"V3 backtest on {symbol} finished in {round(elapsed, 1)}s. "
+                f"Net P/L: {api_data['stats'].get('net_profit', 0):.2f}, "
+                f"Win rate: {api_data['stats'].get('win_rate', 0):.1f}%, "
+                f"Trades: {api_data['stats'].get('total_trades', 0)}",
+            )
+        except Exception as exc:
+            logger.exception("Background V3 backtest failed for bt_id=%s", bt_id)
+            _bt = _db.query(Backtest).filter(Backtest.id == bt_id).first()
+            if _bt:
+                _bt.status = "failed"
+                _bt.results = {
+                    "engine_version": "v3",
+                    "error": str(exc),
+                }
+                _db.commit()
+        finally:
+            _db.close()
+
+    threading.Thread(target=_run_in_background, daemon=True).start()
+
+    # Return immediately with "running" status
+    return {
+        "id": bt_id,
+        "strategy_id": bt.strategy_id,
+        "datasource_id": payload.datasource_id,
+        "status": "running",
+    }
 
 
 @router.post("/walk-forward-v3", response_model=WalkForwardResponse)
