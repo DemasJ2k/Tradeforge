@@ -598,6 +598,10 @@ export default function SettingsPage() {
   const [brokerMsg, setBrokerMsg] = useState<Record<string, string>>({});
   const [expandedBroker, setExpandedBroker] = useState<string | null>(null);
 
+  // cTrader OAuth state
+  const [ctraderAccounts, setCtraderAccounts] = useState<{ account_id: string; is_live: boolean; broker_title: string }[]>([]);
+  const [ctraderStep, setCtraderStep] = useState<'idle' | 'picking'>('idle');
+
   // Notification channel state
   const [notifTesting, setNotifTesting] = useState<string | null>(null); // 'email' | 'telegram' | null
   const [notifTestResult, setNotifTestResult] = useState<Record<string, string>>({});
@@ -720,6 +724,119 @@ export default function SettingsPage() {
       setBrokerBusy(p => ({ ...p, [broker]: false }));
     }
   };
+
+  // cTrader OAuth: start OAuth flow
+  const startCtraderOAuth = async () => {
+    setBrokerBusy(p => ({ ...p, ctrader: true }));
+    setBrokerMsg(p => ({ ...p, ctrader: '' }));
+    try {
+      const r = await fetch(`${API}/api/broker/ctrader/auth-url`, { headers: authHeaders() });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Failed to get auth URL');
+      const d = await r.json();
+      window.location.href = d.auth_url;
+    } catch (e: unknown) {
+      setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'OAuth failed' }));
+      setBrokerBusy(p => ({ ...p, ctrader: false }));
+    }
+  };
+
+  // cTrader OAuth: fetch accounts after OAuth tokens are saved
+  const fetchCtraderAccounts = async () => {
+    setBrokerBusy(p => ({ ...p, ctrader: true }));
+    setBrokerMsg(p => ({ ...p, ctrader: '' }));
+    try {
+      // Get access token from stored credentials
+      const credsR = await fetch(`${API}/api/settings/broker-credentials`, { headers: authHeaders() });
+      if (!credsR.ok) throw new Error('Failed to load credentials');
+      const credsD = await credsR.json();
+      const ctraderCred = (credsD.brokers || []).find((b: BrokerCredentialMasked) => b.broker === 'ctrader');
+      if (!ctraderCred?.configured) throw new Error('cTrader not configured — complete OAuth first');
+
+      // Use the connect endpoint to get accounts via stored token
+      const r = await fetch(`${API}/api/settings/broker-credentials/ctrader/connect`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (r.ok) {
+        setBrokerMsg(p => ({ ...p, ctrader: 'Connected!' }));
+        await loadBrokerCreds();
+        setCtraderStep('idle');
+      } else {
+        throw new Error((await r.json()).detail || 'Connection failed');
+      }
+    } catch (e: unknown) {
+      setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'Failed to fetch accounts' }));
+    } finally {
+      setBrokerBusy(p => ({ ...p, ctrader: false }));
+    }
+  };
+
+  // cTrader: save selected account
+  const saveCtraderAccount = async (accountId: string, isLive: boolean) => {
+    setBrokerBusy(p => ({ ...p, ctrader: true }));
+    try {
+      const r = await fetch(`${API}/api/broker/ctrader/save-account?account_id=${accountId}&is_live=${isLive}`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Failed to save account');
+      setBrokerMsg(p => ({ ...p, ctrader: 'Account saved! Connecting...' }));
+      setCtraderStep('idle');
+      setCtraderAccounts([]);
+      // Now connect with the saved account
+      await connectBroker('ctrader');
+      await loadBrokerCreds();
+    } catch (e: unknown) {
+      setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'Save failed' }));
+    } finally {
+      setBrokerBusy(p => ({ ...p, ctrader: false }));
+    }
+  };
+
+  // Handle cTrader OAuth callback (check URL params on mount)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ctraderCode = params.get('ctrader_code');
+    if (ctraderCode) {
+      // Exchange the code for tokens
+      (async () => {
+        setBrokerBusy(p => ({ ...p, ctrader: true }));
+        setBrokerMsg(p => ({ ...p, ctrader: 'Completing OAuth...' }));
+        setTab('trading');
+        setExpandedBroker('ctrader');
+        try {
+          const r = await fetch(`${API}/api/broker/ctrader/callback?code=${encodeURIComponent(ctraderCode)}`, {
+            headers: authHeaders(),
+          });
+          if (!r.ok) throw new Error((await r.json()).detail || 'Token exchange failed');
+          setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Fetching accounts...' }));
+          await loadBrokerCreds();
+
+          // Fetch trading accounts
+          const d = await r.json();
+          const acctR = await fetch(`${API}/api/broker/ctrader/accounts?access_token=${encodeURIComponent(d.access_token)}`, {
+            headers: authHeaders(),
+          });
+          if (acctR.ok) {
+            const acctD = await acctR.json();
+            setCtraderAccounts(acctD.accounts || []);
+            setCtraderStep('picking');
+            setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
+          } else {
+            setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Click Connect to link your account.' }));
+          }
+        } catch (e: unknown) {
+          setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'OAuth failed' }));
+        } finally {
+          setBrokerBusy(p => ({ ...p, ctrader: false }));
+          // Clean up URL
+          const url = new URL(window.location.href);
+          url.searchParams.delete('ctrader_code');
+          window.history.replaceState({}, '', url.toString());
+        }
+      })();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save settings
   const save = useCallback(async (patch: Record<string, unknown>) => {
@@ -1603,6 +1720,7 @@ export default function SettingsPage() {
                   <option value="coinbase">Coinbase</option>
                   <option value="mt5">MetaTrader 5</option>
                   <option value="tradovate">Tradovate</option>
+                  <option value="ctrader">cTrader</option>
                 </select>
               </Field>
 
@@ -1759,6 +1877,123 @@ export default function SettingsPage() {
                     </div>
                   );
                 })}
+
+                {/* ─── cTrader (OAuth-based) ─── */}
+                {(() => {
+                  const cred = brokerCreds.find(c => c.broker === 'ctrader');
+                  const isExpanded = expandedBroker === 'ctrader';
+                  const busy = brokerBusy['ctrader'];
+                  const msg = brokerMsg['ctrader'];
+
+                  return (
+                    <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
+                      <button onClick={() => setExpandedBroker(isExpanded ? null : 'ctrader')}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-card-bg transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-foreground">cTrader</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">OAuth</span>
+                          {cred?.connected && (
+                            <span className="flex items-center gap-1 text-xs text-green-400">
+                              <span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> Connected
+                            </span>
+                          )}
+                          {cred?.configured && !cred?.connected && (
+                            <span className="text-xs text-yellow-400">Configured</span>
+                          )}
+                          {!cred?.configured && (
+                            <span className="text-xs text-muted-foreground/60">Not configured</span>
+                          )}
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 space-y-3 border-t border-card-border pt-3">
+                          <p className="text-xs text-muted-foreground/80">
+                            cTrader uses OAuth to securely connect your trading account. Click the button below to authorize FlowrexAlgo with your cTrader ID.
+                          </p>
+
+                          {/* Account picker (shown after OAuth callback) */}
+                          {ctraderStep === 'picking' && ctraderAccounts.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-foreground">Select a trading account:</p>
+                              {ctraderAccounts.map(acct => (
+                                <button
+                                  key={acct.account_id}
+                                  onClick={() => saveCtraderAccount(acct.account_id, acct.is_live)}
+                                  disabled={busy}
+                                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-card-border hover:border-blue-500 hover:bg-card-bg transition-colors text-left"
+                                >
+                                  <div>
+                                    <span className="text-sm font-medium text-foreground">Account {acct.account_id}</span>
+                                    {acct.broker_title && (
+                                      <span className="text-xs text-muted-foreground ml-2">({acct.broker_title})</span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${acct.is_live ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                    {acct.is_live ? 'LIVE' : 'DEMO'}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {cred?.configured && (
+                            <p className="text-xs text-muted-foreground/60">
+                              Stored fields: {cred.fields_set.join(', ')}
+                            </p>
+                          )}
+
+                          {/* Auto-connect toggle */}
+                          <Toggle
+                            value={brokerAutoConnect['ctrader'] ?? false}
+                            onChange={v => setBrokerAutoConnect(p => ({ ...p, ctrader: v }))}
+                            label="Auto-connect on app startup"
+                          />
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2 flex-wrap pt-1">
+                            {!cred?.configured && (
+                              <button onClick={startCtraderOAuth} disabled={busy} className={btnPrimary}>
+                                {busy ? 'Redirecting...' : 'Connect with cTrader ID'}
+                              </button>
+                            )}
+                            {cred?.configured && !cred.connected && (
+                              <>
+                                <button onClick={() => connectBroker('ctrader')} disabled={busy} className={btnPrimary}>
+                                  {busy ? 'Connecting...' : 'Connect'}
+                                </button>
+                                <button onClick={startCtraderOAuth} disabled={busy} className={btnSecondary}>
+                                  Re-authorize
+                                </button>
+                              </>
+                            )}
+                            {cred?.connected && (
+                              <>
+                                <span className="px-3 py-2 text-sm text-green-400 font-medium">Connected</span>
+                                <button onClick={startCtraderOAuth} disabled={busy} className={btnSecondary}>
+                                  Re-authorize
+                                </button>
+                              </>
+                            )}
+                            {cred?.configured && (
+                              <button onClick={() => deleteBrokerCreds('ctrader')} disabled={busy} className={btnDanger}>
+                                Remove
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Status message */}
+                          {msg && (
+                            <p className={`text-xs ${msg.includes('saved') || msg.includes('Connected') || msg.includes('complete') || msg.includes('removed') || msg.includes('Select') ? 'text-green-400' : msg.includes('OAuth') || msg.includes('Fetching') || msg.includes('Connecting') ? 'text-blue-400' : 'text-red-400'}`}>
+                              {msg}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
