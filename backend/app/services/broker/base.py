@@ -143,6 +143,20 @@ class PriceTick:
 
 
 @dataclass
+class ClosedTrade:
+    """A closed/filled trade from broker history."""
+    trade_id: str
+    symbol: str
+    side: str             # "BUY" or "SELL"
+    size: float
+    entry_price: float
+    exit_price: float
+    pnl: float
+    close_time: datetime
+    open_time: Optional[datetime] = None
+
+
+@dataclass
 class BrokerEvent:
     """Generic event from broker stream (price update, order fill, etc.)"""
     event_type: str           # "price", "order_fill", "order_cancel", "heartbeat"
@@ -242,6 +256,18 @@ class BrokerAdapter(ABC):
     async def get_price(self, symbol: str) -> PriceTick:
         """Get current bid/ask for a symbol."""
         ...
+
+    # ── Trade History ────────────────────────────────────
+
+    async def get_closed_trades(
+        self,
+        since: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> list[ClosedTrade]:
+        """Get closed trades from broker. Override in adapters that support it.
+        Default returns empty list (safe for adapters that don't implement it).
+        """
+        return []
 
     # ── Streaming ──────────────────────────────────────
 

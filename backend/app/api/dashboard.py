@@ -117,7 +117,16 @@ async def dashboard_summary(
         for a in agents
     ]
 
-    # ── Today's trades (agent trades + broker trades) ─────
+    # ── Today's trades — PRIMARY: broker closed trades, FALLBACK: agent DB ──
+    broker_closed_trades = []
+    if default_adapter:
+        try:
+            broker_closed_trades = await default_adapter.get_closed_trades(
+                since=today_start, limit=200
+            )
+        except Exception:
+            pass
+
     today_agent_trades = (
         db.query(AgentTrade)
         .join(TradingAgent)
@@ -129,13 +138,38 @@ async def dashboard_summary(
         .all()
     )
 
-    today_pnl = sum(t.pnl or 0 for t in today_agent_trades)
-    today_wins = sum(1 for t in today_agent_trades if (t.pnl or 0) > 0)
-    today_losses = sum(1 for t in today_agent_trades if (t.pnl or 0) < 0)
-    today_total = len(today_agent_trades)
+    # Use broker trades when available (real data), fall back to agent DB
+    if broker_closed_trades:
+        today_pnl = sum(t.pnl for t in broker_closed_trades)
+        today_wins = sum(1 for t in broker_closed_trades if t.pnl > 0)
+        today_losses = sum(1 for t in broker_closed_trades if t.pnl < 0)
+        today_total = len(broker_closed_trades)
+    else:
+        today_pnl = sum(t.pnl or 0 for t in today_agent_trades)
+        today_wins = sum(1 for t in today_agent_trades if (t.pnl or 0) > 0)
+        today_losses = sum(1 for t in today_agent_trades if (t.pnl or 0) < 0)
+        today_total = len(today_agent_trades)
     today_win_rate = (today_wins / today_total * 100) if today_total > 0 else 0
 
-    # ── Recent trades (last 10) ───────────────────────────
+    # ── Recent trades (last 10) — broker trades + agent trades ────
+    recent_trades = []
+
+    # Add broker closed trades (real broker history)
+    for bt in broker_closed_trades[:10]:
+        recent_trades.append({
+            "id": bt.trade_id,
+            "source": "broker",
+            "symbol": bt.symbol,
+            "direction": bt.side,
+            "entry_price": bt.entry_price if bt.entry_price else None,
+            "exit_price": bt.exit_price,
+            "lot_size": bt.size,
+            "pnl": bt.pnl,
+            "status": "closed",
+            "time": bt.close_time.isoformat() if bt.close_time else "",
+        })
+
+    # Add agent trades from DB
     recent_agent_trades = (
         db.query(AgentTrade)
         .join(TradingAgent)
@@ -147,15 +181,6 @@ async def dashboard_summary(
         .limit(10)
         .all()
     )
-
-    recent_broker_trades = (
-        db.query(Trade)
-        .order_by(Trade.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    recent_trades = []
     for t in recent_agent_trades:
         recent_trades.append({
             "id": t.id,
@@ -169,23 +194,17 @@ async def dashboard_summary(
             "status": t.status,
             "time": t.created_at.isoformat() if t.created_at else "",
         })
-    for t in recent_broker_trades:
-        recent_trades.append({
-            "id": t.id,
-            "source": "broker",
-            "symbol": t.symbol,
-            "direction": t.direction,
-            "entry_price": t.entry_price,
-            "exit_price": t.exit_price,
-            "lot_size": t.lot_size,
-            "pnl": t.pnl or 0,
-            "status": t.status,
-            "time": t.created_at.isoformat() if t.created_at else "",
-        })
 
-    # Sort combined by time desc, take 10
-    recent_trades.sort(key=lambda x: x["time"], reverse=True)
-    recent_trades = recent_trades[:10]
+    # Deduplicate by trade_id, sort by time desc, take 10
+    seen_ids = set()
+    unique_trades = []
+    for tr in recent_trades:
+        tid = str(tr["id"])
+        if tid not in seen_ids:
+            seen_ids.add(tid)
+            unique_trades.append(tr)
+    unique_trades.sort(key=lambda x: x["time"], reverse=True)
+    recent_trades = unique_trades[:10]
 
     # ── Equity curve (last 30 days, daily aggregated) ─────
     thirty_days_ago = now - timedelta(days=30)

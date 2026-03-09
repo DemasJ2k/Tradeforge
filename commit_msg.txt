@@ -1,13 +1,9 @@
-Wire up remaining gaps: alerts, Monte Carlo, walk-forward, auto-execute
+Fix dashboard to show real broker trade data (P&L, trades)
 
-- Fix Daily P&L: fetch from /api/dashboard/summary instead of hardcoding 0
-- Add prop_firm_account_id to agent schemas, create/update API, and frontend dropdown
-- Add auto-execute broker logic: confirmed trades now place orders via broker adapter
-- Add Monte Carlo simulation button + percentile visualization in backtest Analysis tab
-- Add Walk-Forward validation tab in backtest dashboard with per-fold breakdown
-- Add Telegram disconnect button in settings notification tab
-- Create AlertChecker background service: checks watchlist price alerts every 15s
-- Register alert_checker in startup/shutdown lifecycle
-- Clean up old uploaded CSV data files
+- Add ClosedTrade dataclass and get_closed_trades() to BrokerAdapter base
+- Implement get_closed_trades() in Oanda adapter via /transactions API
+- Dashboard API now fetches broker closed trades as primary data source
+- Broker account cards show Today P&L with trade count
+- Recent trades section includes broker closed trades with deduplication
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

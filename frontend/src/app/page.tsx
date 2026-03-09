@@ -260,6 +260,16 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Today P&L</span>
+                  <span className={`font-medium ${acct.todayPnl > 0 ? "text-green-400" : acct.todayPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                    {acct.todayPnl >= 0 ? "+" : ""}
+                    {acct.todayPnl.toFixed(2)}
+                    {acct.todayTrades > 0 && (
+                      <span className="text-muted-foreground/60 ml-1">({acct.todayTrades})</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Open P&L</span>
                   <span className={`font-medium ${acct.unrealizedPnl > 0 ? "text-green-400" : acct.unrealizedPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}>
                     {acct.unrealizedPnl >= 0 ? "+" : ""}

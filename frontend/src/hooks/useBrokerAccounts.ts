@@ -11,6 +11,7 @@ export interface BrokerAccount {
   equity: number;
   unrealizedPnl: number;
   todayPnl: number;
+  todayTrades: number;
 }
 
 interface BrokerAccountsStore {
@@ -37,7 +38,7 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
           brokers: Record<string, { connected: boolean; broker_name?: string }>;
           default_broker: string | null;
         }>("/api/broker/status"),
-        api.get<{ today: { pnl: number } }>("/api/dashboard/summary").catch(() => ({ today: { pnl: 0 } })),
+        api.get<{ today: { pnl: number; trades: number } }>("/api/dashboard/summary").catch(() => ({ today: { pnl: 0, trades: 0 } })),
       ]);
 
       const connectedBrokers = Object.entries(status.brokers)
@@ -50,6 +51,7 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
       }
 
       const todayPnl = dashboard.today?.pnl ?? 0;
+      const todayTrades = dashboard.today?.trades ?? 0;
 
       // Fetch account info for each connected broker in parallel
       const accountResults = await Promise.allSettled(
@@ -73,6 +75,7 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
               equity: info.equity ?? 0,
               unrealizedPnl: info.unrealized_pnl ?? 0,
               todayPnl: connectedBrokers.length === 1 ? todayPnl : todayPnl / connectedBrokers.length,
+              todayTrades: connectedBrokers.length === 1 ? todayTrades : Math.round(todayTrades / connectedBrokers.length),
             }))
         )
       );

@@ -634,6 +634,56 @@ class OandaAdapter(BrokerAdapter):
             spread=ask - bid,
         )
 
+    # ── Trade History ────────────────────────────────────
+
+    async def get_closed_trades(
+        self,
+        since: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> list["ClosedTrade"]:
+        """Fetch closed trades from Oanda transaction history."""
+        from .base import ClosedTrade
+
+        params: dict = {"type": "ORDER_FILL", "count": min(limit, 500)}
+        if since:
+            params["from"] = since.strftime("%Y-%m-%dT%H:%M:%S.000000000Z")
+
+        try:
+            data = await self._get(
+                f"/accounts/{self._account_id}/transactions",
+                params=params,
+            )
+        except Exception as e:
+            logger.warning("Failed to get Oanda trade history: %s", e)
+            return []
+
+        closed_trades = []
+        for txn in data.get("transactions", []):
+            # Only care about ORDER_FILL with realized P&L (closing trades)
+            if txn.get("type") != "ORDER_FILL":
+                continue
+            pnl = float(txn.get("pl", 0))
+            if pnl == 0:
+                continue  # opening trades have pl=0
+
+            instrument = txn.get("instrument", "")
+            units = float(txn.get("units", 0))
+            price = float(txn.get("price", 0))
+            close_time = self._parse_ts(txn.get("time", ""))
+
+            closed_trades.append(ClosedTrade(
+                trade_id=str(txn.get("id", "")),
+                symbol=instrument,
+                side="BUY" if units > 0 else "SELL",
+                size=abs(units),
+                entry_price=0,  # Oanda doesn't include entry price in fill txn
+                exit_price=price,
+                pnl=pnl,
+                close_time=close_time,
+            ))
+
+        return closed_trades
+
     # ── Streaming ──────────────────────────────────────
 
     async def stream_prices(self, symbols: list[str]) -> AsyncGenerator[PriceTick, None]:
