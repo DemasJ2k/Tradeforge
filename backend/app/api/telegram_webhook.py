@@ -176,7 +176,41 @@ async def telegram_webhook(request: Request):
             "/start — Link your Telegram to FlowrexAlgo\n"
             "/status — Check connection status\n"
             "/disconnect — Unlink your account\n"
-            "/help — Show this help message",
+            "/help — Show this help message\n\n"
+            "💬 You can also send any message to chat with the AI assistant!\n"
+            "Try: <i>\"list my strategies\"</i> or <i>\"what's my best backtest?\"</i>",
         )
+
+    # ── Free-form AI chat ──
+    elif text and not text.startswith("/"):
+        if not tg_username:
+            await _reply(int(chat_id), "Send /start first to link your account.")
+            return {"ok": True}
+
+        db = SessionLocal()
+        try:
+            user_settings = db.query(UserSettings).filter(
+                func.lower(UserSettings.notification_telegram_username) == tg_username
+            ).first()
+
+            if not user_settings or user_settings.notification_telegram_chat_id != chat_id:
+                await _reply(int(chat_id), "Not linked. Send /start first.")
+                return {"ok": True}
+
+            # Route to copilot engine
+            from app.services.llm.telegram_handler import handle_telegram_message
+            response_text = await handle_telegram_message(
+                db=db,
+                user_id=user_settings.user_id,
+                message=text,
+                chat_id=chat_id,
+            )
+            if response_text:
+                await _reply(int(chat_id), response_text)
+        except Exception as exc:
+            logger.error("Telegram AI chat error: %s", exc)
+            await _reply(int(chat_id), "Something went wrong processing your request. Try again.")
+        finally:
+            db.close()
 
     return {"ok": True}

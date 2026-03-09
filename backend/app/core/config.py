@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Telegram (app-level bot token)
     TELEGRAM_BOT_TOKEN: str = ""
 
+    # Platform-level LLM key (all users get AI access without their own key)
+    PLATFORM_LLM_API_KEY: str = ""
+
     # Databento (CME futures data — requires subscription)
     DATABENTO_API_KEY: str = ""
 

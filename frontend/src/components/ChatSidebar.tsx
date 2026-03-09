@@ -285,7 +285,7 @@ export default function ChatSidebar() {
   const [editValue, setEditValue] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState("");
-  const [copilotMode, setCopilotMode] = useState(false);
+  const [copilotMode, setCopilotMode] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     confirm_id: string; name: string; description?: string; args: Record<string, unknown>;
   } | null>(null);
@@ -333,6 +333,18 @@ export default function ChatSidebar() {
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  // Ctrl+K keyboard shortcut to toggle chat
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const loadConversation = useCallback(async (id: number) => {
     try {

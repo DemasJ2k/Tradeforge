@@ -96,8 +96,22 @@ class LLMService:
     @staticmethod
     def _get_settings(db: Session, user_id: int) -> UserSettings:
         s = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-        if not s or not s.llm_provider or not s.llm_api_key_encrypted:
-            raise ValueError("LLM not configured. Please set your API key in Settings → AI / LLM.")
+        if not s:
+            s = UserSettings(user_id=user_id)
+
+        # If user doesn't have their own key, fall back to platform-level key
+        if not s.llm_api_key_encrypted:
+            from app.core.config import settings as app_settings
+            from app.core.encryption import encrypt_value
+            platform_key = app_settings.PLATFORM_LLM_API_KEY
+            if not platform_key:
+                raise ValueError("LLM not configured. Please set your API key in Settings → AI / LLM.")
+            s.llm_api_key_encrypted = encrypt_value(platform_key)
+            s.llm_provider = s.llm_provider or "claude"
+            s.llm_model = s.llm_model or "claude-sonnet-4-20250514"
+
+        if not s.llm_provider:
+            s.llm_provider = "claude"
         return s
 
     @staticmethod

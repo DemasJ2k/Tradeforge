@@ -883,6 +883,112 @@ async def create_agent(
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  UTILITY TOOLS — Broker status, task queue, comparisons
+# ══════════════════════════════════════════════════════════════════════
+
+
+@copilot_tool(
+    name="get_broker_status",
+    description="Check which brokers are currently connected and which is the default.",
+    parameters={"type": "object", "properties": {}, "required": []},
+    permission="auto",
+    category="broker",
+)
+async def get_broker_status(db: Session, user_id: int, **kwargs) -> dict:
+    from app.services.broker.manager import broker_manager
+    adapters_info = {}
+    for name in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(name)
+        connected = await adapter.is_connected() if adapter else False
+        adapters_info[name] = {"connected": connected}
+    return {
+        "default_broker": broker_manager.default_broker,
+        "active_brokers": adapters_info,
+        "count": len(adapters_info),
+    }
+
+
+@copilot_tool(
+    name="compare_backtests",
+    description="Compare two or more backtest results side by side. Provide a list of backtest run IDs.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "backtest_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "List of backtest run IDs to compare",
+            },
+        },
+        "required": ["backtest_ids"],
+    },
+    permission="auto",
+    category="backtests",
+)
+async def compare_backtests(db: Session, user_id: int, backtest_ids: list = None, **kwargs) -> dict:
+    from app.models.backtest import BacktestRun
+    if not backtest_ids or len(backtest_ids) < 2:
+        return {"error": "Provide at least 2 backtest IDs to compare."}
+
+    results = []
+    for bid in backtest_ids[:5]:  # max 5
+        run = db.query(BacktestRun).filter(
+            BacktestRun.id == bid, BacktestRun.user_id == user_id
+        ).first()
+        if not run:
+            results.append({"id": bid, "error": "Not found"})
+            continue
+        stats = run.results or {}
+        results.append({
+            "id": run.id,
+            "strategy": run.strategy_name or f"Strategy #{run.strategy_id}",
+            "symbol": stats.get("symbol", ""),
+            "timeframe": stats.get("timeframe", ""),
+            "net_profit": stats.get("net_profit", 0),
+            "profit_factor": stats.get("profit_factor", 0),
+            "win_rate": stats.get("win_rate", 0),
+            "total_trades": stats.get("total_trades", 0),
+            "max_drawdown_pct": stats.get("max_drawdown_pct", 0),
+            "sharpe_ratio": stats.get("sharpe_ratio", 0),
+        })
+    return {"comparison": results, "count": len(results)}
+
+
+@copilot_tool(
+    name="check_task_status",
+    description="Check the status of a background task (backtest, walk-forward, etc.) by its task ID.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "description": "The task ID returned when the job was started"},
+        },
+        "required": ["task_id"],
+    },
+    permission="auto",
+    category="general",
+)
+async def check_task_status_tool(db: Session, user_id: int, task_id: str = "", **kwargs) -> dict:
+    from app.services.task_queue import get_task_status
+    result = get_task_status(task_id)
+    if not result:
+        return {"error": f"Task '{task_id}' not found. It may have expired."}
+    return result
+
+
+@copilot_tool(
+    name="list_tasks",
+    description="List recent background tasks (backtests, walk-forwards) for the current user.",
+    parameters={"type": "object", "properties": {}, "required": []},
+    permission="auto",
+    category="general",
+)
+async def list_tasks_tool(db: Session, user_id: int, **kwargs) -> dict:
+    from app.services.task_queue import get_user_tasks
+    tasks = get_user_tasks(user_id)
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  BLOCKED TOOLS — Registered for LLM awareness but never executed
 # ══════════════════════════════════════════════════════════════════════
 
