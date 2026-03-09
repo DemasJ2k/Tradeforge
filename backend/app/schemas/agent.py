@@ -77,6 +77,12 @@ class AgentTradeResponse(BaseModel):
     signal_reason: Optional[str] = None
     signal_confidence: float
     broker_ticket: Optional[str] = None
+    filled_price: Optional[float] = None
+    filled_time: Optional[str] = None
+    broker_trade_id: Optional[str] = None
+    broker_pnl: Optional[float] = None
+    broker_name: Optional[str] = None
+    exit_reason: Optional[str] = None
     opened_at: str
     closed_at: Optional[str] = None
     created_at: str

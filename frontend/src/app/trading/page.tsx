@@ -1614,6 +1614,7 @@ export default function TradingPage() {
                       <th className="pb-2 text-right font-medium">Entry</th>
                       <th className="pb-2 text-right font-medium">Exit</th>
                       <th className="pb-2 text-right font-medium">P&L</th>
+                      <th className="pb-2 text-left font-medium">Exit Reason</th>
                       <th className="pb-2 text-left font-medium">Status</th>
                       <th className="pb-2 text-left font-medium">Time</th>
                     </tr>
@@ -1625,7 +1626,7 @@ export default function TradingPage() {
                         className="border-b border-card-border/50 last:border-0"
                       >
                         <td className="py-2">{t.symbol}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{(t as any).broker ?? "—"}</td>
+                        <td className="py-2 text-xs text-muted-foreground">{t.broker ?? "—"}</td>
                         <td className="py-2">
                           <span
                             className={
@@ -1638,8 +1639,8 @@ export default function TradingPage() {
                           </span>
                         </td>
                         <td className="py-2 text-right">{t.lot_size}</td>
-                        <td className="py-2 text-right text-xs text-muted-foreground">{(t as any).stop_loss ?? "—"}</td>
-                        <td className="py-2 text-right text-xs text-muted-foreground">{(t as any).take_profit ?? "—"}</td>
+                        <td className="py-2 text-right text-xs text-muted-foreground">{t.stop_loss != null ? fmt(t.stop_loss, 2) : "—"}</td>
+                        <td className="py-2 text-right text-xs text-muted-foreground">{t.take_profit != null ? fmt(t.take_profit, 2) : "—"}</td>
                         <td className="py-2 text-right">
                           {t.entry_price ? fmt(t.entry_price, 5) : "—"}
                         </td>
@@ -1647,7 +1648,17 @@ export default function TradingPage() {
                           {t.exit_price ? fmt(t.exit_price, 5) : "—"}
                         </td>
                         <td className={`py-2 text-right ${pnlColor(t.pnl ?? 0)}`}>
-                          {t.pnl != null ? fmt(t.pnl) : "—"}
+                          {t.pnl != null ? `$${fmt(t.pnl)}` : "—"}
+                        </td>
+                        <td className="py-2">
+                          {t.exit_reason ? (
+                            <Badge variant="secondary" className={`text-[10px] uppercase ${
+                              t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
+                              : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
+                              : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
+                              : "bg-cyan-500/15 text-cyan-400"
+                            }`}>{t.exit_reason}</Badge>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="py-2">
                           <Badge variant="secondary"

@@ -647,6 +647,9 @@ export interface TradeHistory {
   pnl: number | null;
   commission: number;
   status: string;
+  stop_loss: number | null;
+  take_profit: number | null;
+  exit_reason: string | null;
 }
 
 // --- Knowledge Base Types ---
@@ -898,6 +901,12 @@ export interface AgentTrade {
   signal_reason: string | null;
   signal_confidence: number;
   broker_ticket: string | null;
+  filled_price: number | null;
+  filled_time: string | null;
+  broker_trade_id: string | null;
+  broker_pnl: number | null;
+  broker_name: string | null;
+  exit_reason: string | null;
   opened_at: string;
   closed_at: string | null;
   created_at: string;

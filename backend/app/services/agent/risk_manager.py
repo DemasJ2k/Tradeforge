@@ -71,6 +71,7 @@ class RiskManager:
         balance: float,
         entry_price: float,
         stop_loss: float,
+        broker_name: str = "oanda",
     ) -> RiskDecision:
         """
         Evaluate whether a proposed trade should be allowed.
@@ -106,13 +107,10 @@ class RiskManager:
 
         # Calculate lot size
         if self.position_size_type == "percent_risk" and stop_loss and entry_price:
+            from app.services.agent.instrument_specs import calc_lot_size
             risk_amount = balance * (self.position_size_value / 100.0)
             sl_distance = abs(entry_price - stop_loss)
-            if sl_distance > 0:
-                lot_size = risk_amount / (sl_distance * 100)  # simplified
-                lot_size = max(0.01, round(lot_size, 2))
-            else:
-                lot_size = 0.01
+            lot_size = calc_lot_size(symbol, risk_amount, sl_distance, broker_name)
         else:
             lot_size = self.position_size_value
 

@@ -105,6 +105,14 @@ class AgentTrade(Base):
 
     broker_ticket = Column(String(50))     # Broker order ID when executed
 
+    # Broker fill data (actual execution details)
+    filled_price = Column(Float, nullable=True)          # Actual broker fill price
+    filled_time = Column(DateTime, nullable=True)        # When broker filled
+    broker_trade_id = Column(String(100), nullable=True) # Broker-side trade ID
+    broker_pnl = Column(Float, nullable=True)            # Broker-reported P&L
+    broker_name = Column(String(50), nullable=True)      # Which broker executed
+    exit_reason = Column(String(30), nullable=True)      # SL, TP1, TP2, Reversal, Reconciled
+
     opened_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = Column(DateTime)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

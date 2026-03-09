@@ -110,11 +110,12 @@ class PaperTradeMonitor:
 
         db = SessionLocal()
         try:
-            # Get all open trades (paper or executed, not yet closed)
+            # Get only PAPER trades — broker-executed trades are managed
+            # by the broker's own SL/TP and synced by BrokerReconciler.
             open_trades = (
                 db.query(AgentTrade)
                 .filter(
-                    AgentTrade.status.in_(["paper", "executed"]),
+                    AgentTrade.status == "paper",
                     AgentTrade.closed_at.is_(None),
                 )
                 .all()
@@ -192,22 +193,27 @@ class PaperTradeMonitor:
         return None
 
     def _calc_pnl(self, trade: AgentTrade, exit_price: float) -> float:
-        """Calculate PnL for a trade."""
-        if not trade.entry_price or not exit_price:
+        """Calculate dollar PnL for a trade using instrument specs."""
+        from app.services.agent.instrument_specs import calc_pnl_dollars
+        entry = getattr(trade, "filled_price", None) or trade.entry_price
+        if not entry or not exit_price:
             return 0.0
-        if trade.direction == "BUY":
-            return exit_price - trade.entry_price
-        else:
-            return trade.entry_price - exit_price
+        broker = getattr(trade, "broker_name", None) or "oanda"
+        return calc_pnl_dollars(
+            trade.symbol, trade.direction, entry, exit_price,
+            trade.lot_size, broker,
+        )
 
     def _close_trade(self, db, trade: AgentTrade, exit_result: dict):
         """Close a trade with the exit result."""
         trade.exit_price = exit_result["exit_price"]
         trade.pnl = exit_result["pnl"]
-        if trade.entry_price and trade.entry_price != 0:
-            trade.pnl_pct = (exit_result["pnl"] / trade.entry_price) * 100
+        if trade.entry_price and trade.entry_price != 0 and trade.lot_size:
+            # pnl_pct relative to risk amount (entry × lot)
+            trade.pnl_pct = (exit_result["pnl"] / (trade.entry_price * trade.lot_size)) * 100
         trade.status = "closed"
         trade.closed_at = datetime.now(timezone.utc)
+        trade.exit_reason = exit_result.get("exit_reason", "")
 
         # Log the exit
         log = AgentLog(
@@ -263,6 +269,9 @@ class PaperTradeMonitor:
         """
         Close open trades for an agent due to a reversal signal.
         Called by AgentRunner when an opposite-direction signal fires.
+
+        Paper trades: close immediately in DB.
+        Executed trades: close on broker first, then mark closed.
         """
         db = SessionLocal()
         try:
@@ -277,7 +286,20 @@ class PaperTradeMonitor:
                 .all()
             )
 
+            closed_count = 0
             for trade in open_trades:
+                # For executed (broker) trades, try to close on broker first
+                if trade.status == "executed" and trade.broker_name:
+                    try:
+                        import asyncio
+                        from app.services.broker.manager import broker_manager
+                        adapter = broker_manager.get_adapter(trade.broker_name)
+                        if adapter:
+                            loop = asyncio.get_event_loop()
+                            loop.create_task(adapter.close_position(trade.symbol))
+                    except Exception as e:
+                        logger.warning("[TradeMonitor] Could not close broker position for reversal: %s", e)
+
                 pnl = self._calc_pnl(trade, current_price)
                 exit_result = {
                     "exit_price": current_price,
@@ -285,9 +307,10 @@ class PaperTradeMonitor:
                     "pnl": pnl,
                 }
                 self._close_trade(db, trade, exit_result)
+                closed_count += 1
 
             db.commit()
-            return len(open_trades)
+            return closed_count
 
         except Exception as e:
             logger.error("[TradeMonitor] Error closing reversal trades: %s", e)

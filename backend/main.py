@@ -46,6 +46,7 @@ from app.services.market.broker_stream import broker_price_streamer
 from app.services.market.databento_stream import databento_streamer
 from app.services.agent.engine import algo_engine
 from app.services.agent.trade_monitor import trade_monitor
+from app.services.agent.broker_reconciler import broker_reconciler
 from app.services.alert_checker import alert_checker
 
 # Import all models so Base.metadata knows about them
@@ -134,6 +135,13 @@ def _run_schema_migrations():
         ("users", "otp_expires_at", "TIMESTAMP"),
         # Prop firm account link on trading agents
         ("trading_agents", "prop_firm_account_id", "INTEGER"),
+        # Broker fill data on agent trades
+        ("agent_trades", "filled_price",     "REAL"),
+        ("agent_trades", "filled_time",      "TIMESTAMP"),
+        ("agent_trades", "broker_trade_id",  "VARCHAR(100)"),
+        ("agent_trades", "broker_pnl",       "REAL"),
+        ("agent_trades", "broker_name",      "VARCHAR(50)"),
+        ("agent_trades", "exit_reason",      "VARCHAR(30)"),
     ]
 
     insp = inspect(engine)
@@ -1297,9 +1305,11 @@ async def startup_event():
         market_data.register("databento", DabentoProvider(api_key=settings.DATABENTO_API_KEY))
         logging.getLogger(__name__).info("Databento registered as market data provider")
     await algo_engine.start()
-    # Start paper trade monitor (simulates SL/TP exits for agent trades)
+    # Start paper trade monitor (simulates SL/TP exits for paper agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
     await trade_monitor.start()
+    # Start broker reconciler (syncs executed trades with broker state)
+    await broker_reconciler.start()
     # Start watchlist alert checker (evaluates price alerts periodically)
     await alert_checker.start()
     # Register Telegram bot webhook (so /start commands auto-link users)
@@ -1325,6 +1335,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     await alert_checker.stop()
+    await broker_reconciler.stop()
     await trade_monitor.stop()
     await algo_engine.stop()
     from app.services.news.aggregator import stop_background_refresh as stop_news_refresh

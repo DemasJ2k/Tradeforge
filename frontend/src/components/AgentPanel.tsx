@@ -126,7 +126,8 @@ export default function AgentPanel() {
   const [editName, setEditName] = useState("");
   const [editMode, setEditMode] = useState("paper");
   const [editMlModelId, setEditMlModelId] = useState<number | null>(null);
-  const [editLotSize, setEditLotSize] = useState(0.01);
+  const [editSizeType, setEditSizeType] = useState("fixed_lot");
+  const [editSizeValue, setEditSizeValue] = useState(0.01);
   const [editMaxPositions, setEditMaxPositions] = useState(3);
   const [editMaxDailyLoss, setEditMaxDailyLoss] = useState(5);
   const [editMaxDrawdown, setEditMaxDrawdown] = useState(10);
@@ -513,7 +514,8 @@ export default function AgentPanel() {
                           setEditName(agent.name);
                           setEditMode(agent.mode);
                           setEditMlModelId(agent.ml_model_id ?? null);
-                          setEditLotSize(agent.risk_config?.lot_size ?? 0.01);
+                          setEditSizeType(agent.risk_config?.position_size_type ?? "fixed_lot");
+                          setEditSizeValue(agent.risk_config?.position_size_value ?? agent.risk_config?.lot_size ?? 0.01);
                           setEditMaxPositions(agent.risk_config?.max_open_positions ?? 3);
                           setEditMaxDailyLoss(agent.risk_config?.max_daily_loss_pct ?? 5);
                           setEditMaxDrawdown(agent.risk_config?.max_drawdown_pct ?? 10);
@@ -895,12 +897,26 @@ export default function AgentPanel() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="block text-xs text-muted-foreground mb-1.5">Lot Size</Label>
-                <input type="number" step="0.01" min="0.01" value={editLotSize} onChange={e => setEditLotSize(parseFloat(e.target.value) || 0.01)}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+            <div>
+              <Label className="block text-xs text-muted-foreground mb-1.5">Position Sizing</Label>
+              <div className="flex rounded-lg border border-card-border overflow-hidden mb-2">
+                <button type="button" onClick={() => { setEditSizeType("fixed_lot"); setEditSizeValue(0.01); }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${editSizeType === "fixed_lot" ? "bg-accent text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+                  Fixed Lot
+                </button>
+                <button type="button" onClick={() => { setEditSizeType("percent_risk"); setEditSizeValue(1.0); }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${editSizeType === "percent_risk" ? "bg-accent text-white" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+                  % Risk
+                </button>
               </div>
+              <input type="number" step={editSizeType === "fixed_lot" ? "0.01" : "0.1"} min="0.01"
+                value={editSizeValue} onChange={e => setEditSizeValue(parseFloat(e.target.value) || 0.01)}
+                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {editSizeType === "fixed_lot" ? "Lot size per trade (e.g. 0.01)" : "Risk % per trade based on balance & SL distance"}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="block text-xs text-muted-foreground mb-1.5">Max Open Positions</Label>
                 <input type="number" min="1" max="50" value={editMaxPositions} onChange={e => setEditMaxPositions(parseInt(e.target.value) || 1)}
@@ -923,7 +939,7 @@ export default function AgentPanel() {
                 try {
                   await api.put(`/api/agents/${editAgent.id}`, {
                     name: editName, mode: editMode, ml_model_id: editMlModelId,
-                    risk_config: { ...editAgent.risk_config, lot_size: editLotSize, max_open_positions: editMaxPositions, max_daily_loss_pct: editMaxDailyLoss, max_drawdown_pct: editMaxDrawdown },
+                    risk_config: { ...editAgent.risk_config, position_size_type: editSizeType, position_size_value: editSizeValue, max_open_positions: editMaxPositions, max_daily_loss_pct: editMaxDailyLoss, max_drawdown_pct: editMaxDrawdown },
                   });
                   setEditMsg("✓ Agent updated successfully");
                   setTimeout(() => setEditAgent(null), 1200);
@@ -1081,10 +1097,10 @@ function AgentDetail({
                       : "border-card-border bg-background/50"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Badge
                       variant="secondary"
-                      className={`text-xs font-bold ${
+                      className={`text-xs font-bold shrink-0 ${
                         t.direction === "BUY"
                           ? "bg-green-500/20 text-green-400"
                           : "bg-red-500/20 text-red-400"
@@ -1092,39 +1108,65 @@ function AgentDetail({
                     >
                       {t.direction}
                     </Badge>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-sm font-medium">
                         {t.symbol} • {t.lot_size} lots
+                        {t.broker_name && <span className="text-[10px] text-muted-foreground ml-1">({t.broker_name})</span>}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Entry: {t.entry_price?.toFixed(2) ?? "—"} •
-                        SL: {t.stop_loss?.toFixed(2) ?? "—"} •
-                        TP: {t.take_profit_1?.toFixed(2) ?? "—"}
+                        {t.filled_price ? (
+                          <>
+                            Fill: {t.filled_price.toFixed(2)}
+                            {t.entry_price && t.filled_price !== t.entry_price && (
+                              <span className="text-yellow-400/70 ml-1" title={`Signal: ${t.entry_price.toFixed(2)}`}>
+                                (slip {t.filled_price > t.entry_price ? "+" : ""}{(t.filled_price - t.entry_price).toFixed(2)})
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>Entry: {t.entry_price?.toFixed(2) ?? "—"}</>
+                        )}
+                        {" • "}SL: {t.stop_loss?.toFixed(2) ?? "—"} • TP: {t.take_profit_1?.toFixed(2) ?? "—"}
                         {t.signal_reason && <span className="ml-1 italic">({t.signal_reason})</span>}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
                       <div className={`text-sm font-medium ${pnlColor(t.pnl)}`}>
                         {t.pnl !== 0
-                          ? `${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}`
+                          ? `$${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}`
                           : "—"}
+                        {t.broker_pnl != null && t.broker_pnl !== t.pnl && (
+                          <span className="text-[10px] text-muted-foreground ml-1" title="Broker-verified P&L">
+                            (${t.broker_pnl.toFixed(2)})
+                          </span>
+                        )}
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={`text-[10px] font-medium uppercase ${
-                          t.status === "pending_confirmation"
-                            ? "bg-yellow-500/20 text-yellow-400"
-                            : t.status === "executed" || t.status === "paper"
-                              ? "bg-green-500/15 text-green-400"
-                              : t.status === "rejected"
-                                ? "bg-red-500/15 text-red-400"
-                                : "bg-zinc-500/15 text-zinc-400"
-                        }`}
-                      >
-                        {t.status}
-                      </Badge>
+                      <div className="flex gap-1 justify-end">
+                        {t.exit_reason && (
+                          <Badge variant="secondary" className={`text-[10px] font-medium uppercase ${
+                            t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
+                            : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
+                            : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
+                            : "bg-cyan-500/15 text-cyan-400"
+                          }`}>{t.exit_reason}</Badge>
+                        )}
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] font-medium uppercase ${
+                            t.status === "pending_confirmation"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : t.status === "executed" || t.status === "paper"
+                                ? "bg-green-500/15 text-green-400"
+                                : t.status === "rejected"
+                                  ? "bg-red-500/15 text-red-400"
+                                  : "bg-zinc-500/15 text-zinc-400"
+                          }`}
+                        >
+                          {t.status}
+                        </Badge>
+                      </div>
                     </div>
                     {t.status === "pending_confirmation" && (
                       <div className="flex gap-1">

@@ -527,6 +527,7 @@ class AgentRunner:
             balance=balance,
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
+            broker_name=self._broker_name,
         )
 
         if not risk_decision.approved:
@@ -621,20 +622,29 @@ class AgentRunner:
             # ── Auto-execution: send order to broker with SL/TP ──
             broker_ticket = None
             if self._mode == "auto":
-                broker_ticket = await self._execute_on_broker(
+                order_result = await self._execute_on_broker(
                     direction=direction,
                     lot_size=lot_size,
                     entry_price=signal.entry_price,
                     stop_loss=signal.stop_loss,
                     take_profit=signal.take_profit_2 or signal.take_profit_1,
                 )
-                if broker_ticket:
+                if order_result and order_result.order_id:
+                    broker_ticket = str(order_result.order_id)
                     trade.broker_ticket = broker_ticket
-                    self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f} | ticket={broker_ticket}", data={
+                    trade.broker_name = self._broker_name
+                    # Store actual fill data from broker
+                    if order_result.filled_price:
+                        trade.filled_price = order_result.filled_price
+                    if order_result.filled_time:
+                        trade.filled_time = order_result.filled_time
+                    fill_info = f" fill={order_result.filled_price:.5f}" if order_result.filled_price else ""
+                    self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f}{fill_info} | ticket={broker_ticket}", data={
                         "trade_id": trade_id,
                         "lot_size": lot_size,
                         "status": "executed",
                         "broker_ticket": broker_ticket,
+                        "filled_price": order_result.filled_price,
                     })
                 else:
                     trade.status = "rejected"
@@ -696,10 +706,11 @@ class AgentRunner:
 
     async def _execute_on_broker(self, direction: str, lot_size: float,
                                     entry_price: float, stop_loss: float,
-                                    take_profit: float) -> Optional[str]:
+                                    take_profit: float):
         """Send a market order to the configured broker with SL/TP.
 
-        Returns broker ticket string on success, or None on failure.
+        Returns Order dataclass on success (with filled_price, filled_time),
+        or None on failure.
         NEVER silently routes a non-MT5 agent's order to MT5.
         """
         from app.services.broker.manager import broker_manager
@@ -718,10 +729,10 @@ class AgentRunner:
                     take_profit=take_profit,
                     comment=f"FlowrexAlgo Agent#{self.agent_id}",
                 )
-                # place_order returns an Order dataclass (not a dict)
+                # place_order returns an Order dataclass with fill data
                 result = await adapter.place_order(request)
                 if result and result.order_id:
-                    return str(result.order_id)
+                    return result  # Return full Order object
                 logger.warning("[Agent %d] %s order returned no order_id: %s",
                                self.agent_id, self._broker_name, result)
                 return None

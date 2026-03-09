@@ -312,6 +312,12 @@ def get_agent_trades(
                 signal_reason=t.signal_reason,
                 signal_confidence=t.signal_confidence or 0.0,
                 broker_ticket=t.broker_ticket,
+                filled_price=getattr(t, "filled_price", None),
+                filled_time=t.filled_time.isoformat() if getattr(t, "filled_time", None) else None,
+                broker_trade_id=getattr(t, "broker_trade_id", None),
+                broker_pnl=getattr(t, "broker_pnl", None),
+                broker_name=getattr(t, "broker_name", None),
+                exit_reason=getattr(t, "exit_reason", None),
                 opened_at=t.opened_at.isoformat() if t.opened_at else "",
                 closed_at=t.closed_at.isoformat() if t.closed_at else None,
                 created_at=t.created_at.isoformat() if t.created_at else "",
@@ -364,8 +370,12 @@ async def confirm_trade(
             )
             order = await adapter.place_order(order_req)
             broker_ticket = order.order_id
-            trade.broker_ticket = broker_ticket
-            trade.entry_price = order.filled_price or trade.entry_price
+            trade.broker_ticket = str(broker_ticket) if broker_ticket else None
+            trade.broker_name = agent.broker_name
+            if order.filled_price:
+                trade.filled_price = order.filled_price
+            if order.filled_time:
+                trade.filled_time = order.filled_time
             executed = True
     except Exception:
         pass  # Fall through — mark as confirmed even if execution fails
