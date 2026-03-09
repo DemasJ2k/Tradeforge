@@ -60,6 +60,178 @@ def list_agents(
     return {"items": [_agent_to_response(a) for a in agents], "total": len(agents)}
 
 
+def _trade_to_response(t: AgentTrade) -> dict:
+    return AgentTradeResponse(
+        id=t.id,
+        agent_id=t.agent_id,
+        symbol=t.symbol,
+        direction=t.direction,
+        entry_price=t.entry_price,
+        exit_price=t.exit_price,
+        lot_size=t.lot_size or 0.01,
+        stop_loss=t.stop_loss,
+        take_profit_1=t.take_profit_1,
+        take_profit_2=t.take_profit_2,
+        pnl=t.pnl or 0.0,
+        pnl_pct=t.pnl_pct or 0.0,
+        status=t.status,
+        signal_type=t.signal_type,
+        signal_reason=t.signal_reason,
+        signal_confidence=t.signal_confidence or 0.0,
+        broker_ticket=t.broker_ticket,
+        filled_price=getattr(t, "filled_price", None),
+        filled_time=t.filled_time.isoformat() if getattr(t, "filled_time", None) else None,
+        broker_trade_id=getattr(t, "broker_trade_id", None),
+        broker_pnl=getattr(t, "broker_pnl", None),
+        broker_name=getattr(t, "broker_name", None),
+        exit_reason=getattr(t, "exit_reason", None),
+        opened_at=t.opened_at.isoformat() if t.opened_at else "",
+        closed_at=t.closed_at.isoformat() if t.closed_at else None,
+        created_at=t.created_at.isoformat() if t.created_at else "",
+    ).model_dump()
+
+
+# ── Cross-agent queries (MUST be before /{agent_id} routes) ──
+
+
+@router.get("/all-trades")
+def get_all_agent_trades(
+    status: str = Query("paper,executed"),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get trades from ALL user's agents, filtered by status."""
+    from sqlalchemy import literal_column
+
+    statuses = [s.strip() for s in status.split(",")]
+    rows = (
+        db.query(AgentTrade, TradingAgent.name.label("agent_name"))
+        .join(TradingAgent, AgentTrade.agent_id == TradingAgent.id)
+        .filter(
+            TradingAgent.created_by == user.id,
+            TradingAgent.deleted_at.is_(None),
+            AgentTrade.status.in_(statuses),
+        )
+        .order_by(AgentTrade.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    items = []
+    for trade, agent_name in rows:
+        d = _trade_to_response(trade)
+        d["agent_name"] = agent_name
+        items.append(d)
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/pnl-summary")
+def get_pnl_summary(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get P&L summary for each agent."""
+    from sqlalchemy import func, case
+
+    results = (
+        db.query(
+            TradingAgent.id,
+            TradingAgent.name,
+            TradingAgent.symbol,
+            TradingAgent.timeframe,
+            TradingAgent.status,
+            TradingAgent.mode,
+            func.coalesce(func.sum(AgentTrade.pnl), 0).label("total_pnl"),
+            func.count(AgentTrade.id).label("total_trades"),
+            func.sum(case((AgentTrade.pnl > 0, 1), else_=0)).label("wins"),
+        )
+        .outerjoin(
+            AgentTrade,
+            (AgentTrade.agent_id == TradingAgent.id)
+            & AgentTrade.status.in_(["paper", "executed", "closed"]),
+        )
+        .filter(
+            TradingAgent.created_by == user.id,
+            TradingAgent.deleted_at.is_(None),
+        )
+        .group_by(
+            TradingAgent.id,
+            TradingAgent.name,
+            TradingAgent.symbol,
+            TradingAgent.timeframe,
+            TradingAgent.status,
+            TradingAgent.mode,
+        )
+        .all()
+    )
+
+    items = []
+    for r in results:
+        total = r.total_trades or 0
+        wins = r.wins or 0
+        items.append({
+            "agent_id": r.id,
+            "agent_name": r.name,
+            "symbol": r.symbol,
+            "timeframe": r.timeframe,
+            "status": r.status,
+            "mode": r.mode,
+            "total_pnl": round(float(r.total_pnl), 2),
+            "total_trades": total,
+            "wins": wins,
+            "win_rate": round(wins / total * 100, 1) if total > 0 else 0,
+        })
+    return {"items": items}
+
+
+@router.post("/recalculate-pnl")
+def recalculate_pnl(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Recalculate P&L for all existing trades using correct instrument specs."""
+    if user.username not in ("FlowrexAdmin", "admin"):
+        raise HTTPException(403, "Admin only")
+
+    from app.services.agent.instrument_specs import calc_pnl_dollars
+
+    trades = (
+        db.query(AgentTrade)
+        .join(TradingAgent, AgentTrade.agent_id == TradingAgent.id)
+        .filter(
+            TradingAgent.created_by == user.id,
+            AgentTrade.entry_price.isnot(None),
+            AgentTrade.exit_price.isnot(None),
+        )
+        .all()
+    )
+
+    updated = 0
+    samples = []
+    for t in trades:
+        broker = getattr(t, "broker_name", None) or "oanda"
+        new_pnl = calc_pnl_dollars(
+            symbol=t.symbol,
+            direction=t.direction,
+            entry_price=t.entry_price,
+            exit_price=t.exit_price,
+            lot_size=t.lot_size or 0.01,
+            broker_name=broker,
+        )
+        if abs((t.pnl or 0) - new_pnl) > 0.001:
+            old_pnl = t.pnl
+            t.pnl = round(new_pnl, 4)
+            updated += 1
+            if len(samples) < 5:
+                samples.append({
+                    "trade_id": t.id, "symbol": t.symbol,
+                    "old_pnl": old_pnl, "new_pnl": round(new_pnl, 4),
+                })
+
+    db.commit()
+    return {"updated": updated, "total": len(trades), "samples": samples}
+
+
 @router.post("", status_code=201)
 def create_agent(
     payload: AgentCreate,
@@ -293,37 +465,7 @@ def get_agent_trades(
     trades = q.order_by(AgentTrade.created_at.desc()).offset(offset).limit(limit).all()
 
     return {
-        "items": [
-            AgentTradeResponse(
-                id=t.id,
-                agent_id=t.agent_id,
-                symbol=t.symbol,
-                direction=t.direction,
-                entry_price=t.entry_price,
-                exit_price=t.exit_price,
-                lot_size=t.lot_size or 0.01,
-                stop_loss=t.stop_loss,
-                take_profit_1=t.take_profit_1,
-                take_profit_2=t.take_profit_2,
-                pnl=t.pnl or 0.0,
-                pnl_pct=t.pnl_pct or 0.0,
-                status=t.status,
-                signal_type=t.signal_type,
-                signal_reason=t.signal_reason,
-                signal_confidence=t.signal_confidence or 0.0,
-                broker_ticket=t.broker_ticket,
-                filled_price=getattr(t, "filled_price", None),
-                filled_time=t.filled_time.isoformat() if getattr(t, "filled_time", None) else None,
-                broker_trade_id=getattr(t, "broker_trade_id", None),
-                broker_pnl=getattr(t, "broker_pnl", None),
-                broker_name=getattr(t, "broker_name", None),
-                exit_reason=getattr(t, "exit_reason", None),
-                opened_at=t.opened_at.isoformat() if t.opened_at else "",
-                closed_at=t.closed_at.isoformat() if t.closed_at else None,
-                created_at=t.created_at.isoformat() if t.created_at else "",
-            )
-            for t in trades
-        ],
+        "items": [_trade_to_response(t) for t in trades],
         "total": total,
     }
 

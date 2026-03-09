@@ -5,18 +5,20 @@ import { useAgents, subscribeToAgent } from "@/hooks/useAgents";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
 import { api } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Play, Pause, Square, Pencil, Trash2, Plus, ArrowLeft, Check, X, Bot } from "lucide-react";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Play, Pause, Square, Pencil, Trash2, Plus, Check, X, Bot, ChevronDown } from "lucide-react";
 import type {
   Agent,
   AgentCreateRequest,
   AgentMode,
   AgentLog,
   AgentTrade,
+  AgentPerformance,
   Strategy,
   StrategyList,
 } from "@/types";
@@ -40,7 +42,6 @@ const statusDot: Record<string, string> = {
 const pnlColor = (v: number) =>
   v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-muted-foreground";
 
-const SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100"];
 const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
 
 /* ═══════════════════════════════════════════════════════ */
@@ -55,13 +56,9 @@ export default function AgentPanel() {
     startAgent,
     stopAgent,
     pauseAgent,
-    selectedAgentId,
-    selectAgent,
-    logs,
-    logsLoading,
-    trades: agentTrades,
-    tradesLoading,
-    performance,
+    expandedAgentIds,
+    toggleAgentExpand,
+    agentDetails,
     pendingTrades,
     loadPendingTrades,
     confirmTrade,
@@ -73,11 +70,10 @@ export default function AgentPanel() {
   // ── Local state ──
   const [showCreate, setShowCreate] = useState(false);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [tab, setTab] = useState<"agents" | "detail">("agents");
   const [actionError, setActionError] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-  // Connected broker accounts for broker selector (must be before other hooks)
+  // Connected broker accounts for broker selector
   const { accounts: brokerAccounts, activeBroker } = useBrokerAccounts();
 
   // Create form state
@@ -238,11 +234,6 @@ export default function AgentPanel() {
     }
   };
 
-  const handleSelectAgent = (id: number) => {
-    selectAgent(id);
-    setTab("detail");
-  };
-
   const handleConfirm = async (trade: AgentTrade) => {
     try {
       await confirmTrade(trade.agent_id, trade.id);
@@ -259,69 +250,38 @@ export default function AgentPanel() {
     }
   };
 
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null;
   const strategyName = (id: number) =>
     strategies.find((s) => s.id === id)?.name || `Strategy #${id}`;
 
   /* ═══════════════ RENDER ═══════════════════════════ */
   return (
-    <Card className="border-card-border bg-card-bg overflow-hidden">
-      <CardContent className="p-0">
+    <div>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-semibold">Algo Agents</h3>
-
-          {/* Tabs */}
-          <div className="flex gap-1">
-            <button
-              onClick={() => setTab("agents")}
-              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                tab === "agents"
-                  ? "bg-accent/15 text-accent"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Agents ({agents.length})
-            </button>
-            {selectedAgent && (
-              <button
-                onClick={() => setTab("detail")}
-                className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                  tab === "detail"
-                    ? "bg-accent/15 text-accent"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {selectedAgent.name}
-              </button>
-            )}
-          </div>
-
-          {/* Pending trade count badge */}
+          <h3 className="text-sm font-semibold">Algo Agents ({agents.length})</h3>
           {pendingTrades.length > 0 && (
             <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 animate-pulse">
               {pendingTrades.length} pending
             </Badge>
           )}
         </div>
-
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="w-3.5 h-3.5 mr-1" />New Agent
         </Button>
       </div>
 
       {actionError && (
-        <div className="mx-4 mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">
+        <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">
           {actionError}
         </div>
       )}
 
       {/* ── Pending Trade Confirmations Banner ── */}
-      {pendingTrades.length > 0 && tab === "agents" && (
-        <div className="border-b border-yellow-500/20 bg-yellow-500/5 px-4 py-3">
+      {pendingTrades.length > 0 && (
+        <div className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-3">
           <div className="text-xs font-semibold text-yellow-400 mb-2">
-            ⚡ Trades Awaiting Confirmation
+            Trades Awaiting Confirmation
           </div>
           <div className="space-y-2">
             {pendingTrades.map((t) => (
@@ -343,8 +303,8 @@ export default function AgentPanel() {
                   <div>
                     <div className="text-sm font-medium">{t.symbol}</div>
                     <div className="text-xs text-muted-foreground">
-                      {t.lot_size} lots • SL: {t.stop_loss ?? "—"} • TP: {t.take_profit_1 ?? "—"}
-                      {t.signal_reason && ` • ${t.signal_reason}`}
+                      {t.lot_size} lots{" "}
+                      {t.signal_reason && `- ${t.signal_reason}`}
                     </div>
                   </div>
                 </div>
@@ -373,193 +333,194 @@ export default function AgentPanel() {
         </div>
       )}
 
-      {/* ── Agents List ── */}
-      {tab === "agents" && (
-        <div className="p-4">
-          {loading ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              Loading agents...
-            </div>
-          ) : agents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <Bot className="h-8 w-8 text-muted-foreground/30 mb-3" />
-              <p className="text-sm font-medium mb-1">No Agents Yet</p>
-              <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                Create your first trading agent to start automated algo trading with your strategies.
-              </p>
-              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5">
-                <Plus className="h-3.5 w-3.5" /> Create Agent
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              {agents.map((agent) => (
-                <div
-                  key={agent.id}
-                  className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3 hover:border-accent/30 transition-colors cursor-pointer"
-                  onClick={() => handleSelectAgent(agent.id)}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span
-                      className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 ${statusDot[agent.status] || "bg-zinc-500"}`}
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {agent.name}
+      {/* ── Agents List with Inline Expand ── */}
+      {loading ? (
+        <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+          Loading agents...
+        </div>
+      ) : agents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <Bot className="h-8 w-8 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-medium mb-1">No Agents Yet</p>
+          <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+            Create your first trading agent to start automated algo trading with your strategies.
+          </p>
+          <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> Create Agent
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {agents.map((agent) => {
+            const isExpanded = expandedAgentIds.includes(agent.id);
+            const detail = agentDetails[agent.id];
+
+            return (
+              <Collapsible
+                key={agent.id}
+                open={isExpanded}
+                onOpenChange={() => toggleAgentExpand(agent.id)}
+              >
+                {/* Agent Row (trigger) */}
+                <div className="rounded-lg border border-card-border bg-background/50 hover:border-accent/30 transition-colors overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between p-3 cursor-pointer">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 ${statusDot[agent.status] || "bg-zinc-500"}`}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {agent.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {strategyName(agent.strategy_id)} - {agent.symbol} - {agent.timeframe}
+                            {agent.broker_name && (
+                              <span className="ml-1 capitalize text-accent/70">- {agent.broker_name}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {strategyName(agent.strategy_id)} • {agent.symbol} • {agent.timeframe}
-                        {agent.broker_name && (
-                          <span className="ml-1 capitalize text-accent/70">• {agent.broker_name}</span>
-                        )}
-                        {agent.ml_model_id && (
-                          <span className="ml-1 text-cyan-400/70">
-                            • ML #{agent.ml_model_id}
+
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        {/* Mode badge */}
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] font-medium uppercase hidden sm:inline-flex ${
+                            agent.mode === "paper"
+                              ? "bg-blue-500/15 text-fa-accent"
+                              : agent.mode === "auto"
+                                ? "bg-orange-500/15 text-orange-400"
+                                : "bg-purple-500/15 text-purple-400"
+                          }`}
+                        >
+                          {agent.mode === "auto" ? "autonomous" : agent.mode}
+                        </Badge>
+
+                        {/* Status badge */}
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] font-medium uppercase ${
+                            statusColor[agent.status] || "bg-zinc-500/20 text-zinc-400"
+                          }`}
+                        >
+                          {agent.status}
+                        </Badge>
+
+                        {/* P&L */}
+                        {agent.performance_stats?.total_pnl != null && (
+                          <span
+                            className={`text-xs font-mono font-medium ${pnlColor(agent.performance_stats.total_pnl)}`}
+                          >
+                            {agent.performance_stats.total_pnl >= 0 ? "+" : ""}
+                            ${agent.performance_stats.total_pnl.toFixed(2)}
                           </span>
                         )}
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {agent.status === "stopped" && (
+                            <Button variant="outline" size="sm"
+                              onClick={() => handleAction("start", agent)}
+                              disabled={actionLoading === agent.id}
+                              className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
+                              title="Start agent"
+                            >
+                              <Play className="w-3 h-3" />
+                            </Button>
+                          )}
+                          {agent.status === "running" && (
+                            <>
+                              <Button variant="outline" size="sm"
+                                onClick={() => handleAction("pause", agent)}
+                                disabled={actionLoading === agent.id}
+                                className="border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 h-auto py-0.5 px-2"
+                                title="Pause agent"
+                              >
+                                <Pause className="w-3 h-3" />
+                              </Button>
+                              <Button variant="outline" size="sm"
+                                onClick={() => handleAction("stop", agent)}
+                                disabled={actionLoading === agent.id}
+                                className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-0.5 px-2"
+                                title="Stop agent"
+                              >
+                                <Square className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          {agent.status === "paused" && (
+                            <>
+                              <Button variant="outline" size="sm"
+                                onClick={() => handleAction("start", agent)}
+                                disabled={actionLoading === agent.id}
+                                className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
+                                title="Resume agent"
+                              >
+                                <Play className="w-3 h-3" />
+                              </Button>
+                              <Button variant="outline" size="sm"
+                                onClick={() => handleAction("stop", agent)}
+                                disabled={actionLoading === agent.id}
+                                className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-0.5 px-2"
+                                title="Stop agent"
+                              >
+                                <Square className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          <Button variant="ghost" size="sm"
+                            onClick={() => {
+                              setEditAgent(agent);
+                              setEditName(agent.name);
+                              setEditMode(agent.mode);
+                              setEditMlModelId(agent.ml_model_id ?? null);
+                              setEditSizeType(agent.risk_config?.position_size_type ?? "fixed_lot");
+                              setEditSizeValue(agent.risk_config?.position_size_value ?? agent.risk_config?.lot_size ?? 0.01);
+                              setEditMaxPositions(agent.risk_config?.max_open_positions ?? 3);
+                              setEditMaxDailyLoss(agent.risk_config?.max_daily_loss_pct ?? 5);
+                              setEditMaxDrawdown(agent.risk_config?.max_drawdown_pct ?? 10);
+                              setEditMsg("");
+                            }}
+                            title="Edit agent"
+                            className="h-auto p-1 text-muted-foreground hover:text-accent"
+                          ><Pencil className="w-3.5 h-3.5" /></Button>
+                          <Button variant="outline" size="sm"
+                            onClick={() => handleAction("delete", agent)}
+                            disabled={actionLoading === agent.id}
+                            className="border-card-border text-muted-foreground hover:text-red-400 hover:border-red-500/40 h-auto py-0.5 px-2"
+                            title="Delete agent"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        {/* Expand chevron */}
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                       </div>
                     </div>
-                  </div>
+                  </CollapsibleTrigger>
 
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    {/* Mode badge */}
-                    <Badge
-                      variant="secondary"
-                      className={`text-[10px] font-medium uppercase ${
-                        agent.mode === "paper"
-                          ? "bg-blue-500/15 text-fa-accent"
-                          : agent.mode === "auto"
-                            ? "bg-orange-500/15 text-orange-400"
-                            : "bg-purple-500/15 text-purple-400"
-                      }`}
-                    >
-                      {agent.mode === "auto" ? "autonomous" : agent.mode}
-                    </Badge>
-
-                    {/* Status badge */}
-                    <Badge
-                      variant="secondary"
-                      className={`text-[10px] font-medium uppercase ${
-                        statusColor[agent.status] || "bg-zinc-500/20 text-zinc-400"
-                      }`}
-                    >
-                      {agent.status}
-                    </Badge>
-
-                    {/* P&L */}
-                    {agent.performance_stats?.total_pnl != null && (
-                      <span
-                        className={`text-xs font-mono font-medium ${pnlColor(agent.performance_stats.total_pnl)}`}
-                      >
-                        {agent.performance_stats.total_pnl >= 0 ? "+" : ""}
-                        {agent.performance_stats.total_pnl.toFixed(2)}
-                      </span>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {agent.status === "stopped" && (
-                        <Button variant="outline" size="sm"
-                          onClick={() => handleAction("start", agent)}
-                          disabled={actionLoading === agent.id}
-                          className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
-                          title="Start agent"
-                        >
-                          <Play className="w-3 h-3" />
-                        </Button>
-                      )}
-                      {agent.status === "running" && (
-                        <>
-                          <Button variant="outline" size="sm"
-                            onClick={() => handleAction("pause", agent)}
-                            disabled={actionLoading === agent.id}
-                            className="border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 h-auto py-0.5 px-2"
-                            title="Pause agent"
-                          >
-                            <Pause className="w-3 h-3" />
-                          </Button>
-                          <Button variant="outline" size="sm"
-                            onClick={() => handleAction("stop", agent)}
-                            disabled={actionLoading === agent.id}
-                            className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-0.5 px-2"
-                            title="Stop agent"
-                          >
-                            <Square className="w-3 h-3" />
-                          </Button>
-                        </>
-                      )}
-                      {agent.status === "paused" && (
-                        <>
-                          <Button variant="outline" size="sm"
-                            onClick={() => handleAction("start", agent)}
-                            disabled={actionLoading === agent.id}
-                            className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
-                            title="Resume agent"
-                          >
-                            <Play className="w-3 h-3" />
-                          </Button>
-                          <Button variant="outline" size="sm"
-                            onClick={() => handleAction("stop", agent)}
-                            disabled={actionLoading === agent.id}
-                            className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-0.5 px-2"
-                            title="Stop agent"
-                          >
-                            <Square className="w-3 h-3" />
-                          </Button>
-                        </>
-                      )}
-                      <Button variant="ghost" size="sm"
-                        onClick={() => {
-                          setEditAgent(agent);
-                          setEditName(agent.name);
-                          setEditMode(agent.mode);
-                          setEditMlModelId(agent.ml_model_id ?? null);
-                          setEditSizeType(agent.risk_config?.position_size_type ?? "fixed_lot");
-                          setEditSizeValue(agent.risk_config?.position_size_value ?? agent.risk_config?.lot_size ?? 0.01);
-                          setEditMaxPositions(agent.risk_config?.max_open_positions ?? 3);
-                          setEditMaxDailyLoss(agent.risk_config?.max_daily_loss_pct ?? 5);
-                          setEditMaxDrawdown(agent.risk_config?.max_drawdown_pct ?? 10);
-                          setEditMsg("");
-                        }}
-                        title="Edit agent"
-                        className="h-auto p-1 text-muted-foreground hover:text-accent"
-                      ><Pencil className="w-3.5 h-3.5" /></Button>
-                      <Button variant="outline" size="sm"
-                        onClick={() => handleAction("delete", agent)}
-                        disabled={actionLoading === agent.id}
-                        className="border-card-border text-muted-foreground hover:text-red-400 hover:border-red-500/40 h-auto py-0.5 px-2"
-                        title="Delete agent"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
+                  {/* Expanded Detail (inline) */}
+                  <CollapsibleContent>
+                    <AgentInlineDetail
+                      agent={agent}
+                      detail={detail}
+                      strategyName={strategyName(agent.strategy_id)}
+                      onConfirm={handleConfirm}
+                      onReject={handleReject}
+                    />
+                  </CollapsibleContent>
                 </div>
-              ))}
-            </div>
-          )}
+              </Collapsible>
+            );
+          })}
         </div>
-      )}
-
-      {/* ── Agent Detail ── */}
-      {tab === "detail" && selectedAgent && (
-        <AgentDetail
-          agent={selectedAgent}
-          strategyName={strategyName(selectedAgent.strategy_id)}
-          logs={logs}
-          logsLoading={logsLoading}
-          trades={agentTrades}
-          tradesLoading={tradesLoading}
-          performance={performance}
-          onBack={() => { selectAgent(null); setTab("agents"); }}
-          onConfirm={handleConfirm}
-          onReject={handleReject}
-        />
       )}
 
       {/* ── Create Agent Modal ── */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Trading Agent</DialogTitle>
             <DialogDescription>Configure a new automated trading agent.</DialogDescription>
@@ -667,36 +628,21 @@ export default function AgentPanel() {
             <div>
               <Label className="text-xs text-muted-foreground mb-1">Mode</Label>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setCMode("paper")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-                    cMode === "paper"
-                      ? "bg-blue-500/20 text-fa-accent border border-blue-500/40"
-                      : "border border-card-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  📝 Paper
-                </button>
-                <button
-                  onClick={() => setCMode("confirmation")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-                    cMode === "confirmation"
-                      ? "bg-purple-500/20 text-purple-400 border border-purple-500/40"
-                      : "border border-card-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  ✅ Confirm
-                </button>
-                <button
-                  onClick={() => setCMode("auto")}
-                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-                    cMode === "auto"
-                      ? "bg-orange-500/20 text-orange-400 border border-orange-500/40"
-                      : "border border-card-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  ⚡ Autonomous
-                </button>
+                {(["paper", "confirmation", "auto"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setCMode(m)}
+                    className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+                      cMode === m
+                        ? m === "paper" ? "bg-blue-500/20 text-fa-accent border border-blue-500/40"
+                          : m === "confirmation" ? "bg-purple-500/20 text-purple-400 border border-purple-500/40"
+                            : "bg-orange-500/20 text-orange-400 border border-orange-500/40"
+                        : "border border-card-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m === "paper" ? "Paper" : m === "confirmation" ? "Confirm" : "Autonomous"}
+                  </button>
+                ))}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {cMode === "paper"
@@ -707,7 +653,7 @@ export default function AgentPanel() {
               </p>
               {cMode === "auto" && (
                 <div className="mt-2 rounded-lg bg-orange-500/10 border border-orange-500/30 px-3 py-2 text-xs text-orange-400">
-                  ⚠️ Autonomous mode will place real trades on your connected broker. Ensure risk settings are configured.
+                  Autonomous mode will place real trades on your connected broker. Ensure risk settings are configured.
                 </div>
               )}
             </div>
@@ -715,7 +661,7 @@ export default function AgentPanel() {
             {/* ML Model (optional) */}
             <div>
               <Label className="text-xs text-muted-foreground mb-1">
-                ML Model <span className="text-zinc-500">(optional — filters/enhances signals)</span>
+                ML Model <span className="text-zinc-500">(optional)</span>
               </Label>
               <select
                 value={cMlModelId ?? ""}
@@ -738,7 +684,7 @@ export default function AgentPanel() {
             {propFirmAccounts.length > 0 && (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1">
-                  Prop Firm Account <span className="text-zinc-500">(optional — enforces firm rules pre-trade)</span>
+                  Prop Firm Account <span className="text-zinc-500">(optional)</span>
                 </Label>
                 <select
                   value={cPropFirmId ?? ""}
@@ -792,72 +738,38 @@ export default function AgentPanel() {
               <div className="grid grid-cols-3 gap-3 mt-2">
                 <div>
                   <Label className="block text-[10px] text-muted-foreground mb-1">Max Exposure</Label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={cMaxExposure}
-                    onChange={(e) => setCMaxExposure(e.target.value)}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                    placeholder="1.0 lots"
-                  />
+                  <input type="number" step="0.1" min="0" value={cMaxExposure} onChange={(e) => setCMaxExposure(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" placeholder="1.0 lots" />
                 </div>
                 <div>
                   <Label className="block text-[10px] text-muted-foreground mb-1">Max Positions</Label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    value={cMaxOpenPositions}
-                    onChange={(e) => setCMaxOpenPositions(e.target.value)}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                    placeholder="3"
-                  />
+                  <input type="number" step="1" min="1" value={cMaxOpenPositions} onChange={(e) => setCMaxOpenPositions(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" placeholder="3" />
                 </div>
                 <div>
                   <Label className="block text-[10px] text-muted-foreground mb-1">Max Daily Loss %</Label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={cMaxDailyLoss}
-                    onChange={(e) => setCMaxDailyLoss(e.target.value)}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                    placeholder="5%"
-                  />
+                  <input type="number" step="0.5" min="0" value={cMaxDailyLoss} onChange={(e) => setCMaxDailyLoss(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" placeholder="5%" />
                 </div>
               </div>
 
               <div className="mt-2">
                 <Label className="block text-[10px] text-muted-foreground mb-1">Max Drawdown % <span className="text-zinc-500">(0 = disabled)</span></Label>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={cMaxDrawdown}
-                  onChange={(e) => setCMaxDrawdown(e.target.value)}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                  placeholder="10%"
-                />
+                <input type="number" step="1" min="0" value={cMaxDrawdown} onChange={(e) => setCMaxDrawdown(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" placeholder="10%" />
               </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline"
-                onClick={() => setShowCreate(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={creating || !cName || !cStrategyId}
-              >
+              <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button onClick={handleCreate} disabled={creating || !cName || !cStrategyId}>
                 {creating ? "Creating..." : "Create Agent"}
               </Button>
             </div>
         </DialogContent>
       </Dialog>
 
+      {/* ── Edit Agent Modal ── */}
       <Dialog open={!!editAgent} onOpenChange={(open) => { if (!open) setEditAgent(null); }}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -933,7 +845,7 @@ export default function AgentPanel() {
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
               </div>
             </div>
-            {editMsg && <p className={`text-xs ${editMsg.startsWith('✓') ? 'text-accent' : 'text-danger'}`}>{editMsg}</p>}
+            {editMsg && <p className={`text-xs ${editMsg.startsWith('\u2713') ? 'text-accent' : 'text-danger'}`}>{editMsg}</p>}
             <div className="flex gap-2 pt-1">
               <Button onClick={async () => {
                 try {
@@ -941,7 +853,7 @@ export default function AgentPanel() {
                     name: editName, mode: editMode, ml_model_id: editMlModelId,
                     risk_config: { ...editAgent.risk_config, position_size_type: editSizeType, position_size_value: editSizeValue, max_open_positions: editMaxPositions, max_daily_loss_pct: editMaxDailyLoss, max_drawdown_pct: editMaxDrawdown },
                   });
-                  setEditMsg("✓ Agent updated successfully");
+                  setEditMsg("\u2713 Agent updated successfully");
                   setTimeout(() => setEditAgent(null), 1200);
                 } catch (err: unknown) { setEditMsg(err instanceof Error ? err.message : "Save failed"); }
               }} className="flex-1">Save Changes</Button>
@@ -951,236 +863,144 @@ export default function AgentPanel() {
           )}
         </DialogContent>
       </Dialog>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   Agent Detail Sub-Component
+   Agent Inline Detail Sub-Component
    ═══════════════════════════════════════════════════════ */
 
-function AgentDetail({
+function AgentInlineDetail({
   agent,
+  detail,
   strategyName,
-  logs,
-  logsLoading,
-  trades,
-  tradesLoading,
-  performance,
-  onBack,
   onConfirm,
   onReject,
 }: {
   agent: Agent;
+  detail?: { logs: AgentLog[]; trades: AgentTrade[]; performance: AgentPerformance | null; loading: boolean };
   strategyName: string;
-  logs: AgentLog[];
-  logsLoading: boolean;
-  trades: AgentTrade[];
-  tradesLoading: boolean;
-  performance: ReturnType<typeof useAgents.getState>["performance"];
-  onBack: () => void;
   onConfirm: (trade: AgentTrade) => void;
   onReject: (trade: AgentTrade) => void;
 }) {
-  const [detailTab, setDetailTab] = useState<"trades" | "logs" | "performance">("trades");
+  if (!detail || detail.loading) {
+    return (
+      <div className="flex h-24 items-center justify-center border-t border-card-border text-sm text-muted-foreground">
+        Loading agent details...
+      </div>
+    );
+  }
+
+  const { logs, trades, performance } = detail;
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm"
-            onClick={onBack}
-            className="h-auto py-1 px-2"
-          >
-            <ArrowLeft className="w-3 h-3 mr-1" />Back
-          </Button>
-          <div>
-            <h4 className="text-sm font-semibold">{agent.name}</h4>
-            <div className="text-xs text-muted-foreground">
-              {strategyName} • {agent.symbol} • {agent.timeframe} •{" "}
-              <span className="uppercase">{agent.mode}</span>
-              {agent.ml_model_id && (
-                <span className="text-cyan-400/70 ml-1">
-                  • ML Model #{agent.ml_model_id}
-                </span>
-              )}
+    <div className="border-t border-card-border p-4 space-y-3">
+      {/* Mini performance cards */}
+      {performance && (
+        <div className="grid grid-cols-5 gap-2">
+          <div className="rounded-lg bg-background/80 p-2">
+            <div className="text-[10px] text-muted-foreground uppercase">P&L</div>
+            <div className={`text-sm font-semibold ${pnlColor(performance.total_pnl)}`}>
+              {performance.total_pnl >= 0 ? "+" : ""}${performance.total_pnl.toFixed(2)}
             </div>
           </div>
-        </div>
-        <Badge
-          variant="secondary"
-          className={`text-xs font-medium uppercase ${
-            statusColor[agent.status] || "bg-zinc-500/20 text-zinc-400"
-          }`}
-        >
-          {agent.status}
-        </Badge>
-      </div>
-
-      {/* Performance summary cards */}
-      {performance && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <Card className="border-card-border bg-background/50">
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase">Total P&L</div>
-              <div className={`text-sm font-semibold ${pnlColor(performance.total_pnl)}`}>
-                {performance.total_pnl >= 0 ? "+" : ""}
-                {performance.total_pnl.toFixed(2)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-card-border bg-background/50">
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase">Win Rate</div>
-              <div className="text-sm font-semibold">{performance.win_rate.toFixed(1)}%</div>
-            </CardContent>
-          </Card>
-          <Card className="border-card-border bg-background/50">
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase">Total Trades</div>
-              <div className="text-sm font-semibold">{performance.total_trades}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-card-border bg-background/50">
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase">Wins</div>
-              <div className="text-sm font-semibold text-green-400">{performance.wins}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-card-border bg-background/50">
-            <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase">Losses</div>
-              <div className="text-sm font-semibold text-red-400">{performance.losses}</div>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg bg-background/80 p-2">
+            <div className="text-[10px] text-muted-foreground uppercase">Win Rate</div>
+            <div className="text-sm font-semibold">{performance.win_rate.toFixed(1)}%</div>
+          </div>
+          <div className="rounded-lg bg-background/80 p-2">
+            <div className="text-[10px] text-muted-foreground uppercase">Trades</div>
+            <div className="text-sm font-semibold">{performance.total_trades}</div>
+          </div>
+          <div className="rounded-lg bg-background/80 p-2">
+            <div className="text-[10px] text-muted-foreground uppercase">Wins</div>
+            <div className="text-sm font-semibold text-green-400">{performance.wins}</div>
+          </div>
+          <div className="rounded-lg bg-background/80 p-2">
+            <div className="text-[10px] text-muted-foreground uppercase">Losses</div>
+            <div className="text-sm font-semibold text-red-400">{performance.losses}</div>
+          </div>
         </div>
       )}
 
-      {/* Detail tabs */}
-      <div className="flex gap-1 border-b border-card-border pb-0">
-        {(["trades", "logs", "performance"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setDetailTab(t)}
-            className={`rounded-t px-3 py-1.5 text-xs font-medium transition-colors ${
-              detailTab === t
-                ? "bg-card-bg text-accent border-b-2 border-accent"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t === "trades" ? `Trades (${trades.length})` : t === "logs" ? `Logs (${logs.length})` : "Equity Curve"}
-          </button>
-        ))}
-      </div>
+      {/* Sub-tabs: Trades | Logs | Equity */}
+      <Tabs defaultValue="trades" className="w-full">
+        <TabsList variant="line" className="w-full justify-start">
+          <TabsTrigger value="trades" className="text-xs">Trades ({trades.length})</TabsTrigger>
+          <TabsTrigger value="logs" className="text-xs">Logs ({logs.length})</TabsTrigger>
+          <TabsTrigger value="equity" className="text-xs">Equity</TabsTrigger>
+        </TabsList>
 
-      {/* ── Trades Tab ── */}
-      {detailTab === "trades" && (
-        <div>
-          {tradesLoading ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              Loading trades...
-            </div>
-          ) : trades.length === 0 ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              No trades yet
-            </div>
+        {/* ── Trades ── */}
+        <TabsContent value="trades">
+          {trades.length === 0 ? (
+            <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">No trades yet</div>
           ) : (
-            <div className="max-h-[300px] overflow-y-auto space-y-2">
+            <div className="max-h-[250px] overflow-y-auto space-y-1.5">
               {trades.map((t) => (
                 <div
                   key={t.id}
-                  className={`flex items-center justify-between rounded-lg border p-3 ${
+                  className={`flex items-center justify-between rounded-lg border p-2.5 ${
                     t.status === "pending_confirmation"
                       ? "border-yellow-500/30 bg-yellow-500/5"
-                      : "border-card-border bg-background/50"
+                      : "border-card-border bg-background/30"
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Badge
                       variant="secondary"
-                      className={`text-xs font-bold shrink-0 ${
-                        t.direction === "BUY"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-red-500/20 text-red-400"
+                      className={`text-[10px] font-bold shrink-0 ${
+                        t.direction === "BUY" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                       }`}
                     >
                       {t.direction}
                     </Badge>
                     <div className="min-w-0">
-                      <div className="text-sm font-medium">
-                        {t.symbol} • {t.lot_size} lots
+                      <div className="text-xs font-medium">
+                        {t.symbol} - {t.lot_size} lots
                         {t.broker_name && <span className="text-[10px] text-muted-foreground ml-1">({t.broker_name})</span>}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] text-muted-foreground">
                         {t.filled_price ? (
-                          <>
-                            Fill: {t.filled_price.toFixed(2)}
-                            {t.entry_price && t.filled_price !== t.entry_price && (
-                              <span className="text-yellow-400/70 ml-1" title={`Signal: ${t.entry_price.toFixed(2)}`}>
-                                (slip {t.filled_price > t.entry_price ? "+" : ""}{(t.filled_price - t.entry_price).toFixed(2)})
-                              </span>
-                            )}
-                          </>
+                          <>Fill: {t.filled_price.toFixed(2)}</>
                         ) : (
                           <>Entry: {t.entry_price?.toFixed(2) ?? "—"}</>
                         )}
-                        {" • "}SL: {t.stop_loss?.toFixed(2) ?? "—"} • TP: {t.take_profit_1?.toFixed(2) ?? "—"}
-                        {t.signal_reason && <span className="ml-1 italic">({t.signal_reason})</span>}
+                        {" "}SL: {t.stop_loss?.toFixed(2) ?? "—"} TP: {t.take_profit_1?.toFixed(2) ?? "—"}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
-                      <div className={`text-sm font-medium ${pnlColor(t.pnl)}`}>
-                        {t.pnl !== 0
-                          ? `$${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}`
-                          : "—"}
-                        {t.broker_pnl != null && t.broker_pnl !== t.pnl && (
-                          <span className="text-[10px] text-muted-foreground ml-1" title="Broker-verified P&L">
-                            (${t.broker_pnl.toFixed(2)})
-                          </span>
-                        )}
+                      <div className={`text-xs font-medium ${pnlColor(t.pnl)}`}>
+                        {t.pnl !== 0 ? `$${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}` : "—"}
                       </div>
                       <div className="flex gap-1 justify-end">
                         {t.exit_reason && (
-                          <Badge variant="secondary" className={`text-[10px] font-medium uppercase ${
+                          <Badge variant="secondary" className={`text-[9px] font-medium uppercase ${
                             t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
                             : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
-                            : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
                             : "bg-cyan-500/15 text-cyan-400"
                           }`}>{t.exit_reason}</Badge>
                         )}
-                        <Badge
-                          variant="secondary"
-                          className={`text-[10px] font-medium uppercase ${
-                            t.status === "pending_confirmation"
-                              ? "bg-yellow-500/20 text-yellow-400"
-                              : t.status === "executed" || t.status === "paper"
-                                ? "bg-green-500/15 text-green-400"
-                                : t.status === "rejected"
-                                  ? "bg-red-500/15 text-red-400"
-                                  : "bg-zinc-500/15 text-zinc-400"
-                          }`}
-                        >
-                          {t.status}
-                        </Badge>
+                        <Badge variant="secondary" className={`text-[9px] font-medium uppercase ${
+                          t.status === "pending_confirmation" ? "bg-yellow-500/20 text-yellow-400"
+                          : t.status === "executed" || t.status === "paper" ? "bg-green-500/15 text-green-400"
+                          : t.status === "rejected" ? "bg-red-500/15 text-red-400"
+                          : "bg-zinc-500/15 text-zinc-400"
+                        }`}>{t.status}</Badge>
                       </div>
                     </div>
                     {t.status === "pending_confirmation" && (
                       <div className="flex gap-1">
-                        <button
-                          onClick={() => onConfirm(t)}
-                          className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-foreground hover:bg-green-700"
-                        >
-                          ✓
+                        <button onClick={() => onConfirm(t)}
+                          className="rounded bg-green-600 px-2 py-0.5 text-[10px] font-medium text-foreground hover:bg-green-700">
+                          Approve
                         </button>
-                        <button
-                          onClick={() => onReject(t)}
-                          className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
-                        >
-                          ✕
+                        <button onClick={() => onReject(t)}
+                          className="rounded border border-red-500/40 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/10">
+                          Reject
                         </button>
                       </div>
                     )}
@@ -1189,49 +1009,33 @@ function AgentDetail({
               ))}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {/* ── Logs Tab ── */}
-      {detailTab === "logs" && (
-        <div>
-          {logsLoading ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              Loading logs...
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              No logs yet
-            </div>
+        {/* ── Logs ── */}
+        <TabsContent value="logs">
+          {logs.length === 0 ? (
+            <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">No logs yet</div>
           ) : (
-            <div className="max-h-[300px] overflow-y-auto font-mono text-xs space-y-0.5">
+            <div className="max-h-[250px] overflow-y-auto font-mono text-[11px] space-y-0.5">
               {logs.map((log) => (
                 <div
                   key={log.id}
-                  className={`flex gap-2 rounded px-2 py-1 ${
-                    log.level === "error"
-                      ? "bg-red-500/5 text-red-400"
-                      : log.level === "warn"
-                        ? "bg-yellow-500/5 text-yellow-400"
-                        : log.level === "trade"
-                          ? "bg-green-500/5 text-green-400"
-                          : "text-muted-foreground"
+                  className={`flex gap-2 rounded px-2 py-0.5 ${
+                    log.level === "error" ? "bg-red-500/5 text-red-400"
+                    : log.level === "warn" ? "bg-yellow-500/5 text-yellow-400"
+                    : log.level === "trade" ? "bg-green-500/5 text-green-400"
+                    : "text-muted-foreground"
                   }`}
                 >
                   <span className="shrink-0 text-zinc-600">
                     {new Date(log.created_at).toLocaleTimeString()}
                   </span>
-                  <span
-                    className={`shrink-0 w-12 text-right uppercase font-semibold ${
-                      log.level === "error"
-                        ? "text-red-400"
-                        : log.level === "warn"
-                          ? "text-yellow-400"
-                          : log.level === "trade"
-                            ? "text-green-400"
-                            : "text-zinc-500"
-                    }`}
-                  >
+                  <span className={`shrink-0 w-10 text-right uppercase font-semibold ${
+                    log.level === "error" ? "text-red-400"
+                    : log.level === "warn" ? "text-yellow-400"
+                    : log.level === "trade" ? "text-green-400"
+                    : "text-zinc-500"
+                  }`}>
                     {log.level}
                   </span>
                   <span className="break-all">{log.message}</span>
@@ -1239,57 +1043,50 @@ function AgentDetail({
               ))}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {/* ── Equity Curve Tab ── */}
-      {detailTab === "performance" && (
-        <div>
+        {/* ── Equity Curve ── */}
+        <TabsContent value="equity">
           {!performance || performance.equity_curve.length === 0 ? (
-            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">
               No performance data yet
             </div>
           ) : (
-            <div className="space-y-3">
-              {/* Simple text-based equity display — can be replaced with chart later */}
-              <div className="max-h-[250px] overflow-y-auto font-mono text-xs">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-card-border text-muted-foreground">
-                      <th className="pb-1 text-left font-medium">Time</th>
-                      <th className="pb-1 text-right font-medium">P&L</th>
-                      <th className="pb-1 text-right font-medium">Cumulative</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      let cumulative = 0;
-                      return performance.equity_curve.map((pt, i) => {
-                        cumulative += pt.pnl;
-                        return (
-                          <tr key={i} className="border-b border-card-border/30">
-                            <td className="py-1 text-muted-foreground">
-                              {pt.time ? new Date(pt.time).toLocaleDateString() : `Trade #${i + 1}`}
-                            </td>
-                            <td className={`py-1 text-right ${pnlColor(pt.pnl)}`}>
-                              {pt.pnl >= 0 ? "+" : ""}
-                              {pt.pnl.toFixed(2)}
-                            </td>
-                            <td className={`py-1 text-right font-medium ${pnlColor(cumulative)}`}>
-                              {cumulative >= 0 ? "+" : ""}
-                              {cumulative.toFixed(2)}
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+            <div className="max-h-[250px] overflow-y-auto font-mono text-[11px]">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-card-border text-muted-foreground">
+                    <th className="pb-1 text-left font-medium">Time</th>
+                    <th className="pb-1 text-right font-medium">P&L</th>
+                    <th className="pb-1 text-right font-medium">Cumulative</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let cumulative = 0;
+                    return performance.equity_curve.map((pt, i) => {
+                      cumulative += pt.pnl;
+                      return (
+                        <tr key={i} className="border-b border-card-border/30">
+                          <td className="py-0.5 text-muted-foreground">
+                            {pt.time ? new Date(pt.time).toLocaleDateString() : `#${i + 1}`}
+                          </td>
+                          <td className={`py-0.5 text-right ${pnlColor(pt.pnl)}`}>
+                            {pt.pnl >= 0 ? "+" : ""}{pt.pnl.toFixed(2)}
+                          </td>
+                          <td className={`py-0.5 text-right font-medium ${pnlColor(cumulative)}`}>
+                            {cumulative >= 0 ? "+" : ""}{cumulative.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

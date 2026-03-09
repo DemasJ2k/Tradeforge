@@ -11,7 +11,8 @@ import { getIndicatorById } from "@/lib/indicatorRegistry";
 import * as Calc from "@/lib/indicators";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { ChevronDown, Radio, RefreshCw } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useAgents } from "@/hooks/useAgents";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -185,6 +186,32 @@ export default function TradingPage() {
   const tickAgeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Ref so the interval callback can read latest lastTickMs without being a dep
   const lastTickMsRef = useRef<Record<string, number>>({});
+
+  // ── Chart container ref + dynamic height ──
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [chartHeight, setChartHeight] = useState(400);
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect?.height;
+      if (h && h > 100) setChartHeight(Math.round(h));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ── Agent store for P&L summary + counts ──
+  const {
+    agents,
+    pnlSummary,
+    loadPnlSummary,
+    loadAllTrades,
+    allTrades,
+    allTradesLoading,
+    expandedAgentIds,
+    toggleAgentExpand,
+  } = useAgents();
 
   // ── Connect WebSocket on mount ──
   useEffect(() => {
@@ -690,6 +717,15 @@ export default function TradingPage() {
     }
   };
 
+  // ── Load P&L summary on mount ──
+  const pnlDidLoad = useRef(false);
+  useEffect(() => {
+    if (pnlDidLoad.current) return;
+    pnlDidLoad.current = true;
+    loadPnlSummary();
+    loadAllTrades();
+  }, []);
+
   /* ── polling loop ─────────────────────────────── */
   const refreshData = useCallback(async () => {
     try {
@@ -803,8 +839,11 @@ export default function TradingPage() {
   };
 
   /* ═══════════════ RENDER ═══════════════════════ */
+  const runningAgents = agents.filter(a => a.status === "running").length;
+  const todayPnl = pnlSummary.reduce((s, a) => s + a.total_pnl, 0);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* ── Header ─────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg sm:text-xl font-semibold">Live Trading</h2>
@@ -830,9 +869,7 @@ export default function TradingPage() {
             </>
           )}
           {!connected && (
-            <Button
-              onClick={() => setShowConnect(true)}
-            >
+            <Button onClick={() => setShowConnect(true)}>
               Connect Broker
             </Button>
           )}
@@ -845,7 +882,7 @@ export default function TradingPage() {
         </div>
       )}
 
-      {/* ── Chart Panel ────────────────────────── */}
+      {/* ── Chart Panel (dominant) ────────────── */}
       <div className="rounded-xl border border-card-border bg-card-bg overflow-hidden">
         {/* Chart toolbar */}
         <div className="flex flex-wrap items-center justify-between border-b border-card-border px-2 sm:px-4 py-2 gap-2">
@@ -1012,19 +1049,19 @@ export default function TradingPage() {
           <IndicatorDropdown label="Indicator 2" value={indicator2} onChange={setIndicator2} />
         </div>
 
-        {/* Chart */}
-        <div className="relative">
+        {/* Chart — dominant height */}
+        <div ref={chartContainerRef} className="relative h-[55vh] min-h-[350px]">
         {chartLoading ? (
-          <div className="flex h-[400px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading chart data...
           </div>
         ) : chartBars.length === 0 ? (
-          <div className="flex h-[400px] flex-col items-center justify-center text-sm text-muted-foreground gap-2">
+          <div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground gap-2">
             <span>
               {chartBroker === "mt5" && !connected
                 ? "Connect MT5 broker to view live chart data"
                 : chartBroker !== "static" && chartBroker !== "mt5" && !connected
-                  ? `Connect ${chartBroker.charAt(0).toUpperCase() + chartBroker.slice(1)} in Settings → Brokers, then use Connect Broker`
+                  ? `Connect ${chartBroker.charAt(0).toUpperCase() + chartBroker.slice(1)} in Settings, then use Connect Broker`
                   : chartMode === "live" && wsStatus !== "connected"
                     ? "WebSocket connecting... waiting for live data"
                     : "No chart data available — try switching to a different symbol or data source"}
@@ -1042,7 +1079,7 @@ export default function TradingPage() {
           <CandlestickChart
             ref={chartRef}
             data={chartBars}
-            height={400}
+            height={chartHeight}
             upColor={settings?.chart_up_color || "#22c55e"}
             downColor={settings?.chart_down_color || "#ef4444"}
             showGrid={settings?.chart_grid !== false}
@@ -1050,7 +1087,7 @@ export default function TradingPage() {
             overlayLines={overlayLines}
           />
         )}
-        {/* Strategy Overlay Panel (Phase 5A) */}
+        {/* Strategy Overlay Panel */}
         <StrategyOverlayPanel
           chart={chartRef.current?.getChart() ?? null}
           datasourceId={overlayDatasourceId}
@@ -1076,6 +1113,248 @@ export default function TradingPage() {
           </div>
         )}
       </div>
+
+      {/* ── Summary Cards Strip ─────────────────── */}
+      {connected && account && (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="rounded-lg border border-card-border bg-card-bg p-3">
+            <div className="text-[10px] text-muted-foreground uppercase">Balance</div>
+            <div className="text-base font-semibold">{account.currency} {fmtK(account.balance)}</div>
+          </div>
+          <div className="rounded-lg border border-card-border bg-card-bg p-3">
+            <div className="text-[10px] text-muted-foreground uppercase">Equity</div>
+            <div className="text-base font-semibold">{account.currency} {fmtK(account.equity)}</div>
+          </div>
+          <div className="rounded-lg border border-card-border bg-card-bg p-3">
+            <div className="text-[10px] text-muted-foreground uppercase">Unrealized P&L</div>
+            <div className={`text-base font-semibold ${pnlColor(account.unrealized_pnl)}`}>
+              {account.unrealized_pnl >= 0 ? "+" : ""}{fmt(account.unrealized_pnl)}
+            </div>
+          </div>
+          <div className="rounded-lg border border-card-border bg-card-bg p-3">
+            <div className="text-[10px] text-muted-foreground uppercase">Active Agents</div>
+            <div className="text-base font-semibold">{runningAgents} <span className="text-xs text-muted-foreground font-normal">/ {agents.length}</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Per-Agent P&L Breakdown Cards ────── */}
+      {pnlSummary.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          {pnlSummary.map((a) => (
+            <button
+              key={a.agent_id}
+              onClick={() => {
+                // Switch to agents tab + expand this agent
+                const tabsEl = document.querySelector('[data-slot="tabs"]');
+                if (tabsEl) {
+                  const trigger = tabsEl.querySelector('[data-value="agents"]') as HTMLButtonElement | null;
+                  trigger?.click();
+                }
+                if (!expandedAgentIds.includes(a.agent_id)) {
+                  toggleAgentExpand(a.agent_id);
+                }
+              }}
+              className="shrink-0 rounded-lg border border-card-border bg-card-bg p-3 hover:border-accent/30 transition-colors min-w-[160px] text-left"
+            >
+              <div className="text-xs font-medium truncate">{a.agent_name}</div>
+              <div className="text-[10px] text-muted-foreground">{a.symbol} - {a.timeframe}</div>
+              <div className={`text-sm font-semibold mt-1 ${pnlColor(a.total_pnl)}`}>
+                {a.total_pnl >= 0 ? "+" : ""}${a.total_pnl.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {a.total_trades} trades - {a.win_rate.toFixed(0)}% WR
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Section Tabs ──────────────────────── */}
+      <Tabs defaultValue="agents" className="w-full">
+        <TabsList variant="line" className="w-full justify-start border-b border-card-border">
+          <TabsTrigger value="agents">Agents ({agents.length})</TabsTrigger>
+          <TabsTrigger value="positions">Positions ({positions.length})</TabsTrigger>
+          <TabsTrigger value="orders">Orders ({orders.length})</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
+
+        {/* ── Agents Tab ── */}
+        <TabsContent value="agents" className="pt-3">
+          <AgentPanel />
+        </TabsContent>
+
+        {/* ── Positions Tab (multi-agent unified) ── */}
+        <TabsContent value="positions" className="pt-3">
+          {!connected ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Radio className="w-8 h-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground mb-4">Connect a broker to see live positions.</p>
+              <Button onClick={() => setShowConnect(true)}>Connect Broker</Button>
+            </div>
+          ) : positions.length === 0 ? (
+            <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+              No open positions
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {positions.map((p) => (
+                <div
+                  key={p.position_id}
+                  className="flex items-center justify-between rounded-lg border border-card-border bg-card-bg p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary"
+                      className={`${p.side === "LONG" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
+                    >
+                      {p.side}
+                    </Badge>
+                    <div>
+                      <div className="text-sm font-medium">{p.symbol}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.size} units @ {fmt(p.entry_price, 5)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <div className={`text-sm font-medium ${pnlColor(p.unrealized_pnl)}`}>
+                        {p.unrealized_pnl >= 0 ? "+" : ""}{fmt(p.unrealized_pnl)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{fmt(p.current_price, 5)}</div>
+                    </div>
+                    <Button variant="outline" size="sm"
+                      onClick={() => closePosition(p.position_id)}
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Orders Tab ── */}
+        <TabsContent value="orders" className="pt-3">
+          {!connected ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Radio className="w-8 h-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground mb-4">Connect a broker to see pending orders.</p>
+              <Button onClick={() => setShowConnect(true)}>Connect Broker</Button>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+              No pending orders
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {orders.map((o) => (
+                <div
+                  key={o.order_id}
+                  className="flex items-center justify-between rounded-lg border border-card-border bg-card-bg p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary"
+                      className={`${o.side === "BUY" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
+                    >
+                      {o.side}
+                    </Badge>
+                    <div>
+                      <div className="text-sm font-medium">{o.symbol}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {o.order_type} — {o.size} units {o.price ? `@ ${fmt(o.price, 5)}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right text-xs text-muted-foreground">
+                      {o.stop_loss && <div>SL: {fmt(o.stop_loss, 5)}</div>}
+                      {o.take_profit && <div>TP: {fmt(o.take_profit, 5)}</div>}
+                    </div>
+                    <Button variant="outline" size="sm"
+                      onClick={() => cancelOrder(o.order_id)}
+                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── History Tab ── */}
+        <TabsContent value="history" className="pt-3">
+          {trades.length === 0 ? (
+            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+              No trades recorded yet
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-card-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-card-border text-xs text-muted-foreground bg-card-bg">
+                    <th className="px-3 py-2 text-left font-medium">Symbol</th>
+                    <th className="px-3 py-2 text-left font-medium">Broker</th>
+                    <th className="px-3 py-2 text-left font-medium">Side</th>
+                    <th className="px-3 py-2 text-right font-medium">Size</th>
+                    <th className="px-3 py-2 text-right font-medium">Entry</th>
+                    <th className="px-3 py-2 text-right font-medium">Exit</th>
+                    <th className="px-3 py-2 text-right font-medium">P&L</th>
+                    <th className="px-3 py-2 text-left font-medium">Exit Reason</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                    <th className="px-3 py-2 text-left font-medium">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.map((t) => (
+                    <tr key={t.id} className="border-b border-card-border/50 last:border-0">
+                      <td className="px-3 py-2">{t.symbol}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{t.broker ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        <span className={t.direction === "BUY" ? "text-green-400" : "text-red-400"}>
+                          {t.direction}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">{t.lot_size}</td>
+                      <td className="px-3 py-2 text-right">{t.entry_price ? fmt(t.entry_price, 5) : "—"}</td>
+                      <td className="px-3 py-2 text-right">{t.exit_price ? fmt(t.exit_price, 5) : "—"}</td>
+                      <td className={`px-3 py-2 text-right ${pnlColor(t.pnl ?? 0)}`}>
+                        {t.pnl != null ? `$${fmt(t.pnl)}` : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {t.exit_reason ? (
+                          <Badge variant="secondary" className={`text-[10px] uppercase ${
+                            t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
+                            : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
+                            : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
+                            : "bg-cyan-500/15 text-cyan-400"
+                          }`}>{t.exit_reason}</Badge>
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="secondary"
+                          className={`${
+                            t.status === "open" ? "bg-blue-500/20 text-fa-accent" : "bg-zinc-500/20 text-zinc-400"
+                          }`}
+                        >
+                          {t.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {t.entry_time ? new Date(t.entry_time).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* ── Connect Modal ──────────────────────── */}
       <Dialog open={showConnect} onOpenChange={setShowConnect}>
@@ -1364,328 +1643,6 @@ export default function TradingPage() {
             </div>
         </DialogContent>
       </Dialog>
-
-      {/* ── Algo Agents Panel ────────────────── */}
-      <AgentPanel />
-
-      {/* ── Not Connected State ────────────────── */}
-      {!connected && (
-        <Card className="border-card-border bg-card-bg p-16 text-center">
-          <CardContent className="flex flex-col items-center justify-center p-0">
-          <Radio className="w-10 h-10 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No Broker Connected</h3>
-          <p className="text-sm text-muted-foreground mb-6 max-w-md">
-            Connect to a broker to see live positions, place orders, and monitor your
-            account in real time.
-          </p>
-          <Button
-            onClick={() => setShowConnect(true)}
-          >
-            Connect Broker
-          </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Connected Dashboard ────────────────── */}
-      {connected && account && (
-        <>
-          {/* Account Summary Cards */}
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1">Balance</div>
-              <div className="text-lg font-semibold">
-                {account.currency} {fmtK(account.balance)}
-              </div>
-              </CardContent>
-            </Card>
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1">Equity</div>
-              <div className="text-lg font-semibold">
-                {account.currency} {fmtK(account.equity)}
-              </div>
-              </CardContent>
-            </Card>
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1">Unrealized P&L</div>
-              <div className={`text-lg font-semibold ${pnlColor(account.unrealized_pnl)}`}>
-                {account.unrealized_pnl >= 0 ? "+" : ""}
-                {fmt(account.unrealized_pnl)}
-              </div>
-              </CardContent>
-            </Card>
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground mb-1">Margin Used / Free</div>
-              <div className="text-lg font-semibold">
-                {fmtK(account.margin_used)}{" "}
-                <span className="text-xs text-muted-foreground font-normal">
-                  / {fmtK(account.margin_available)}
-                </span>
-              </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Positions & Orders */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Open Positions */}
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Open Positions ({positions.length})
-                </h3>
-                <Button variant="ghost" size="sm" onClick={refreshData}
-                  className="text-xs text-muted-foreground hover:text-accent h-auto py-1">
-                  <RefreshCw className="w-3 h-3 mr-1" />Refresh
-                </Button>
-              </div>
-
-              {positions.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-                  No open positions
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {positions.map((p) => (
-                    <div
-                      key={p.position_id}
-                      className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary"
-                          className={`${p.side === "LONG" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
-                        >
-                          {p.side}
-                        </Badge>
-                        <div>
-                          <div className="text-sm font-medium">{p.symbol}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {p.size} units @ {fmt(p.entry_price, 5)}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className={`text-sm font-medium ${pnlColor(p.unrealized_pnl)}`}>
-                            {p.unrealized_pnl >= 0 ? "+" : ""}
-                            {fmt(p.unrealized_pnl)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {fmt(p.current_price, 5)}
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm"
-                          onClick={() => closePosition(p.position_id)}
-                          className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
-                          title="Close position"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              </CardContent>
-            </Card>
-
-            {/* Pending Orders */}
-            <Card className="border-card-border bg-card-bg">
-              <CardContent className="p-5">
-              <h3 className="text-sm font-medium text-muted-foreground mb-4">
-                Pending Orders ({orders.length})
-              </h3>
-
-              {orders.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-                  No pending orders
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {orders.map((o) => (
-                    <div
-                      key={o.order_id}
-                      className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary"
-                          className={`${o.side === "BUY" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
-                        >
-                          {o.side}
-                        </Badge>
-                        <div>
-                          <div className="text-sm font-medium">{o.symbol}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {o.order_type} — {o.size} units
-                            {o.price ? ` @ ${fmt(o.price, 5)}` : ""}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right text-xs text-muted-foreground">
-                          {o.stop_loss && <div>SL: {fmt(o.stop_loss, 5)}</div>}
-                          {o.take_profit && <div>TP: {fmt(o.take_profit, 5)}</div>}
-                        </div>
-                        <Button variant="outline" size="sm"
-                          onClick={() => cancelOrder(o.order_id)}
-                          className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Risk Monitor */}
-          <Card className="border-card-border bg-card-bg">
-            <CardContent className="p-5">
-            <h3 className="text-sm font-medium text-muted-foreground mb-4">Risk Monitor</h3>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Total Exposure</div>
-                <div className="text-sm font-medium">
-                  {positions.reduce((s, p) => s + p.size * p.current_price, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Positions</div>
-                <div className="text-sm font-medium">{positions.length}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Margin Level</div>
-                <div className="text-sm font-medium">
-                  {account.margin_used > 0
-                    ? `${((account.equity / account.margin_used) * 100).toFixed(0)}%`
-                    : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Unrealized P&L %</div>
-                <div className={`text-sm font-medium ${pnlColor(account.unrealized_pnl)}`}>
-                  {account.balance > 0
-                    ? `${((account.unrealized_pnl / account.balance) * 100).toFixed(2)}%`
-                    : "0.00%"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Free Margin %</div>
-                <div className="text-sm font-medium">
-                  {account.equity > 0
-                    ? `${((account.margin_available / account.equity) * 100).toFixed(0)}%`
-                    : "—"}
-                </div>
-              </div>
-            </div>
-            </CardContent>
-          </Card>
-
-          {/* Trade History */}
-          <Card className="border-card-border bg-card-bg">
-            <CardContent className="p-5">
-            <h3 className="text-sm font-medium text-muted-foreground mb-4">
-              Recent Trade History
-            </h3>
-
-            {trades.length === 0 ? (
-              <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-                No trades recorded yet
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-card-border text-xs text-muted-foreground">
-                      <th className="pb-2 text-left font-medium">Symbol</th>
-                      <th className="pb-2 text-left font-medium">Broker</th>
-                      <th className="pb-2 text-left font-medium">Side</th>
-                      <th className="pb-2 text-right font-medium">Size</th>
-                      <th className="pb-2 text-right font-medium">SL</th>
-                      <th className="pb-2 text-right font-medium">TP</th>
-                      <th className="pb-2 text-right font-medium">Entry</th>
-                      <th className="pb-2 text-right font-medium">Exit</th>
-                      <th className="pb-2 text-right font-medium">P&L</th>
-                      <th className="pb-2 text-left font-medium">Exit Reason</th>
-                      <th className="pb-2 text-left font-medium">Status</th>
-                      <th className="pb-2 text-left font-medium">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trades.map((t) => (
-                      <tr
-                        key={t.id}
-                        className="border-b border-card-border/50 last:border-0"
-                      >
-                        <td className="py-2">{t.symbol}</td>
-                        <td className="py-2 text-xs text-muted-foreground">{t.broker ?? "—"}</td>
-                        <td className="py-2">
-                          <span
-                            className={
-                              t.direction === "BUY"
-                                ? "text-green-400"
-                                : "text-red-400"
-                            }
-                          >
-                            {t.direction}
-                          </span>
-                        </td>
-                        <td className="py-2 text-right">{t.lot_size}</td>
-                        <td className="py-2 text-right text-xs text-muted-foreground">{t.stop_loss != null ? fmt(t.stop_loss, 2) : "—"}</td>
-                        <td className="py-2 text-right text-xs text-muted-foreground">{t.take_profit != null ? fmt(t.take_profit, 2) : "—"}</td>
-                        <td className="py-2 text-right">
-                          {t.entry_price ? fmt(t.entry_price, 5) : "—"}
-                        </td>
-                        <td className="py-2 text-right">
-                          {t.exit_price ? fmt(t.exit_price, 5) : "—"}
-                        </td>
-                        <td className={`py-2 text-right ${pnlColor(t.pnl ?? 0)}`}>
-                          {t.pnl != null ? `$${fmt(t.pnl)}` : "—"}
-                        </td>
-                        <td className="py-2">
-                          {t.exit_reason ? (
-                            <Badge variant="secondary" className={`text-[10px] uppercase ${
-                              t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
-                              : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
-                              : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
-                              : "bg-cyan-500/15 text-cyan-400"
-                            }`}>{t.exit_reason}</Badge>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="py-2">
-                          <Badge variant="secondary"
-                            className={`${
-                              t.status === "open"
-                                ? "bg-blue-500/20 text-fa-accent"
-                                : "bg-zinc-500/20 text-zinc-400"
-                            }`}
-                          >
-                            {t.status}
-                          </Badge>
-                        </td>
-                        <td className="py-2 text-xs text-muted-foreground">
-                          {t.entry_time
-                            ? new Date(t.entry_time).toLocaleString()
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            </CardContent>
-          </Card>
-        </>
-      )}
 
       <ChatHelpers />
     </div>

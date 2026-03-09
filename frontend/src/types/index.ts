@@ -917,6 +917,23 @@ export interface AgentTradeList {
   total: number;
 }
 
+export interface MultiAgentTrade extends AgentTrade {
+  agent_name: string;
+}
+
+export interface AgentPnlSummary {
+  agent_id: number;
+  agent_name: string;
+  symbol: string;
+  timeframe: string;
+  status: string;
+  mode: string;
+  total_pnl: number;
+  total_trades: number;
+  wins: number;
+  win_rate: number;
+}
+
 export interface AgentPerformance {
   agent_id: number;
   total_trades: number;

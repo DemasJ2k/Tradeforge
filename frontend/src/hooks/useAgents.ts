@@ -13,6 +13,8 @@ import type {
   AgentTrade,
   AgentTradeList,
   AgentPerformance,
+  MultiAgentTrade,
+  AgentPnlSummary,
 } from "@/types";
 
 // ── Store state ─────────────────────────────────────
@@ -38,6 +40,23 @@ interface AgentsState {
 
   /** Performance stats for selected agent */
   performance: AgentPerformance | null;
+
+  /** All trades across agents (for multi-agent views) */
+  allTrades: MultiAgentTrade[];
+  allTradesLoading: boolean;
+
+  /** Per-agent P&L summary */
+  pnlSummary: AgentPnlSummary[];
+  pnlSummaryLoading: boolean;
+
+  /** Which agent rows are expanded inline */
+  expandedAgentIds: number[];
+
+  /** Per-agent detail cache (for inline expand) */
+  agentDetails: Record<
+    number,
+    { logs: AgentLog[]; trades: AgentTrade[]; performance: AgentPerformance | null; loading: boolean }
+  >;
 
   // ── Actions ──
 
@@ -83,6 +102,18 @@ interface AgentsState {
   /** Reject a pending trade */
   rejectTrade: (agentId: number, tradeId: number) => Promise<void>;
 
+  /** Load trades from all agents */
+  loadAllTrades: (status?: string) => Promise<void>;
+
+  /** Load per-agent P&L summary */
+  loadPnlSummary: () => Promise<void>;
+
+  /** Toggle inline expand for an agent row */
+  toggleAgentExpand: (id: number) => void;
+
+  /** Load detail data for an expanded agent */
+  loadAgentDetail: (agentId: number) => Promise<void>;
+
   /** Handle real-time agent event from WebSocket */
   handleAgentEvent: (data: Record<string, unknown>) => void;
 
@@ -103,6 +134,15 @@ const initialState = {
   tradesLoading: false,
   pendingTrades: [] as AgentTrade[],
   performance: null as AgentPerformance | null,
+  allTrades: [] as MultiAgentTrade[],
+  allTradesLoading: false,
+  pnlSummary: [] as AgentPnlSummary[],
+  pnlSummaryLoading: false,
+  expandedAgentIds: [] as number[],
+  agentDetails: {} as Record<
+    number,
+    { logs: AgentLog[]; trades: AgentTrade[]; performance: AgentPerformance | null; loading: boolean }
+  >,
 };
 
 // ── Store ───────────────────────────────────────────
@@ -246,6 +286,78 @@ export const useAgents = create<AgentsState>((set, get) => ({
     }));
   },
 
+  loadAllTrades: async (status = "paper,executed") => {
+    set({ allTradesLoading: true });
+    try {
+      const data = await api.get<{ items: MultiAgentTrade[]; total: number }>(
+        `/api/agents/all-trades?status=${encodeURIComponent(status)}&limit=200`
+      );
+      set({ allTrades: data.items, allTradesLoading: false });
+    } catch {
+      set({ allTradesLoading: false });
+    }
+  },
+
+  loadPnlSummary: async () => {
+    set({ pnlSummaryLoading: true });
+    try {
+      const data = await api.get<{ items: AgentPnlSummary[] }>(
+        "/api/agents/pnl-summary"
+      );
+      set({ pnlSummary: data.items, pnlSummaryLoading: false });
+    } catch {
+      set({ pnlSummaryLoading: false });
+    }
+  },
+
+  toggleAgentExpand: (id: number) => {
+    const { expandedAgentIds } = get();
+    const isExpanded = expandedAgentIds.includes(id);
+    if (isExpanded) {
+      set({ expandedAgentIds: expandedAgentIds.filter((x) => x !== id) });
+    } else {
+      set({ expandedAgentIds: [...expandedAgentIds, id] });
+      // Load detail data if not already cached
+      if (!get().agentDetails[id]) {
+        get().loadAgentDetail(id);
+      }
+    }
+  },
+
+  loadAgentDetail: async (agentId: number) => {
+    set((s) => ({
+      agentDetails: {
+        ...s.agentDetails,
+        [agentId]: { logs: [], trades: [], performance: null, loading: true },
+      },
+    }));
+    try {
+      const [logsData, tradesData, perfData] = await Promise.all([
+        api.get<AgentLogList>(`/api/agents/${agentId}/logs?limit=50`),
+        api.get<AgentTradeList>(`/api/agents/${agentId}/trades?limit=50`),
+        api.get<AgentPerformance>(`/api/agents/${agentId}/performance`).catch(() => null),
+      ]);
+      set((s) => ({
+        agentDetails: {
+          ...s.agentDetails,
+          [agentId]: {
+            logs: logsData.items,
+            trades: tradesData.items,
+            performance: perfData,
+            loading: false,
+          },
+        },
+      }));
+    } catch {
+      set((s) => ({
+        agentDetails: {
+          ...s.agentDetails,
+          [agentId]: { ...s.agentDetails[agentId], loading: false },
+        },
+      }));
+    }
+  },
+
   handleAgentEvent: (data: Record<string, unknown>) => {
     const eventType = data.event as string | undefined;
     const agentId = data.agent_id as number | undefined;
@@ -280,6 +392,17 @@ export const useAgents = create<AgentsState>((set, get) => ({
         if (get().selectedAgentId === agentId) {
           set((s) => ({ trades: [trade, ...s.trades] }));
         }
+
+        // Update expanded agent detail cache
+        const detail = get().agentDetails[agentId];
+        if (detail) {
+          set((s) => ({
+            agentDetails: {
+              ...s.agentDetails,
+              [agentId]: { ...detail, trades: [trade, ...detail.trades] },
+            },
+          }));
+        }
         break;
       }
 
@@ -287,10 +410,21 @@ export const useAgents = create<AgentsState>((set, get) => ({
         const trade = data.trade as AgentTrade | undefined;
         if (!trade) break;
 
-        set((s) => ({
-          trades: s.trades.map((t) => (t.id === trade.id ? trade : t)),
-          pendingTrades: s.pendingTrades.filter((t) => t.id !== trade.id),
-        }));
+        set((s) => {
+          const update: Partial<AgentsState> = {
+            trades: s.trades.map((t) => (t.id === trade.id ? trade : t)),
+            pendingTrades: s.pendingTrades.filter((t) => t.id !== trade.id),
+          };
+          // Update expanded agent detail cache
+          const d = s.agentDetails[agentId];
+          if (d) {
+            update.agentDetails = {
+              ...s.agentDetails,
+              [agentId]: { ...d, trades: d.trades.map((t) => (t.id === trade.id ? trade : t)) },
+            };
+          }
+          return update;
+        });
         break;
       }
 
@@ -301,6 +435,17 @@ export const useAgents = create<AgentsState>((set, get) => ({
         // Prepend to logs if viewing this agent
         if (get().selectedAgentId === agentId) {
           set((s) => ({ logs: [log, ...s.logs].slice(0, 200) }));
+        }
+
+        // Update expanded agent detail cache
+        const logDetail = get().agentDetails[agentId];
+        if (logDetail) {
+          set((s) => ({
+            agentDetails: {
+              ...s.agentDetails,
+              [agentId]: { ...logDetail, logs: [log, ...logDetail.logs].slice(0, 200) },
+            },
+          }));
         }
         break;
       }
@@ -328,6 +473,17 @@ export const useAgents = create<AgentsState>((set, get) => ({
               : a
           ),
         }));
+
+        // Update expanded agent detail cache
+        const perfDetail = get().agentDetails[agentId];
+        if (perfDetail) {
+          set((s) => ({
+            agentDetails: {
+              ...s.agentDetails,
+              [agentId]: { ...perfDetail, performance: perf },
+            },
+          }));
+        }
         break;
       }
     }

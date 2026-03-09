@@ -352,6 +352,38 @@ def _remove_incompatible_strategies():
 
 _remove_incompatible_strategies()
 
+
+def _recalculate_agent_pnl():
+    """One-time recalculation of all AgentTrade P&L using correct instrument specs.
+    Fixes historical trades that used the broken raw-points formula."""
+    from app.services.agent.instrument_specs import calc_pnl_dollars
+    _log = logging.getLogger(__name__)
+
+    with engine.connect() as conn:
+        from sqlalchemy import text
+        rows = conn.execute(text(
+            "SELECT id, symbol, direction, entry_price, exit_price, lot_size, pnl, broker_name "
+            "FROM agent_trades WHERE entry_price IS NOT NULL AND exit_price IS NOT NULL"
+        )).fetchall()
+
+        updated = 0
+        for r in rows:
+            tid, symbol, direction, entry, exit_p, lot, old_pnl, broker = r
+            broker = broker or "oanda"
+            lot = lot or 0.01
+            new_pnl = calc_pnl_dollars(symbol, direction, entry, exit_p, lot, broker)
+            if abs((old_pnl or 0) - new_pnl) > 0.001:
+                conn.execute(text(
+                    "UPDATE agent_trades SET pnl = :pnl WHERE id = :id"
+                ), {"pnl": round(new_pnl, 4), "id": tid})
+                updated += 1
+        conn.commit()
+        if updated > 0:
+            _log.info("Recalculated P&L for %d/%d agent trades", updated, len(rows))
+
+
+_recalculate_agent_pnl()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -1283,6 +1315,7 @@ async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
+    _recalculate_agent_pnl()
     await ws_manager.start()
     await tick_aggregator.start()
     try:
