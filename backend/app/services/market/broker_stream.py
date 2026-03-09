@@ -218,6 +218,26 @@ class BrokerPriceStreamer:
                 return name
         return None
 
+    async def notify_broker_connected(self, broker_name: str):
+        """Called when a broker connects — start pollers for any subscribed-but-unpolled symbols."""
+        subscribed = ws_manager.get_subscribed_channels()
+        for channel in subscribed:
+            if not channel.startswith("ticks:"):
+                continue
+            symbol = channel.split(":", 1)[1]
+            if symbol in self._pollers and self._pollers[symbol].is_running:
+                continue
+            # Check that this broker is actually connected
+            from app.services.broker.manager import broker_manager
+            adapter = broker_manager.get_adapter(broker_name)
+            if not adapter:
+                continue
+            poll_interval = _POLL_INTERVALS.get(broker_name, _DEFAULT_POLL_INTERVAL)
+            poller = BrokerPricePoller(symbol, broker_name, poll_interval=poll_interval)
+            self._pollers[symbol] = poller
+            await poller.start()
+            logger.info("BrokerPriceStreamer: late-started poller for %s via %s", symbol, broker_name)
+
     def get_active_symbols(self) -> list[str]:
         return [s for s, p in self._pollers.items() if p.is_running]
 

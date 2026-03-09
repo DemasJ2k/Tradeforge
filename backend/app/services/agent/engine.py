@@ -354,44 +354,62 @@ class AgentRunner:
         Uses the agent's configured broker so prices match the chart exactly.
         Only falls back to direct MT5 when broker_name is "mt5" — never silently
         uses MT5 data for Oanda/Coinbase agents (that would cause price mismatches).
+
+        Retries up to 6 times (30s total) to allow broker auto-connect to finish.
         """
         from app.services.broker.manager import broker_manager
 
-        # Load from the configured broker (Oanda, Coinbase, MT5 adapter, etc.)
-        try:
-            adapter = broker_manager.get_adapter(self._broker_name)
-            if adapter and await adapter.is_connected():
-                # MT5 adapter has a dedicated get_initial_bars(); others use get_candles()
-                if hasattr(adapter, "get_initial_bars"):
-                    bars = await adapter.get_initial_bars(self._symbol, self._timeframe, 500)
+        max_retries = 6
+        for attempt in range(max_retries):
+            if not self._running:
+                return
+            try:
+                adapter = broker_manager.get_adapter(self._broker_name)
+                if adapter and await adapter.is_connected():
+                    # MT5 adapter has a dedicated get_initial_bars(); others use get_candles()
+                    if hasattr(adapter, "get_initial_bars"):
+                        bars = await adapter.get_initial_bars(self._symbol, self._timeframe, 500)
+                    else:
+                        candles = await adapter.get_candles(self._symbol, self._timeframe, 500)
+                        bars = [
+                            {
+                                "time": int(c.timestamp.timestamp()),
+                                "open": c.open,
+                                "high": c.high,
+                                "low": c.low,
+                                "close": c.close,
+                                "volume": c.volume,
+                            }
+                            for c in candles
+                        ]
+                    if bars:
+                        self._bar_buffer = bars
+                        self._log("info",
+                            f"Loaded {len(bars)} initial bars via {self._broker_name} "
+                            f"({self._symbol}/{self._timeframe})")
+                        return
+                    else:
+                        self._log("warn", f"Broker {self._broker_name} returned 0 bars for "
+                                          f"{self._symbol}/{self._timeframe}")
+                        # 0 bars is likely a real API response, don't retry
+                        break
                 else:
-                    candles = await adapter.get_candles(self._symbol, self._timeframe, 500)
-                    bars = [
-                        {
-                            "time": int(c.timestamp.timestamp()),
-                            "open": c.open,
-                            "high": c.high,
-                            "low": c.low,
-                            "close": c.close,
-                            "volume": c.volume,
-                        }
-                        for c in candles
-                    ]
-                if bars:
-                    self._bar_buffer = bars
-                    self._log("info",
-                        f"Loaded {len(bars)} initial bars via {self._broker_name} "
-                        f"({self._symbol}/{self._timeframe})")
-                    return
-                else:
-                    self._log("warn", f"Broker {self._broker_name} returned 0 bars for "
-                                      f"{self._symbol}/{self._timeframe}")
-            else:
-                self._log("warn", f"Broker {self._broker_name} not connected for initial bar load")
-        except Exception as e:
-            logger.warning("[Agent %d] Initial bar load from %s failed: %s",
-                           self.agent_id, self._broker_name, e)
-            self._log("warn", f"Bar load from {self._broker_name} failed: {e}")
+                    if attempt < max_retries - 1:
+                        self._log("info",
+                            f"Broker {self._broker_name} not connected yet — "
+                            f"retrying in 5s ({attempt + 1}/{max_retries})")
+                        await asyncio.sleep(5)
+                    else:
+                        self._log("warn",
+                            f"Broker {self._broker_name} not connected after "
+                            f"{max_retries} attempts — evaluator will warm up as bars arrive")
+            except Exception as e:
+                logger.warning("[Agent %d] Initial bar load from %s failed (attempt %d): %s",
+                               self.agent_id, self._broker_name, attempt + 1, e)
+                self._log("warn", f"Bar load from {self._broker_name} failed: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
+                break
 
         # For MT5 agents only: fall back to direct MT5 API if adapter isn't ready yet
         # (e.g., the MQL5 bridge isn't fully connected but MT5 is available locally)

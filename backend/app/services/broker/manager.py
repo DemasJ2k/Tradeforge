@@ -46,6 +46,15 @@ class BrokerManager:
             if self._default_broker is None:
                 self._default_broker = broker_name
             logger.info("Broker %s connected and registered", broker_name)
+
+            # Notify broker price streamer so it can start pollers for
+            # any symbols that were subscribed before the broker connected
+            try:
+                from app.services.market.broker_stream import broker_price_streamer
+                await broker_price_streamer.notify_broker_connected(broker_name)
+            except Exception as e:
+                logger.warning("Failed to notify broker_price_streamer: %s", e)
+
         return success
 
     async def disconnect_broker(self, broker_name: str) -> None:
