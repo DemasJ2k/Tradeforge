@@ -43,6 +43,7 @@ class AgentRunner:
         self._evaluator: Optional[MSSEvaluator] = None
         self._risk_manager: Optional[RiskManager] = None
         self._ml_filter: Optional[MLSignalFilter] = None
+        self._regime_detector = None  # HMM regime detector
         self._mode = "paper"
         self._symbol = ""
         self._timeframe = ""
@@ -124,6 +125,21 @@ class AgentRunner:
                                     self.agent_id, ml_model.name, ml_mode)
                     else:
                         self._ml_filter = None
+
+            # Initialize regime detector (if regime model exists)
+            regime_model_id = (agent.risk_config or {}).get("regime_model_id")
+            if regime_model_id is not None:
+                try:
+                    from app.services.ml.regime_detector import RegimeDetector
+                    rd = RegimeDetector(model_id=int(regime_model_id))
+                    if rd.load():
+                        self._regime_detector = rd
+                        logger.info("[Agent %d] Regime detector loaded (model_id=%s)",
+                                    self.agent_id, regime_model_id)
+                    else:
+                        logger.warning("[Agent %d] Regime model %s not found", self.agent_id, regime_model_id)
+                except Exception as e:
+                    logger.warning("[Agent %d] Failed to load regime detector: %s", self.agent_id, e)
 
             # Initialize risk manager
             self._risk_manager = RiskManager(agent.risk_config or {})
@@ -510,12 +526,27 @@ class AgentRunner:
             self._log("info", f"Skipping signal — already in {signal.direction} direction")
             return
 
+        # ── Regime detection ──
+        regime_context = None
+        if self._regime_detector:
+            try:
+                regime_context = self._regime_detector.predict_regime(self._bar_buffer)
+                if regime_context:
+                    self._log("regime", f"Market regime: {regime_context['regime']}", data={
+                        "regime": regime_context["regime"],
+                        "confidence": regime_context.get("confidence", 0),
+                        "probabilities": regime_context.get("probabilities", {}),
+                    })
+            except Exception as e:
+                logger.warning("[Agent %d] Regime detection error: %s", self.agent_id, e)
+
         # ── ML filter ──
         if self._ml_filter:
             ml_result = self._ml_filter.evaluate_signal(
                 strategy_direction=signal.direction,
                 strategy_confidence=signal.confidence,
                 bars=self._bar_buffer,
+                regime_context=regime_context,
             )
 
             self._log("ml_filter", ml_result["reason"], data={
@@ -530,6 +561,14 @@ class AgentRunner:
                 return
 
             signal.confidence = ml_result["combined_confidence"]
+        elif regime_context and self._regime_detector:
+            # Apply regime adjustment even without ML filter
+            adjusted = MLSignalFilter._apply_regime_adjustment(
+                {"approved": True, "combined_confidence": signal.confidence},
+                signal.direction,
+                regime_context,
+            )
+            signal.confidence = adjusted["combined_confidence"]
 
         # ── Risk check ──
         balance = await self._get_balance()

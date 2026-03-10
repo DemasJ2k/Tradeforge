@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ const levelLabel = (l: number) =>
 
 export default function MLPage() {
   /* ── state ──────────────────────────────────── */
-  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare">("list");
+  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime">("list");
   const [models, setModels] = useState<MLModelListItem[]>([]);
   const [selected, setSelected] = useState<MLModelDetail | null>(null);
   const [predictions, setPredictions] = useState<MLPredictionResult | null>(null);
@@ -85,6 +85,17 @@ export default function MLPage() {
   const [tOptunaNTrials, setTOptunaNTrials] = useState(50);
   const [tOptunaTimeout, setTOptunaTimeout] = useState(600);
   const [tOptunaFolds, setTOptunaFolds] = useState(3);
+
+  // Regime detection
+  const [regimeDsId, setRegimeDsId] = useState<number>(0);
+  const [regimeModelId, setRegimeModelId] = useState(0);
+  const [regimeTraining, setRegimeTraining] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [regimeResult, setRegimeResult] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [regimeHistory, setRegimeHistory] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [regimeCurrent, setRegimeCurrent] = useState<any>(null);
 
   // Meta-labeling
   const [metaTraining, setMetaTraining] = useState(false);
@@ -417,6 +428,61 @@ export default function MLPage() {
     }
   };
 
+  /* ── Regime handlers ─────────────────────── */
+  const handleRegimeTrain = async () => {
+    if (!regimeDsId) { setError("Select a datasource"); return; }
+    setRegimeTraining(true);
+    setError("");
+    setRegimeResult(null);
+    try {
+      const result = await api.post(`/api/ml/regime/train?datasource_id=${regimeDsId}&model_id=${regimeModelId}`, {});
+      setRegimeResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regime training failed");
+    } finally {
+      setRegimeTraining(false);
+    }
+  };
+
+  const handleRegimePredict = async () => {
+    if (!regimeDsId) { setError("Select a datasource"); return; }
+    setError("");
+    try {
+      // Find datasource name for symbol extraction
+      const ds = dataSources.find(d => d.id === regimeDsId);
+      const symbol = ds ? ds.filename.split("_")[0] : "UNKNOWN";
+      const result = await api.get(`/api/ml/regime/current/${symbol}?datasource_id=${regimeDsId}&model_id=${regimeModelId}`);
+      setRegimeCurrent(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regime prediction failed");
+    }
+  };
+
+  const handleRegimeHistory = async () => {
+    if (!regimeDsId) { setError("Select a datasource"); return; }
+    setError("");
+    try {
+      const ds = dataSources.find(d => d.id === regimeDsId);
+      const parts = ds ? ds.filename.split("_") : [];
+      const symbol = parts[0] || "UNKNOWN";
+      const timeframe = parts[1] || "H1";
+      const data = await api.get<Record<string, unknown>[]>(
+        `/api/ml/regime/history?symbol=${symbol}&timeframe=${timeframe}&model_id=${regimeModelId}`
+      );
+      setRegimeHistory(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load regime history");
+    }
+  };
+
+  const regimeColor = (r: string) => {
+    if (r === "trending_up") return "bg-green-500/20 text-green-400 border-green-500/30";
+    if (r === "trending_down") return "bg-red-500/20 text-red-400 border-red-500/30";
+    if (r === "ranging") return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+    if (r === "volatile") return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+    return "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
+  };
+
   /* ═══════════════ RENDER ═══════════════════════ */
   return (
     <div className="space-y-4">
@@ -461,6 +527,9 @@ export default function MLPage() {
             input.click();
           }}>
             <Upload className="h-4 w-4" /> Upload Model
+          </Button>
+          <Button variant="outline" onClick={() => setView("regime")} className="gap-1.5">
+            <Activity className="h-4 w-4" /> Regime Detection
           </Button>
           <Button onClick={() => setView("train")} className="gap-1.5">
             <Brain className="h-4 w-4" /> Train New Model
@@ -1386,6 +1455,176 @@ export default function MLPage() {
           </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── REGIME DETECTION VIEW ──────────── */}
+      {view === "regime" && (
+        <div className="space-y-4">
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-accent flex items-center gap-2">
+                <Activity className="h-4 w-4" /> HMM Regime Detection
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Train a Hidden Markov Model to classify market regime into 4 states:
+                <Badge className="ml-1 bg-green-500/20 text-green-400 text-[10px]">trending up</Badge>
+                <Badge className="ml-1 bg-red-500/20 text-red-400 text-[10px]">trending down</Badge>
+                <Badge className="ml-1 bg-blue-500/20 text-blue-400 text-[10px]">ranging</Badge>
+                <Badge className="ml-1 bg-orange-500/20 text-orange-400 text-[10px]">volatile</Badge>
+              </p>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Datasource</Label>
+                  <select
+                    className="w-full mt-1 rounded-md bg-zinc-900 border border-zinc-700 text-sm p-2"
+                    value={regimeDsId}
+                    onChange={e => setRegimeDsId(Number(e.target.value))}
+                  >
+                    <option value={0}>Select datasource...</option>
+                    {dataSources.map(ds => (
+                      <option key={ds.id} value={ds.id}>{ds.filename}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Model ID</Label>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={regimeModelId}
+                    onChange={e => setRegimeModelId(Number(e.target.value))}
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button onClick={handleRegimeTrain} disabled={regimeTraining || !regimeDsId} className="gap-1.5">
+                    {regimeTraining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                    Train HMM
+                  </Button>
+                  <Button variant="outline" onClick={handleRegimePredict} disabled={!regimeDsId}>
+                    <Play className="h-4 w-4 mr-1" /> Current
+                  </Button>
+                  <Button variant="outline" onClick={handleRegimeHistory} disabled={!regimeDsId}>
+                    <BarChart3 className="h-4 w-4 mr-1" /> History
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Training Result */}
+          {regimeResult && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold text-green-400">Training Complete</h4>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div><span className="text-muted-foreground">Bars:</span> {regimeResult.n_bars}</div>
+                  <div><span className="text-muted-foreground">States:</span> {regimeResult.n_states}</div>
+                  <div><span className="text-muted-foreground">Log-Likelihood:</span> {regimeResult.log_likelihood?.toFixed(2)}</div>
+                </div>
+                {regimeResult.regime_stats && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                    {Object.entries(regimeResult.regime_stats).map(([name, stats]: [string, unknown]) => {
+                      const s = stats as Record<string, number>;
+                      return (
+                        <div key={name} className={`rounded-lg border p-3 ${regimeColor(name)}`}>
+                          <div className="text-xs font-semibold capitalize">{name.replace(/_/g, " ")}</div>
+                          <div className="text-lg font-bold">{s.pct}%</div>
+                          <div className="text-[10px] mt-1">
+                            Avg return: {(s.return_mean * 100).toFixed(3)}% | Vol: {(s.vol_mean * 100).toFixed(3)}%
+                          </div>
+                          <div className="text-[10px]">{s.count} bars</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Current Regime */}
+          {regimeCurrent && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold">Current Market Regime</h4>
+                <div className="flex items-center gap-4">
+                  <Badge className={`text-base px-4 py-2 ${regimeColor(regimeCurrent.regime)}`}>
+                    {regimeCurrent.regime?.replace(/_/g, " ")}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    Confidence: {(regimeCurrent.confidence * 100).toFixed(1)}%
+                  </span>
+                </div>
+                {regimeCurrent.probabilities && (
+                  <div className="space-y-1 mt-2">
+                    {Object.entries(regimeCurrent.probabilities).map(([name, prob]: [string, unknown]) => (
+                      <div key={name} className="flex items-center gap-2 text-xs">
+                        <span className="w-28 text-muted-foreground capitalize">{name.replace(/_/g, " ")}</span>
+                        <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              name === "trending_up" ? "bg-green-500" :
+                              name === "trending_down" ? "bg-red-500" :
+                              name === "ranging" ? "bg-blue-500" : "bg-orange-500"
+                            }`}
+                            style={{ width: `${(prob as number) * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-12 text-right">{((prob as number) * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Regime History */}
+          {regimeHistory.length > 0 && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5">
+                <h4 className="text-sm font-semibold mb-3">Regime History ({regimeHistory.length} bars)</h4>
+                <div className="flex h-8 rounded overflow-hidden">
+                  {regimeHistory.map((r, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 ${
+                        r.regime === "trending_up" ? "bg-green-500" :
+                        r.regime === "trending_down" ? "bg-red-500" :
+                        r.regime === "ranging" ? "bg-blue-500" : "bg-orange-500"
+                      }`}
+                      title={`${r.datetime || i}: ${r.regime}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
+                  <span>{regimeHistory[0]?.datetime?.split("T")[0] || "start"}</span>
+                  <span>{regimeHistory[regimeHistory.length - 1]?.datetime?.split("T")[0] || "end"}</span>
+                </div>
+                {/* Legend */}
+                <div className="flex gap-4 mt-2 text-[10px]">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500"/> Trending Up</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500"/> Trending Down</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500"/> Ranging</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500"/> Volatile</span>
+                </div>
+                {/* Breakdown */}
+                <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
+                  {["trending_up", "trending_down", "ranging", "volatile"].map(r => {
+                    const count = regimeHistory.filter(h => h.regime === r).length;
+                    return (
+                      <div key={r} className={`rounded p-2 text-center ${regimeColor(r)}`}>
+                        <div className="capitalize text-[10px]">{r.replace(/_/g, " ")}</div>
+                        <div className="font-bold">{((count / regimeHistory.length) * 100).toFixed(1)}%</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       <ChatHelpers />

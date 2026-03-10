@@ -262,6 +262,7 @@ class MLSignalFilter:
         strategy_direction: int,
         strategy_confidence: float,
         bars: list[dict],
+        regime_context: Optional[dict] = None,
     ) -> dict:
         """
         Evaluate a strategy signal against the ML model prediction.
@@ -270,6 +271,8 @@ class MLSignalFilter:
             strategy_direction: 1 (bullish) or -1 (bearish)
             strategy_confidence: Strategy's confidence score (0-1)
             bars: Recent bars for ML prediction
+            regime_context: Optional dict from RegimeDetector.predict_regime()
+                            with keys: regime, state_index, probabilities, confidence
 
         Returns:
             Dict with:
@@ -277,6 +280,7 @@ class MLSignalFilter:
               - combined_confidence: float (blended confidence score)
               - ml_direction: int (ML model's predicted direction)
               - ml_confidence: float (ML model's confidence)
+              - regime: str (current regime name if available)
               - reason: str (explanation)
         """
         ml_pred = self.predict(bars)
@@ -309,7 +313,7 @@ class MLSignalFilter:
             # Both must agree
             if agrees:
                 combined = 0.6 * strategy_confidence + 0.4 * ml_conf
-                return {
+                result = {
                     "approved": True,
                     "combined_confidence": combined,
                     "ml_direction": ml_dir,
@@ -317,7 +321,7 @@ class MLSignalFilter:
                     "reason": f"Strategy + ML agree (ML conf={ml_conf:.1%})",
                 }
             else:
-                return {
+                result = {
                     "approved": False,
                     "combined_confidence": 0.0,
                     "ml_direction": ml_dir,
@@ -328,21 +332,22 @@ class MLSignalFilter:
         elif self.mode == "filter":
             # Skip only when ML strongly disagrees
             if not agrees and ml_conf > 0.55:
-                return {
+                result = {
                     "approved": False,
                     "combined_confidence": 0.0,
                     "ml_direction": ml_dir,
                     "ml_confidence": ml_conf,
                     "reason": f"ML strongly disagrees (pred={ml_dir}, conf={ml_conf:.1%})",
                 }
-            combined = strategy_confidence if agrees else strategy_confidence * 0.8
-            return {
-                "approved": True,
-                "combined_confidence": combined,
-                "ml_direction": ml_dir,
-                "ml_confidence": ml_conf,
-                "reason": f"ML {'agrees' if agrees else 'weakly disagrees'} (conf={ml_conf:.1%})",
-            }
+            else:
+                combined = strategy_confidence if agrees else strategy_confidence * 0.8
+                result = {
+                    "approved": True,
+                    "combined_confidence": combined,
+                    "ml_direction": ml_dir,
+                    "ml_confidence": ml_conf,
+                    "reason": f"ML {'agrees' if agrees else 'weakly disagrees'} (conf={ml_conf:.1%})",
+                }
 
         else:  # "enhance" (default)
             # Blend confidences, always proceed
@@ -350,10 +355,68 @@ class MLSignalFilter:
                 combined = 0.6 * strategy_confidence + 0.4 * ml_conf
             else:
                 combined = strategy_confidence * 0.7  # Penalize slightly
-            return {
+            result = {
                 "approved": True,
                 "combined_confidence": combined,
                 "ml_direction": ml_dir,
                 "ml_confidence": ml_conf,
                 "reason": f"ML {'confirms' if agrees else 'disagrees'} (conf={ml_conf:.1%})",
             }
+
+        # ── Regime adjustments ──
+        result = self._apply_regime_adjustment(result, strategy_direction, regime_context)
+        return result
+
+    @staticmethod
+    def _apply_regime_adjustment(
+        result: dict,
+        strategy_direction: int,
+        regime_context: Optional[dict],
+    ) -> dict:
+        """Adjust confidence based on detected market regime."""
+        if not regime_context or not result["approved"]:
+            result.setdefault("regime", "unknown")
+            return result
+
+        regime = regime_context.get("regime", "unknown")
+        regime_conf = regime_context.get("confidence", 0)
+        result["regime"] = regime
+
+        # Only apply adjustments if regime confidence is decent
+        if regime_conf < 0.4:
+            return result
+
+        conf = result["combined_confidence"]
+
+        if regime == "trending_up":
+            if strategy_direction == 1:
+                # Trending up + BUY → boost 10%
+                conf = min(conf * 1.10, 1.0)
+                result["reason"] += f" | regime=trending_up (+10%)"
+            else:
+                # Trending up + SELL → reduce 20%
+                conf *= 0.80
+                result["reason"] += f" | regime=trending_up (SELL penalized -20%)"
+
+        elif regime == "trending_down":
+            if strategy_direction == -1:
+                # Trending down + SELL → boost 10%
+                conf = min(conf * 1.10, 1.0)
+                result["reason"] += f" | regime=trending_down (+10%)"
+            else:
+                # Trending down + BUY → reduce 20%
+                conf *= 0.80
+                result["reason"] += f" | regime=trending_down (BUY penalized -20%)"
+
+        elif regime == "ranging":
+            # Ranging → reduce momentum signals, slightly penalize all
+            conf *= 0.90
+            result["reason"] += f" | regime=ranging (momentum reduced -10%)"
+
+        elif regime == "volatile":
+            # Volatile → tighten risk, reduce confidence
+            conf *= 0.85
+            result["reason"] += f" | regime=volatile (risk tightened -15%)"
+
+        result["combined_confidence"] = conf
+        return result

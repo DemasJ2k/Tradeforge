@@ -1048,6 +1048,145 @@ async def upload_model(
     }
 
 
+# ── Regime Detection ──────────────────────────────────
+
+@router.post("/regime/train")
+async def train_regime_model(
+    datasource_id: int = Query(...),
+    model_id: int = Query(0, description="Regime model identifier"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Train an HMM regime detector on OHLCV data from a datasource."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+    if not ds.file_path:
+        raise HTTPException(400, "DataSource has no file")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    if len(ohlcv_data) < 200:
+        raise HTTPException(400, f"Need at least 200 bars, got {len(ohlcv_data)}")
+
+    def _train():
+        from app.services.ml.regime_detector import RegimeDetector
+        detector = RegimeDetector(model_id=model_id)
+        return detector.train(ohlcv_data)
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _train)
+
+    # Store regime history if bars have datetime
+    from app.models.ml import RegimeHistory
+    detector = None
+
+    def _get_history():
+        from app.services.ml.regime_detector import RegimeDetector
+        d = RegimeDetector(model_id=model_id)
+        d.load()
+        return d.get_regime_history(ohlcv_data)
+
+    history = await loop.run_in_executor(_train_pool, _get_history)
+
+    if history:
+        symbol = ds.name.split("_")[0] if "_" in ds.name else ds.name
+        timeframe = ds.name.split("_")[1] if "_" in ds.name and len(ds.name.split("_")) > 1 else "H1"
+
+        # Clear old history for this symbol+timeframe+model
+        db.query(RegimeHistory).filter(
+            RegimeHistory.symbol == symbol,
+            RegimeHistory.timeframe == timeframe,
+            RegimeHistory.model_id == model_id,
+        ).delete()
+
+        for entry in history:
+            if entry.get("datetime"):
+                from datetime import datetime as dt_cls
+                bar_dt = entry["datetime"]
+                if isinstance(bar_dt, str):
+                    try:
+                        bar_dt = dt_cls.fromisoformat(bar_dt)
+                    except ValueError:
+                        continue
+                db.add(RegimeHistory(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    bar_datetime=bar_dt,
+                    regime=entry["regime"],
+                    state_index=entry.get("state_index", 0),
+                    probabilities=entry.get("probabilities", {}),
+                    model_id=model_id,
+                ))
+        db.commit()
+
+    return result
+
+
+@router.get("/regime/current/{symbol}")
+async def get_current_regime(
+    symbol: str,
+    datasource_id: int = Query(...),
+    model_id: int = Query(0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the current market regime for a symbol using a trained HMM model."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+
+    def _predict():
+        from app.services.ml.regime_detector import RegimeDetector
+        detector = RegimeDetector(model_id=model_id)
+        if not detector.load():
+            return None
+        return detector.predict_regime(ohlcv_data)
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _predict)
+
+    if result is None:
+        raise HTTPException(400, "Regime model not trained or not enough data")
+    return result
+
+
+@router.get("/regime/history")
+async def get_regime_history(
+    symbol: str = Query(...),
+    timeframe: str = Query("H1"),
+    model_id: int = Query(0),
+    limit: int = Query(500),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get stored regime history for charting."""
+    from app.models.ml import RegimeHistory
+
+    rows = (
+        db.query(RegimeHistory)
+        .filter(
+            RegimeHistory.symbol == symbol,
+            RegimeHistory.timeframe == timeframe,
+            RegimeHistory.model_id == model_id,
+        )
+        .order_by(RegimeHistory.bar_datetime.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "datetime": r.bar_datetime.isoformat() if r.bar_datetime else None,
+            "regime": r.regime,
+            "state_index": r.state_index,
+            "probabilities": r.probabilities or {},
+        }
+        for r in reversed(rows)  # chronological order
+    ]
+
+
 # ── Helpers ───────────────────────────────────────────
 
 def _load_csv_ohlcv(file_path: str) -> list[dict]:

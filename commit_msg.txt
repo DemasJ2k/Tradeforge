@@ -1,9 +1,22 @@
-Fix dashboard to show real broker trade data (P&L, trades)
+Phase 2: HMM regime detection + regime-aware signal filtering
 
-- Add ClosedTrade dataclass and get_closed_trades() to BrokerAdapter base
-- Implement get_closed_trades() in Oanda adapter via /transactions API
-- Dashboard API now fetches broker closed trades as primary data source
-- Broker account cards show Today P&L with trade count
-- Recent trades section includes broker closed trades with deduplication
+Backend:
+- New: RegimeDetector class (HMM with 4 Gaussian states: trending_up,
+  trending_down, ranging, volatile). Observation vector: 1-bar return,
+  5-bar volatility, ATR(14)/price, autocorrelation(20)
+- MLSignalFilter: add regime_context parameter to evaluate_signal() with
+  regime-based confidence adjustments (trending+aligned → +10%, trending+
+  counter → -20%, ranging → -10%, volatile → -15%)
+- API: POST /api/ml/regime/train, GET /api/ml/regime/current/{symbol},
+  GET /api/ml/regime/history endpoints
+- DB: RegimeHistory table for per-bar regime storage
+- Agent engine: load RegimeDetector in start(), detect regime before
+  ML filter in _evaluate_signal(), regime works standalone or with ML
+- Deps: add hmmlearn>=0.3.0
+
+Frontend:
+- ML Lab: add Regime Detection view with HMM training form
+- ML Lab: current regime indicator with probability bars
+- ML Lab: regime history color-bar timeline with breakdown stats
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

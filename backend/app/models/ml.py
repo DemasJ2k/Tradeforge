@@ -57,3 +57,18 @@ class MLPrediction(Base):
     correct = Column(Integer, nullable=True)        # 1=correct, 0=wrong, null=pending
 
     model = relationship("MLModel", back_populates="predictions")
+
+
+class RegimeHistory(Base):
+    """Stores HMM regime detection results per bar for analysis/visualization."""
+    __tablename__ = "regime_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(50), nullable=False, index=True)
+    timeframe = Column(String(10), nullable=False)
+    bar_datetime = Column(DateTime, nullable=False)
+    regime = Column(String(30), nullable=False)        # trending_up, trending_down, ranging, volatile
+    state_index = Column(Integer, default=0)
+    probabilities = Column(JSON, default=dict)          # {regime_name: probability}
+    model_id = Column(Integer, default=0)               # regime model identifier
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
