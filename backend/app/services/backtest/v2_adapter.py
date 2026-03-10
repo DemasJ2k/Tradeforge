@@ -817,6 +817,173 @@ class MultiSymbolBuilderStrategy(StrategyBase):
             return entry + dist if is_sl else entry - dist
 
 
+def run_unified_backtest_with_ml(
+    bars: list[Bar],
+    strategy_config: dict,
+    symbol: str,
+    initial_balance: float = 10_000.0,
+    spread_points: float = 0.0,
+    commission_per_lot: float = 0.0,
+    point_value: float = 1.0,
+    slippage_pct: float = 0.0,
+    commission_pct: float = 0.0,
+    margin_rate: float = 0.01,
+    use_fast_core: bool = False,
+    bars_per_day: float = 1.0,
+    tick_mode: str = "ohlc_five",
+    ml_model=None,
+    regime_detector=None,
+    ml_threshold: float = 0.5,
+) -> tuple[RunResult, dict]:
+    """Run a V2 backtest with optional ML signal filtering and/or regime detection.
+
+    Wraps the inner strategy with MLFilterStrategy when ml_model or
+    regime_detector is provided.
+
+    Returns:
+        (RunResult, ml_filter_stats_dict)
+    """
+    from app.services.backtest.v2.engine.ml_filter_strategy import MLFilterStrategy
+    from app.services.backtest.v2.engine.strategies import (
+        MSSStrategy, GoldBreakoutStrategy,
+    )
+    from app.services.backtest.v2.engine.instrument import get_instrument_spec
+    from app.services.backtest.v2.engine.position_sizer import sizing_config_from_risk_params
+
+    spec = get_instrument_spec(symbol)
+    if point_value == 1.0 and spec.contract_size != 100_000:
+        point_value = spec.point_value
+
+    # Detect strategy type
+    filters = strategy_config.get("filters", {})
+    mss_config = filters.get("mss_config")
+    gold_bt_config = filters.get("gold_bt_config")
+
+    if mss_config:
+        mss_params = dict(mss_config)
+        lot_size = strategy_config.get("risk_params", {}).get("position_size_value", 0.01)
+        mss_params.setdefault("lot_size", lot_size)
+        inner_strategy: StrategyBase = MSSStrategy(symbol=symbol, params=mss_params)
+    elif gold_bt_config:
+        gold_params = dict(gold_bt_config)
+        lot_size = strategy_config.get("risk_params", {}).get("position_size_value", 0.01)
+        gold_params.setdefault("lot_size", lot_size)
+        inner_strategy = GoldBreakoutStrategy(symbol=symbol, params=gold_params)
+    else:
+        inner_strategy = BuilderStrategy(
+            strategy_config=strategy_config,
+            symbol=symbol,
+            point_value=point_value,
+        )
+
+    # Wrap with ML filter
+    strategy = MLFilterStrategy(
+        inner_strategy=inner_strategy,
+        ml_model=ml_model,
+        regime_detector=regime_detector,
+        ml_threshold=ml_threshold,
+        symbol=symbol,
+    )
+
+    # Build DataHandler
+    data_handler = DataHandler()
+    indicator_configs = strategy_config.get("indicators", [])
+    data_handler.add_symbol(
+        symbol=symbol,
+        bars=bars,
+        indicator_configs=indicator_configs if indicator_configs else None,
+        point_value=point_value,
+    )
+
+    risk_params = strategy_config.get("risk_params", {})
+    sizing = sizing_config_from_risk_params(risk_params)
+
+    config = RunConfig(
+        initial_cash=initial_balance,
+        commission_per_lot=commission_per_lot,
+        commission_pct=commission_pct,
+        spread=spread_points,
+        slippage_pct=slippage_pct,
+        point_values={symbol: point_value},
+        margin_rates={symbol: margin_rate},
+        risk=RiskConfig(
+            max_positions=risk_params.get("max_positions", 1),
+            exclusive_orders=True,
+        ),
+        sizing=sizing,
+        tick_mode=TICK_MODE_MAP.get(tick_mode, TickMode.OHLC_FIVE),
+        bars_per_day=bars_per_day,
+        use_fast_core=use_fast_core,
+        warm_up_bars=data_handler.warm_up_bars if use_fast_core else 0,
+    )
+
+    runner = Runner(data_handler=data_handler, strategy=strategy, config=config)
+    result = runner.run()
+    ml_stats = strategy.get_ml_stats()
+    return result, ml_stats
+
+
+def run_rl_backtest(
+    bars: list[Bar],
+    rl_agent,
+    symbol: str,
+    initial_balance: float = 10_000.0,
+    spread_points: float = 0.0,
+    commission_per_lot: float = 0.0,
+    point_value: float = 1.0,
+    slippage_pct: float = 0.0,
+    commission_pct: float = 0.0,
+    margin_rate: float = 0.01,
+    bars_per_day: float = 1.0,
+    tick_mode: str = "ohlc_five",
+    lot_size: float = 0.01,
+) -> tuple[RunResult, dict]:
+    """Run a V2 backtest using an RL agent as the strategy.
+
+    Returns:
+        (RunResult, rl_action_stats_dict)
+    """
+    from app.services.backtest.v2.engine.rl_evaluator import RLBacktestStrategy
+    from app.services.backtest.v2.engine.instrument import get_instrument_spec
+
+    spec = get_instrument_spec(symbol)
+    if point_value == 1.0 and spec.contract_size != 100_000:
+        point_value = spec.point_value
+
+    strategy = RLBacktestStrategy(
+        rl_agent=rl_agent,
+        symbol=symbol,
+        lot_size=lot_size,
+    )
+
+    # Build DataHandler — RL needs ATR indicator
+    data_handler = DataHandler()
+    data_handler.add_symbol(
+        symbol=symbol,
+        bars=bars,
+        indicator_configs=[{"type": "atr", "period": 14}],
+        point_value=point_value,
+    )
+
+    config = RunConfig(
+        initial_cash=initial_balance,
+        commission_per_lot=commission_per_lot,
+        commission_pct=commission_pct,
+        spread=spread_points,
+        slippage_pct=slippage_pct,
+        point_values={symbol: point_value},
+        margin_rates={symbol: margin_rate},
+        risk=RiskConfig(max_positions=1, exclusive_orders=True),
+        tick_mode=TICK_MODE_MAP.get(tick_mode, TickMode.OHLC_FIVE),
+        bars_per_day=bars_per_day,
+    )
+
+    runner = Runner(data_handler=data_handler, strategy=strategy, config=config)
+    result = runner.run()
+    action_stats = strategy.get_action_stats()
+    return result, action_stats
+
+
 def run_v2_portfolio_backtest(
     symbols_data: list[dict],
     strategy_config: dict,

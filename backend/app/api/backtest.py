@@ -323,6 +323,7 @@ def run_backtest(
         from app.services.backtest.v2_adapter import (
             run_v2_backtest, run_unified_backtest, v2_result_to_api_response,
             run_v2_portfolio_backtest, v2_portfolio_result_to_api_response,
+            run_unified_backtest_with_ml, run_rl_backtest,
         )
 
         # Build strategy config (same shape for all builder-type strategies)
@@ -454,28 +455,107 @@ def run_backtest(
                 symbols=sym_names,
             )
 
-        # ── Single-symbol V2 (unified — handles builder, MSS, Gold BT) ─
+        # ── Single-symbol V2 (unified — handles builder, MSS, Gold BT, RL, ML) ─
         symbol = datasource.symbol or "ASSET"
+        ml_filter_stats = None
+        rl_action_stats = None
 
-        try:
-            v2_result = run_unified_backtest(
-                bars=bars,
-                strategy_config=strategy_config,
-                symbol=symbol,
-                initial_balance=payload.initial_balance,
-                spread_points=payload.spread_points,
-                commission_per_lot=payload.commission_per_lot,
-                point_value=payload.point_value,
-                slippage_pct=payload.slippage_pct,
-                commission_pct=payload.commission_pct,
-                margin_rate=payload.margin_rate,
-                use_fast_core=payload.use_fast_core,
-                bars_per_day=payload.bars_per_day,
-                tick_mode=payload.tick_mode,
-            )
-        except Exception as e:
-            logger.exception("V2 backtest failed")
-            raise HTTPException(status_code=500, detail=f"V2 engine error: {str(e)}")
+        # Phase 5: Check for RL agent backtest
+        bt_strategy_type = getattr(payload, "strategy_type", "strategy") or "strategy"
+        rl_model_id = getattr(payload, "rl_model_id", None)
+
+        if bt_strategy_type == "rl" and rl_model_id:
+            try:
+                from app.services.agent.rl_agent import RLInferenceAgent
+                from app.models.ml import MLModel
+                ml_model_row = db.query(MLModel).filter(MLModel.id == rl_model_id).first()
+                if not ml_model_row or not ml_model_row.model_path:
+                    raise HTTPException(status_code=404, detail="RL model not found")
+                rl_agent = RLInferenceAgent()
+                rl_agent.load(ml_model_row.model_path)
+                v2_result, rl_action_stats = run_rl_backtest(
+                    bars=bars,
+                    rl_agent=rl_agent,
+                    symbol=symbol,
+                    initial_balance=payload.initial_balance,
+                    spread_points=payload.spread_points,
+                    commission_per_lot=payload.commission_per_lot,
+                    point_value=payload.point_value,
+                    slippage_pct=payload.slippage_pct,
+                    commission_pct=payload.commission_pct,
+                    margin_rate=payload.margin_rate,
+                    bars_per_day=payload.bars_per_day,
+                    tick_mode=payload.tick_mode,
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.exception("RL backtest failed")
+                raise HTTPException(status_code=500, detail=f"RL backtest error: {str(e)}")
+
+        # Phase 5: Check for ML filter / regime-enhanced backtest
+        elif getattr(payload, "ml_model_id", None) or getattr(payload, "regime_model_id", None):
+            try:
+                ml_model = None
+                regime_detector = None
+                ml_model_id_val = getattr(payload, "ml_model_id", None)
+                regime_model_id_val = getattr(payload, "regime_model_id", None)
+
+                if ml_model_id_val:
+                    from app.models.ml import MLModel
+                    ml_row = db.query(MLModel).filter(MLModel.id == ml_model_id_val).first()
+                    if ml_row and ml_row.model_path:
+                        from app.services.agent.ml_filter import MLSignalFilter
+                        ml_model = MLSignalFilter.load_model(ml_row.model_path, ml_row.feature_names or [])
+
+                if regime_model_id_val:
+                    from app.services.ml.regime_detector import RegimeDetector
+                    regime_detector = RegimeDetector(model_id=regime_model_id_val)
+                    regime_detector.load()
+
+                v2_result, ml_filter_stats = run_unified_backtest_with_ml(
+                    bars=bars,
+                    strategy_config=strategy_config,
+                    symbol=symbol,
+                    initial_balance=payload.initial_balance,
+                    spread_points=payload.spread_points,
+                    commission_per_lot=payload.commission_per_lot,
+                    point_value=payload.point_value,
+                    slippage_pct=payload.slippage_pct,
+                    commission_pct=payload.commission_pct,
+                    margin_rate=payload.margin_rate,
+                    use_fast_core=payload.use_fast_core,
+                    bars_per_day=payload.bars_per_day,
+                    tick_mode=payload.tick_mode,
+                    ml_model=ml_model,
+                    regime_detector=regime_detector,
+                    ml_threshold=getattr(payload, "ml_threshold", 0.5),
+                )
+            except Exception as e:
+                logger.exception("ML-enhanced backtest failed")
+                raise HTTPException(status_code=500, detail=f"ML backtest error: {str(e)}")
+
+        else:
+            # Standard backtest (no ML)
+            try:
+                v2_result = run_unified_backtest(
+                    bars=bars,
+                    strategy_config=strategy_config,
+                    symbol=symbol,
+                    initial_balance=payload.initial_balance,
+                    spread_points=payload.spread_points,
+                    commission_per_lot=payload.commission_per_lot,
+                    point_value=payload.point_value,
+                    slippage_pct=payload.slippage_pct,
+                    commission_pct=payload.commission_pct,
+                    margin_rate=payload.margin_rate,
+                    use_fast_core=payload.use_fast_core,
+                    bars_per_day=payload.bars_per_day,
+                    tick_mode=payload.tick_mode,
+                )
+            except Exception as e:
+                logger.exception("V2 backtest failed")
+                raise HTTPException(status_code=500, detail=f"V2 engine error: {str(e)}")
 
         elapsed = time.time() - t0
         api_data = v2_result_to_api_response(v2_result, payload.initial_balance, len(bars))
@@ -496,6 +576,8 @@ def run_backtest(
                 "trades": api_data["trades"],
                 "equity_curve": api_data["equity_curve"],
                 "elapsed_seconds": round(elapsed, 3),
+                **({"ml_filter_stats": ml_filter_stats} if ml_filter_stats else {}),
+                **({"rl_action_stats": rl_action_stats} if rl_action_stats else {}),
             },
             creator_id=current_user.id,
         )
@@ -528,6 +610,8 @@ def run_backtest(
             v2_stats=api_data["v2_stats"],
             tearsheet=api_data["tearsheet"],
             elapsed_seconds=api_data["elapsed_seconds"],
+            ml_filter_stats=ml_filter_stats,
+            rl_action_stats=rl_action_stats,
         )
 
     # V1 engine path removed — Phase 1C: all strategies route via V2 unified runner.

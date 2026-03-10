@@ -19,7 +19,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Play, Settings } from 'lucide-react';
+import { Play, Settings, Brain, Activity, Bot } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useEffect } from 'react';
+
+interface MLModel {
+  id: number;
+  name: string;
+  model_type: string;
+  status: string;
+}
 
 interface Props {
   open: boolean;
@@ -37,6 +46,11 @@ interface Props {
     slippage_pct: number;
     margin_rate: number;
     latency_ms: number;
+    ml_model_id?: number;
+    regime_model_id?: number;
+    rl_model_id?: number;
+    strategy_type?: string;
+    ml_threshold?: number;
   }) => void;
 }
 
@@ -58,12 +72,32 @@ export default function BacktestConfigDialog({
   const [marginRate, setMarginRate] = useState(0.01);
   const [latencyMs, setLatencyMs] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // ML-enhanced backtest options
+  const [mlModels, setMlModels] = useState<MLModel[]>([]);
+  const [mlModelId, setMlModelId] = useState<string>('');
+  const [regimeModelId, setRegimeModelId] = useState<string>('');
+  const [rlModelId, setRlModelId] = useState<string>('');
+  const [mlThreshold, setMlThreshold] = useState(0.5);
+  const [showMl, setShowMl] = useState(false);
+  const isRlMode = !!rlModelId;
+
+  // Load ML models
+  useEffect(() => {
+    if (open) {
+      api.get<{ items: MLModel[] } | MLModel[]>('/api/ml/models')
+        .then(res => {
+          const items = Array.isArray(res) ? res : (res as { items: MLModel[] }).items || [];
+          setMlModels(items.filter(m => m.status === 'ready'));
+        })
+        .catch(() => setMlModels([]));
+    }
+  }, [open]);
 
   // Auto-fill point value from datasource
   const selectedDs = datasources.find(d => d.id === Number(datasourceId));
   const autoPointValue = selectedDs?.point_value || pointValue;
 
-  const canRun = strategyId && datasourceId;
+  const canRun = (strategyId || isRlMode) && datasourceId;
 
   const handleRun = () => {
     if (!canRun) return;
@@ -73,7 +107,7 @@ export default function BacktestConfigDialog({
     if (slippage < 0 || slippage > 10) { alert("Slippage must be between 0% and 10%"); return; }
     if (marginRate < 0 || marginRate > 1) { alert("Margin rate must be between 0 and 1"); return; }
     onRun({
-      strategy_id: Number(strategyId),
+      strategy_id: Number(strategyId) || 0,
       datasource_id: Number(datasourceId),
       initial_balance: balance,
       spread_points: spread,
@@ -83,6 +117,10 @@ export default function BacktestConfigDialog({
       slippage_pct: slippage,
       margin_rate: marginRate,
       latency_ms: latencyMs,
+      ...(mlModelId ? { ml_model_id: Number(mlModelId) } : {}),
+      ...(regimeModelId ? { regime_model_id: Number(regimeModelId) } : {}),
+      ...(rlModelId ? { rl_model_id: Number(rlModelId), strategy_type: 'rl' } : {}),
+      ...(mlModelId ? { ml_threshold: mlThreshold } : {}),
     });
   };
 
@@ -232,6 +270,106 @@ export default function BacktestConfigDialog({
             </div>
           )}
 
+          {/* ML Enhancement Toggle */}
+          <button
+            onClick={() => setShowMl(!showMl)}
+            className="text-xs text-accent hover:underline flex items-center gap-1"
+          >
+            <Brain className="w-3 h-3" />
+            {showMl ? 'Hide' : 'Show'} ML Enhancement
+          </button>
+
+          {showMl && (
+            <div className="space-y-3 pl-2 border-l-2 border-purple-500/30">
+              {/* RL Agent Mode */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1">
+                  <Bot className="w-3 h-3" /> RL Agent (replaces strategy)
+                </Label>
+                <Select value={rlModelId} onValueChange={v => { setRlModelId(v === '_none' ? '' : v); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="None — use strategy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {mlModels.filter(m => m.model_type === 'rl_ppo').map(m => (
+                      <SelectItem key={m.id} value={String(m.id)}>
+                        {m.name} (RL)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  RL agent trades autonomously — strategy is ignored.
+                </p>
+              </div>
+
+              {!isRlMode && (
+                <>
+                  {/* ML Signal Filter */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1">
+                      <Brain className="w-3 h-3" /> ML Signal Filter
+                    </Label>
+                    <Select value={mlModelId} onValueChange={v => setMlModelId(v === '_none' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None — no ML filter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">None</SelectItem>
+                        {mlModels.filter(m => !['rl_ppo', 'hmm_regime', 'lstm', 'gru'].includes(m.model_type)).map(m => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            {m.name} ({m.model_type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {mlModelId && (
+                    <div className="space-y-1.5">
+                      <Label>ML Threshold</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        max="1"
+                        value={mlThreshold}
+                        onChange={e => setMlThreshold(Number(e.target.value))}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Signals below this confidence are filtered out.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Regime Model */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1">
+                      <Activity className="w-3 h-3" /> Regime Model
+                    </Label>
+                    <Select value={regimeModelId} onValueChange={v => setRegimeModelId(v === '_none' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None — no regime filter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">None</SelectItem>
+                        {mlModels.filter(m => m.model_type === 'hmm_regime').map(m => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            {m.name} (HMM)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Filters counter-trend signals and adjusts confidence by regime.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Run Button */}
           <Button
             onClick={handleRun}
@@ -240,7 +378,7 @@ export default function BacktestConfigDialog({
             size="lg"
           >
             <Play className="w-4 h-4" />
-            Run Backtest
+            {isRlMode ? 'Backtest RL Agent' : 'Run Backtest'}
           </Button>
         </div>
       </DialogContent>

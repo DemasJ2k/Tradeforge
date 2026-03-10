@@ -87,6 +87,11 @@ export default function BacktestPage() {
     slippage_pct: number;
     margin_rate: number;
     latency_ms: number;
+    ml_model_id?: number;
+    regime_model_id?: number;
+    rl_model_id?: number;
+    strategy_type?: string;
+    ml_threshold?: number;
   }) => {
     setLoading(true);
     setConfigOpen(false);

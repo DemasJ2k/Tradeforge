@@ -21,6 +21,12 @@ class BacktestRequest(BaseModel):
     latency_ms: float = 0.0              # Simulated execution latency (ms)
     # Phase 4 — Multi-symbol portfolio mode
     datasource_ids: Optional[list[int]] = None  # Multiple datasources (overrides datasource_id)
+    # Phase 5 — ML-enhanced backtesting
+    ml_model_id: Optional[int] = None            # ML model to filter strategy signals
+    regime_model_id: Optional[int] = None         # HMM regime model for regime-conditional testing
+    rl_model_id: Optional[int] = None             # RL agent model (replaces strategy)
+    strategy_type: str = "strategy"               # "strategy" or "rl"
+    ml_threshold: float = 0.5                     # ML filter confidence threshold
 
 
 class TradeResult(BaseModel):
@@ -80,6 +86,9 @@ class BacktestResponse(BaseModel):
     # Phase 4 — Multi-symbol portfolio fields
     portfolio_analytics: Optional[dict[str, Any]] = None  # Per-symbol, correlation, diversification
     symbols: Optional[list[str]] = None                   # Symbols in portfolio mode
+    # Phase 5 — ML-enhanced backtest results
+    ml_filter_stats: Optional[dict[str, Any]] = None      # ML filter rate, regime breakdown
+    rl_action_stats: Optional[dict[str, int]] = None      # RL action distribution
 
 
 # ── Walk-Forward Validation ──

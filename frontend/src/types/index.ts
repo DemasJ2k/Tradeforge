@@ -296,6 +296,16 @@ export interface BacktestResponse {
     symbols: string[];
   };
   symbols?: string[];
+  // Phase 5 — ML-enhanced backtest results
+  ml_filter_stats?: {
+    total_signals: number;
+    signals_approved: number;
+    signals_filtered: number;
+    filter_rate: number;
+    per_regime_trades: Record<string, { total: number; approved: number; filtered: number }>;
+    regime_history_length: number;
+  };
+  rl_action_stats?: Record<number, number>;
 }
 
 export interface BacktestListItem {
