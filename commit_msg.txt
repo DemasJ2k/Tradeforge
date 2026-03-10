@@ -1,22 +1,21 @@
-Phase 2: HMM regime detection + regime-aware signal filtering
+Phase 3: LSTM/GRU price range forecasting + dynamic SL/TP
 
 Backend:
-- New: RegimeDetector class (HMM with 4 Gaussian states: trending_up,
-  trending_down, ranging, volatile). Observation vector: 1-bar return,
-  5-bar volatility, ATR(14)/price, autocorrelation(20)
-- MLSignalFilter: add regime_context parameter to evaluate_signal() with
-  regime-based confidence adjustments (trending+aligned → +10%, trending+
-  counter → -20%, ranging → -10%, volatile → -15%)
-- API: POST /api/ml/regime/train, GET /api/ml/regime/current/{symbol},
-  GET /api/ml/regime/history endpoints
-- DB: RegimeHistory table for per-bar regime storage
-- Agent engine: load RegimeDetector in start(), detect regime before
-  ML filter in _evaluate_signal(), regime works standalone or with ML
-- Deps: add hmmlearn>=0.3.0
+- New: LSTMForecaster class with LSTM/GRU architecture (hidden=128,
+  layers=2, dropout=0.2). Predicts future price distribution (mean,
+  std, p20, p80) for dynamic SL/TP placement
+- Train with PyTorch locally, export ONNX for Render inference
+- Agent engine: load LSTM forecaster, adjust SL/TP based on predicted
+  price ranges (BUY: TP at p80, SL at p20; SELL: inverse)
+- API: POST /api/ml/lstm/train, GET /api/ml/lstm/predict/{symbol}
+- New: scripts/train_lstm_local.py for standalone local training
 
 Frontend:
-- ML Lab: add Regime Detection view with HMM training form
-- ML Lab: current regime indicator with probability bars
-- ML Lab: regime history color-bar timeline with breakdown stats
+- ML Lab: add Forecast view with LSTM/GRU training form (cell type,
+  hidden size, seq length, horizon, epochs)
+- ML Lab: display training results (val loss, direction accuracy,
+  loss curve bars)
+- ML Lab: show forecast with price distribution, predicted range,
+  and derived long/short SL/TP levels
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

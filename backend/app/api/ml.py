@@ -1187,6 +1187,79 @@ async def get_regime_history(
     ]
 
 
+# ── LSTM Forecasting ─────────────────────────────────
+
+@router.post("/lstm/train")
+async def train_lstm_model(
+    datasource_id: int = Query(...),
+    model_id: int = Query(0, description="LSTM model identifier"),
+    cell_type: str = Query("lstm", description="Cell type: lstm or gru"),
+    seq_len: int = Query(60),
+    horizon: int = Query(10),
+    hidden_size: int = Query(128),
+    num_layers: int = Query(2),
+    epochs: int = Query(50),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Train LSTM/GRU price range forecaster. Requires PyTorch (local only)."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    min_bars = seq_len + horizon + 100
+    if len(ohlcv_data) < min_bars:
+        raise HTTPException(400, f"Need at least {min_bars} bars, got {len(ohlcv_data)}")
+
+    def _train():
+        from app.services.ml.lstm_forecaster import LSTMForecaster
+        forecaster = LSTMForecaster(model_id=model_id)
+        return forecaster.train(
+            ohlcv_data=ohlcv_data,
+            seq_len=seq_len,
+            horizon=horizon,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            cell_type=cell_type,
+            epochs=epochs,
+        )
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _train)
+    return result
+
+
+@router.get("/lstm/predict/{symbol}")
+async def lstm_predict(
+    symbol: str,
+    datasource_id: int = Query(...),
+    model_id: int = Query(0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get LSTM price range forecast for a symbol."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+
+    def _predict():
+        from app.services.ml.lstm_forecaster import LSTMForecaster
+        forecaster = LSTMForecaster(model_id=model_id)
+        if not forecaster.load():
+            return None
+        return forecaster.predict(ohlcv_data)
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _predict)
+
+    if result is None:
+        raise HTTPException(400, "LSTM model not trained or not enough data")
+    return result
+
+
 # ── Helpers ───────────────────────────────────────────
 
 def _load_csv_ohlcv(file_path: str) -> list[dict]:

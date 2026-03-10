@@ -44,6 +44,7 @@ class AgentRunner:
         self._risk_manager: Optional[RiskManager] = None
         self._ml_filter: Optional[MLSignalFilter] = None
         self._regime_detector = None  # HMM regime detector
+        self._lstm_forecaster = None  # LSTM price range forecaster
         self._mode = "paper"
         self._symbol = ""
         self._timeframe = ""
@@ -140,6 +141,21 @@ class AgentRunner:
                         logger.warning("[Agent %d] Regime model %s not found", self.agent_id, regime_model_id)
                 except Exception as e:
                     logger.warning("[Agent %d] Failed to load regime detector: %s", self.agent_id, e)
+
+            # Initialize LSTM forecaster (if configured)
+            lstm_model_id = (agent.risk_config or {}).get("lstm_model_id")
+            if lstm_model_id is not None:
+                try:
+                    from app.services.ml.lstm_forecaster import LSTMForecaster
+                    lf = LSTMForecaster(model_id=int(lstm_model_id))
+                    if lf.load():
+                        self._lstm_forecaster = lf
+                        logger.info("[Agent %d] LSTM forecaster loaded (model_id=%s)",
+                                    self.agent_id, lstm_model_id)
+                    else:
+                        logger.warning("[Agent %d] LSTM model %s not found", self.agent_id, lstm_model_id)
+                except Exception as e:
+                    logger.warning("[Agent %d] Failed to load LSTM forecaster: %s", self.agent_id, e)
 
             # Initialize risk manager
             self._risk_manager = RiskManager(agent.risk_config or {})
@@ -569,6 +585,32 @@ class AgentRunner:
                 regime_context,
             )
             signal.confidence = adjusted["combined_confidence"]
+
+        # ── LSTM dynamic SL/TP ──
+        if self._lstm_forecaster:
+            try:
+                forecast = self._lstm_forecaster.predict(self._bar_buffer)
+                if forecast:
+                    if signal.direction == 1:  # BUY
+                        new_tp = forecast["tp_price_long"]
+                        new_sl = forecast["sl_price_long"]
+                    else:  # SELL
+                        new_tp = forecast["tp_price_short"]
+                        new_sl = forecast["sl_price_short"]
+
+                    # Only use LSTM SL/TP if it provides tighter risk
+                    if signal.stop_loss and new_sl:
+                        signal.stop_loss = new_sl
+                    if signal.take_profit_1 and new_tp:
+                        signal.take_profit_1 = new_tp
+
+                    self._log("lstm", f"Dynamic SL/TP: SL={new_sl:.5f} TP={new_tp:.5f}", data={
+                        "predicted_mean": forecast["predicted_mean_return"],
+                        "predicted_std": forecast["predicted_std"],
+                        "horizon": forecast["horizon"],
+                    })
+            except Exception as e:
+                logger.warning("[Agent %d] LSTM forecast error: %s", self.agent_id, e)
 
         # ── Risk check ──
         balance = await self._get_balance()

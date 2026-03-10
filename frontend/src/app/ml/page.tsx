@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ const levelLabel = (l: number) =>
 
 export default function MLPage() {
   /* ── state ──────────────────────────────────── */
-  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime">("list");
+  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime" | "forecast">("list");
   const [models, setModels] = useState<MLModelListItem[]>([]);
   const [selected, setSelected] = useState<MLModelDetail | null>(null);
   const [predictions, setPredictions] = useState<MLPredictionResult | null>(null);
@@ -96,6 +96,20 @@ export default function MLPage() {
   const [regimeHistory, setRegimeHistory] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [regimeCurrent, setRegimeCurrent] = useState<any>(null);
+
+  // LSTM forecast
+  const [lstmDsId, setLstmDsId] = useState<number>(0);
+  const [lstmModelId, setLstmModelId] = useState(0);
+  const [lstmCell, setLstmCell] = useState("lstm");
+  const [lstmSeqLen, setLstmSeqLen] = useState(60);
+  const [lstmHorizon, setLstmHorizon] = useState(10);
+  const [lstmHidden, setLstmHidden] = useState(128);
+  const [lstmEpochs, setLstmEpochs] = useState(50);
+  const [lstmTraining, setLstmTraining] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [lstmResult, setLstmResult] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [lstmForecast, setLstmForecast] = useState<any>(null);
 
   // Meta-labeling
   const [metaTraining, setMetaTraining] = useState(false);
@@ -483,6 +497,46 @@ export default function MLPage() {
     return "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
   };
 
+  /* ── LSTM handlers ───────────────────────── */
+  const handleLstmTrain = async () => {
+    if (!lstmDsId) { setError("Select a datasource"); return; }
+    setLstmTraining(true);
+    setError("");
+    setLstmResult(null);
+    try {
+      const params = new URLSearchParams({
+        datasource_id: String(lstmDsId),
+        model_id: String(lstmModelId),
+        cell_type: lstmCell,
+        seq_len: String(lstmSeqLen),
+        horizon: String(lstmHorizon),
+        hidden_size: String(lstmHidden),
+        epochs: String(lstmEpochs),
+      });
+      const result = await api.post(`/api/ml/lstm/train?${params}`, {});
+      setLstmResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "LSTM training failed");
+    } finally {
+      setLstmTraining(false);
+    }
+  };
+
+  const handleLstmPredict = async () => {
+    if (!lstmDsId) { setError("Select a datasource"); return; }
+    setError("");
+    try {
+      const ds = dataSources.find(d => d.id === lstmDsId);
+      const symbol = ds ? ds.filename.split("_")[0] : "UNKNOWN";
+      const result = await api.get(
+        `/api/ml/lstm/predict/${symbol}?datasource_id=${lstmDsId}&model_id=${lstmModelId}`
+      );
+      setLstmForecast(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "LSTM prediction failed");
+    }
+  };
+
   /* ═══════════════ RENDER ═══════════════════════ */
   return (
     <div className="space-y-4">
@@ -529,7 +583,10 @@ export default function MLPage() {
             <Upload className="h-4 w-4" /> Upload Model
           </Button>
           <Button variant="outline" onClick={() => setView("regime")} className="gap-1.5">
-            <Activity className="h-4 w-4" /> Regime Detection
+            <Activity className="h-4 w-4" /> Regime
+          </Button>
+          <Button variant="outline" onClick={() => setView("forecast")} className="gap-1.5">
+            <TrendingUp className="h-4 w-4" /> Forecast
           </Button>
           <Button onClick={() => setView("train")} className="gap-1.5">
             <Brain className="h-4 w-4" /> Train New Model
@@ -1620,6 +1677,158 @@ export default function MLPage() {
                       </div>
                     );
                   })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── LSTM FORECAST VIEW ──────────── */}
+      {view === "forecast" && (
+        <div className="space-y-4">
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-accent flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" /> LSTM/GRU Price Range Forecaster
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Train a deep learning model to predict future price distribution (mean, std, p20, p80) for dynamic SL/TP placement.
+                Requires PyTorch for training (local only). Inference uses ONNX Runtime.
+              </p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">Datasource</Label>
+                  <select
+                    className="w-full mt-1 rounded-md bg-zinc-900 border border-zinc-700 text-sm p-2"
+                    value={lstmDsId}
+                    onChange={e => setLstmDsId(Number(e.target.value))}
+                  >
+                    <option value={0}>Select datasource...</option>
+                    {dataSources.map(ds => (
+                      <option key={ds.id} value={ds.id}>{ds.filename}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Cell Type</Label>
+                  <select
+                    className="w-full mt-1 rounded-md bg-zinc-900 border border-zinc-700 text-sm p-2"
+                    value={lstmCell}
+                    onChange={e => setLstmCell(e.target.value)}
+                  >
+                    <option value="lstm">LSTM</option>
+                    <option value="gru">GRU</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Model ID</Label>
+                  <Input type="number" className="mt-1" value={lstmModelId} onChange={e => setLstmModelId(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Hidden Size</Label>
+                  <Input type="number" className="mt-1" value={lstmHidden} onChange={e => setLstmHidden(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Seq Length</Label>
+                  <Input type="number" className="mt-1" value={lstmSeqLen} onChange={e => setLstmSeqLen(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Horizon (bars)</Label>
+                  <Input type="number" className="mt-1" value={lstmHorizon} onChange={e => setLstmHorizon(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Epochs</Label>
+                  <Input type="number" className="mt-1" value={lstmEpochs} onChange={e => setLstmEpochs(Number(e.target.value))} />
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button onClick={handleLstmTrain} disabled={lstmTraining || !lstmDsId} className="gap-1.5">
+                    {lstmTraining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                    Train
+                  </Button>
+                  <Button variant="outline" onClick={handleLstmPredict} disabled={!lstmDsId}>
+                    <Play className="h-4 w-4 mr-1" /> Predict
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* LSTM Training Result */}
+          {lstmResult && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold text-green-400">Training Complete</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div><span className="text-muted-foreground">Cell:</span> {lstmResult.cell_type?.toUpperCase()}</div>
+                  <div><span className="text-muted-foreground">Features:</span> {lstmResult.n_features}</div>
+                  <div><span className="text-muted-foreground">Train:</span> {lstmResult.n_train} samples</div>
+                  <div><span className="text-muted-foreground">Val:</span> {lstmResult.n_val} samples</div>
+                  <div><span className="text-muted-foreground">Best Val Loss:</span> {lstmResult.best_val_loss?.toFixed(6)}</div>
+                  <div><span className="text-muted-foreground">Direction Acc:</span> <span className="text-green-400">{(lstmResult.direction_accuracy * 100).toFixed(1)}%</span></div>
+                  <div><span className="text-muted-foreground">Model Size:</span> {lstmResult.model_size_kb} KB</div>
+                  <div><span className="text-muted-foreground">Horizon:</span> {lstmResult.horizon} bars</div>
+                </div>
+                {/* Loss curve (simplified) */}
+                {lstmResult.val_losses && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted-foreground">Val loss (last 10 epochs):</span>
+                    <div className="flex items-end gap-1 h-12 mt-1">
+                      {lstmResult.val_losses.map((l: number, i: number) => {
+                        const max = Math.max(...lstmResult.val_losses);
+                        const h = max > 0 ? (l / max) * 100 : 0;
+                        return (
+                          <div key={i} className="flex-1 bg-accent/30 rounded-t" style={{ height: `${h}%` }} title={l.toFixed(6)} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* LSTM Forecast */}
+          {lstmForecast && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold">Price Forecast ({lstmForecast.horizon} bars ahead)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div className="rounded-lg border border-zinc-700 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground">Current Price</div>
+                    <div className="text-lg font-bold">{lstmForecast.current_price?.toFixed(2)}</div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground">Mean Return</div>
+                    <div className={`text-lg font-bold ${lstmForecast.predicted_mean_return > 0 ? "text-green-400" : "text-red-400"}`}>
+                      {(lstmForecast.predicted_mean_return * 100).toFixed(3)}%
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground">Volatility (std)</div>
+                    <div className="text-lg font-bold text-orange-400">{(lstmForecast.predicted_std * 100).toFixed(3)}%</div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 p-3 text-center">
+                    <div className="text-[10px] text-muted-foreground">Range (P20-P80)</div>
+                    <div className="text-sm font-bold">
+                      <span className="text-red-400">{(lstmForecast.predicted_p20 * 100).toFixed(3)}%</span>
+                      {" → "}
+                      <span className="text-green-400">{(lstmForecast.predicted_p80 * 100).toFixed(3)}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-2 text-sm">
+                  <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+                    <div className="text-[10px] text-green-400">Long Setup</div>
+                    <div>TP: <span className="font-bold">{lstmForecast.tp_price_long?.toFixed(2)}</span></div>
+                    <div>SL: <span className="font-bold">{lstmForecast.sl_price_long?.toFixed(2)}</span></div>
+                  </div>
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                    <div className="text-[10px] text-red-400">Short Setup</div>
+                    <div>TP: <span className="font-bold">{lstmForecast.tp_price_short?.toFixed(2)}</span></div>
+                    <div>SL: <span className="font-bold">{lstmForecast.sl_price_short?.toFixed(2)}</span></div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
