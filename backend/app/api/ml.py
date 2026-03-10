@@ -7,11 +7,15 @@ Manages ML model training, prediction, and model lifecycle.
 import asyncio
 import csv
 import logging
+import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
@@ -57,10 +61,17 @@ FEATURE_DESCRIPTIONS = {
     "time": "Cyclical hour-of-day and day-of-week (sin/cos encoded)",
     "regime": "Market regime: ATR ratio, return autocorrelation, volatility clustering",
     "momentum": "Rate of change (5/10/20) and price acceleration",
+    "fractal_dimension": "Higuchi fractal dimension (market complexity, 1.0=smooth to 2.0=noisy)",
+    "hurst_exponent": "Hurst exponent via R/S analysis (>0.5 trending, <0.5 mean-reverting)",
+    "order_flow_imbalance": "Volume-weighted directional pressure and buy pressure ratio",
+    "microstructure": "Parkinson & Garman-Klass volatility estimators",
 }
 
 
-_ALL_FEATURES = _DEFAULT_FEATURES + ["time", "regime", "momentum"]
+_ALL_FEATURES = _DEFAULT_FEATURES + [
+    "time", "regime", "momentum",
+    "fractal_dimension", "hurst_exponent", "order_flow_imbalance", "microstructure",
+]
 
 
 @router.get("/features")
@@ -240,11 +251,22 @@ async def train_model(
     seq_len = payload.seq_len or 20
     hidden_units = payload.hidden_units or 64
 
+    # Optuna settings
+    optuna_config = None
+    if payload.use_optuna:
+        optuna_config = {
+            "n_trials": payload.optuna_n_trials,
+            "timeout": payload.optuna_timeout,
+            "cv_method": payload.optuna_cv_method,
+            "n_folds": payload.optuna_n_folds,
+        }
+
     asyncio.get_event_loop().run_in_executor(
         _train_pool,
         _run_training,
         model_id, ohlcv_data, level, model_type, sub_type,
         seq_len, hidden_units, features_config, target_config, hyperparams,
+        optuna_config,
     )
 
     # Return immediately with "training" status
@@ -269,6 +291,7 @@ def _run_training(
     features_config: dict,
     target_config: dict,
     hyperparams: dict,
+    optuna_config: dict = None,
 ):
     """Run ML training in a background thread. Updates DB when done."""
     db = SessionLocal()
@@ -280,7 +303,20 @@ def _run_training(
             logger.error("Background train: model %d not found", model_id)
             return
 
-        if level == 3:
+        if optuna_config and level != 3:
+            # Optuna auto-tuning path
+            result = MLTrainer.train_with_optuna(
+                ohlcv_data=ohlcv_data,
+                model_type=model_type,
+                features_config=features_config,
+                target_config=target_config,
+                model_id=model_id,
+                n_trials=optuna_config.get("n_trials", 50),
+                timeout=optuna_config.get("timeout", 600),
+                cv_method=optuna_config.get("cv_method", "walk_forward"),
+                n_folds=optuna_config.get("n_folds", 3),
+            )
+        elif level == 3:
             result = MLTrainer.train_level3(
                 ohlcv_data=ohlcv_data,
                 sub_type=sub_type,
@@ -900,6 +936,116 @@ async def update_prediction_actuals(
 
     db.commit()
     return {"model_id": model_id, "updated": updated, "total_pending": len(pending)}
+
+
+# ── Export / Upload ───────────────────────────────────
+
+@router.post("/export/{model_id}")
+async def export_model(
+    model_id: int,
+    format: str = Query("joblib", description="Export format: joblib or onnx"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download a trained model file."""
+    model_record = db.query(MLModel).filter(MLModel.id == model_id).first()
+    if not model_record:
+        raise HTTPException(404, "Model not found")
+    if model_record.status != "ready" or not model_record.model_path:
+        raise HTTPException(400, "Model not ready or has no saved file")
+
+    if format == "onnx":
+        try:
+            from app.services.ml.exporter import export_to_onnx
+            onnx_path = export_to_onnx(model_record.model_path)
+            return FileResponse(
+                onnx_path,
+                media_type="application/octet-stream",
+                filename=f"model_{model_id}.onnx",
+            )
+        except ImportError as e:
+            raise HTTPException(400, f"ONNX export not available: {e}")
+        except Exception as e:
+            raise HTTPException(500, f"ONNX export failed: {e}")
+    else:
+        # Return joblib file directly
+        if not os.path.exists(model_record.model_path):
+            raise HTTPException(404, "Model file not found on disk")
+        return FileResponse(
+            model_record.model_path,
+            media_type="application/octet-stream",
+            filename=f"model_{model_id}.joblib",
+        )
+
+
+@router.post("/upload-model")
+async def upload_model(
+    name: str = Query(...),
+    symbol: str = Query(""),
+    timeframe: str = Query("H1"),
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload a pre-trained model (ONNX or joblib)."""
+    ext = Path(file.filename).suffix.lower()
+    if ext not in (".onnx", ".joblib"):
+        raise HTTPException(400, f"Unsupported format: {ext}. Use .onnx or .joblib")
+
+    # Create model record
+    model_record = MLModel(
+        name=name,
+        level=1,
+        model_type="uploaded",
+        creator_id=user.id,
+        symbol=symbol,
+        timeframe=timeframe,
+        features_config={},
+        target_config={},
+        hyperparams={"uploaded": True, "format": ext.lstrip(".")},
+        status="ready",
+        trained_at=datetime.now(timezone.utc),
+    )
+    db.add(model_record)
+    db.commit()
+    db.refresh(model_record)
+
+    # Save file
+    from app.core.config import settings
+    model_dir = Path(settings.UPLOAD_DIR).parent / "ml_models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    dest = model_dir / f"model_{model_record.id}{ext}"
+
+    with open(dest, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    model_record.model_path = str(dest)
+
+    # Try to extract feature info from joblib
+    if ext == ".joblib":
+        try:
+            import joblib
+            data = joblib.load(str(dest))
+            if isinstance(data, dict):
+                feature_names = data.get("feature_names", [])
+                model_record.feature_importance = {fn: 0.0 for fn in feature_names}
+                model_record.train_metrics = {"uploaded": True}
+                model_record.val_metrics = {"uploaded": True}
+                if data.get("model_type"):
+                    model_record.model_type = data["model_type"]
+        except Exception:
+            pass
+
+    db.commit()
+
+    return {
+        "id": model_record.id,
+        "name": model_record.name,
+        "status": "ready",
+        "model_path": str(dest),
+        "format": ext.lstrip("."),
+    }
 
 
 # ── Helpers ───────────────────────────────────────────

@@ -61,6 +61,12 @@ class MLTrainRequest(BaseModel):
     hidden_units: Optional[int] = 64      # LSTM hidden units
     # Meta-labeling
     primary_model_id: Optional[int] = None  # ID of primary model for meta-labeling
+    # Optuna auto-tuning
+    use_optuna: bool = False
+    optuna_n_trials: int = 50
+    optuna_timeout: int = 600            # seconds
+    optuna_cv_method: str = "walk_forward"  # walk_forward or purged_kfold
+    optuna_n_folds: int = 3
 
 
 class MLModelResponse(BaseModel):

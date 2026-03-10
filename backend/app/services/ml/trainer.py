@@ -174,6 +174,217 @@ class MLTrainer:
         }
 
     @staticmethod
+    def train_with_optuna(
+        ohlcv_data: list[dict],
+        model_type: str = "lightgbm",
+        features_config: Optional[dict] = None,
+        target_config: Optional[dict] = None,
+        model_id: int = 0,
+        n_trials: int = 50,
+        timeout: int = 600,
+        cv_method: str = "walk_forward",
+        n_folds: int = 3,
+    ) -> dict:
+        """
+        Train with Optuna hyperparameter auto-tuning.
+
+        Uses TPE sampler to search over model hyperparameters.
+        Each trial evaluates via walk-forward CV or purged k-fold.
+
+        Returns same dict as train_model() with extra optuna results.
+        """
+        import joblib
+        import numpy as np
+        import optuna
+
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+        n = len(ohlcv_data)
+        if n < 200:
+            raise ValueError(f"Need at least 200 bars for Optuna tuning, got {n}")
+
+        # Prepare data once
+        opens = [d["open"] for d in ohlcv_data]
+        highs = [d["high"] for d in ohlcv_data]
+        lows = [d["low"] for d in ohlcv_data]
+        closes = [d["close"] for d in ohlcv_data]
+        volumes = [d.get("volume", 0) for d in ohlcv_data]
+        timestamps = [d.get("datetime") for d in ohlcv_data]
+        if all(t is None for t in timestamps):
+            timestamps = None
+
+        feature_names, feature_matrix = compute_features(
+            opens, highs, lows, closes, volumes, features_config,
+            timestamps=timestamps,
+        )
+        if not feature_names:
+            raise ValueError("No features computed")
+
+        normalize = (features_config or {}).get("normalize", "none")
+        if normalize == "zscore" and feature_matrix:
+            zscore_window = (features_config or {}).get("zscore_window", 50)
+            feature_matrix = apply_rolling_zscore(feature_matrix, window=zscore_window)
+
+        target_name, targets = compute_targets(closes, target_config, highs=highs, lows=lows)
+        feature_names, X, y = clean_data(feature_names, feature_matrix, targets)
+
+        if len(X) < 100:
+            raise ValueError(f"Not enough valid samples after cleaning: {len(X)}")
+
+        is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
+
+        def _get_param_space(trial, mt):
+            """Define Optuna search space per model type."""
+            common = {
+                "n_estimators": trial.suggest_int("n_estimators", 50, 500),
+                "max_depth": trial.suggest_int("max_depth", 3, 12),
+                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            }
+            if mt in ("xgboost", "lightgbm", "catboost"):
+                common["subsample"] = trial.suggest_float("subsample", 0.6, 1.0)
+                common["colsample_bytree"] = trial.suggest_float("colsample_bytree", 0.6, 1.0)
+                common["reg_alpha"] = trial.suggest_float("reg_alpha", 1e-8, 5.0, log=True)
+                common["reg_lambda"] = trial.suggest_float("reg_lambda", 1e-8, 5.0, log=True)
+                common["min_child_weight"] = trial.suggest_int("min_child_weight", 1, 10)
+            if mt == "random_forest":
+                common["min_samples_split"] = trial.suggest_int("min_samples_split", 2, 20)
+                common["min_samples_leaf"] = trial.suggest_int("min_samples_leaf", 1, 10)
+            return common
+
+        def _cv_score(hp_dict):
+            """Evaluate hyperparams via walk-forward CV."""
+            segment_size = len(X) // (n_folds + 1)
+            fold_scores = []
+
+            for fold in range(n_folds):
+                train_end = segment_size * (fold + 1)
+                val_start = train_end
+                val_end = min(train_end + segment_size, len(X))
+
+                if val_end <= val_start or train_end < 50:
+                    continue
+
+                X_tr, y_tr = X[:train_end], y[:train_end]
+                X_vl, y_vl = X[val_start:val_end], y[val_start:val_end]
+
+                mdl = _build_model(model_type, hp_dict, target_config)
+                try:
+                    if model_type in ("xgboost", "lightgbm"):
+                        mdl.fit(X_tr, y_tr, eval_set=[(X_vl, y_vl)], verbose=False)
+                    elif model_type == "catboost":
+                        mdl.fit(X_tr, y_tr, eval_set=(X_vl, y_vl), verbose=False)
+                    else:
+                        mdl.fit(X_tr, y_tr)
+                except Exception:
+                    mdl.fit(X_tr, y_tr)
+
+                pred = mdl.predict(X_vl)
+                if is_classification:
+                    from sklearn.metrics import accuracy_score
+                    fold_scores.append(accuracy_score(y_vl, pred))
+                else:
+                    from sklearn.metrics import r2_score
+                    fold_scores.append(r2_score(y_vl, pred))
+
+            return float(np.mean(fold_scores)) if fold_scores else 0.0
+
+        def objective(trial):
+            hp_dict = _get_param_space(trial, model_type)
+            score = _cv_score(hp_dict)
+
+            # Pruning for early stopping
+            trial.report(score, 0)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
+            return score
+
+        # Run Optuna study
+        study = optuna.create_study(
+            direction="maximize",
+            sampler=optuna.samplers.TPESampler(seed=42),
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=5),
+        )
+        study.optimize(objective, n_trials=n_trials, timeout=timeout, show_progress_bar=False)
+
+        best_params = study.best_params
+        best_value = study.best_value
+
+        logger.info(
+            "Optuna done: %d trials, best_score=%.4f, best_params=%s",
+            len(study.trials), best_value, best_params,
+        )
+
+        # Compute param importances
+        try:
+            from optuna.importance import get_param_importances
+            param_importances = get_param_importances(study)
+            param_importances = {k: round(v, 4) for k, v in param_importances.items()}
+        except Exception:
+            param_importances = {}
+
+        # Train final model with best params on 80% holdout
+        split_idx = int(len(X) * 0.8)
+        X_train, X_val = X[:split_idx], X[split_idx:]
+        y_train, y_val = y[:split_idx], y[split_idx:]
+
+        final_model = _build_model(model_type, best_params, target_config)
+        try:
+            if model_type in ("xgboost", "lightgbm"):
+                final_model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+            elif model_type == "catboost":
+                final_model.fit(X_train, y_train, eval_set=(X_val, y_val), verbose=False)
+            else:
+                final_model.fit(X_train, y_train)
+        except Exception:
+            final_model.fit(X_train, y_train)
+
+        train_pred = final_model.predict(X_train)
+        val_pred = final_model.predict(X_val)
+
+        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
+
+        train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)
+        val_metrics = _compute_metrics(y_val, val_pred, is_classification, c_val)
+        importance = _get_feature_importance(final_model, feature_names)
+
+        # Embed Optuna results into val_metrics
+        val_metrics["optuna"] = {
+            "best_params": best_params,
+            "best_value": round(best_value, 4),
+            "n_trials": len(study.trials),
+            "param_importances": param_importances,
+        }
+
+        # Save model
+        model_path = str(_MODEL_DIR / f"model_{model_id}.joblib")
+        joblib.dump({
+            "model": final_model,
+            "feature_names": feature_names,
+            "target_name": target_name,
+            "model_type": model_type,
+            "optuna_best_params": best_params,
+        }, model_path)
+
+        logger.info(
+            "Optuna model %d trained: val_acc=%.3f, best_optuna=%.3f",
+            model_id, val_metrics.get("accuracy", 0), best_value,
+        )
+
+        return {
+            "train_metrics": train_metrics,
+            "val_metrics": val_metrics,
+            "feature_importance": importance,
+            "model_path": model_path,
+            "n_train": len(X_train),
+            "n_val": len(X_val),
+            "n_features": len(feature_names),
+            "feature_names": feature_names,
+            "target_name": target_name,
+        }
+
+    @staticmethod
     def train_walk_forward(
         ohlcv_data: list[dict],
         model_type: str = "random_forest",

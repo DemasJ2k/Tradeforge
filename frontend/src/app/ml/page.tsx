@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,12 @@ export default function MLPage() {
   // Predict form
   const [pDsId, setPDsId] = useState<number>(0);
   const [pBars, setPBars] = useState(50);
+
+  // Optuna config
+  const [tUseOptuna, setTUseOptuna] = useState(false);
+  const [tOptunaNTrials, setTOptunaNTrials] = useState(50);
+  const [tOptunaTimeout, setTOptunaTimeout] = useState(600);
+  const [tOptunaFolds, setTOptunaFolds] = useState(3);
 
   // Meta-labeling
   const [metaTraining, setMetaTraining] = useState(false);
@@ -220,6 +226,7 @@ export default function MLPage() {
         learning_rate: tLR,
         ...(tTarget === "triple_barrier" && { sl_atr_mult: tSlAtrMult, tp_atr_mult: tTpAtrMult, max_holding_bars: tMaxHoldBars }),
         ...(tLevel === 3 && { sub_type: l3SubType, seq_len: l3SeqLen, hidden_units: l3Units }),
+        ...(tUseOptuna && { use_optuna: true, optuna_n_trials: tOptunaNTrials, optuna_timeout: tOptunaTimeout, optuna_n_folds: tOptunaFolds }),
       });
 
       // Background training: poll for completion
@@ -423,9 +430,42 @@ export default function MLPage() {
             </Button>
           )}
         </div>
-        <Button onClick={() => setView("train")} className="gap-1.5">
-          <Brain className="h-4 w-4" /> Train New Model
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-1.5" onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".onnx,.joblib";
+            input.onchange = async (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0];
+              if (!file) return;
+              const name = prompt("Model name:", file.name.replace(/\.(onnx|joblib)$/i, ""));
+              if (!name) return;
+              const formData = new FormData();
+              formData.append("file", file);
+              try {
+                setLoading(true);
+                const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+                const res = await fetch(`${API_BASE}/api/ml/upload-model?name=${encodeURIComponent(name)}`, {
+                  method: "POST",
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  body: formData,
+                });
+                if (!res.ok) throw new Error(await res.text());
+                loadModels();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Upload failed");
+              } finally {
+                setLoading(false);
+              }
+            };
+            input.click();
+          }}>
+            <Upload className="h-4 w-4" /> Upload Model
+          </Button>
+          <Button onClick={() => setView("train")} className="gap-1.5">
+            <Brain className="h-4 w-4" /> Train New Model
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -815,6 +855,39 @@ export default function MLPage() {
             )}
           </div>
 
+          {/* Optuna auto-tuning */}
+          {tLevel !== 3 && (
+            <div className="space-y-3 p-3 rounded-lg border border-card-border bg-background/40">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={tUseOptuna} onChange={e => setTUseOptuna(e.target.checked)} className="accent-accent" />
+                <span className="text-sm font-medium">Optuna Auto-Tuning</span>
+                <span className="text-xs text-muted-foreground">— automatically finds optimal hyperparameters</span>
+              </label>
+              {tUseOptuna && (
+                <div className="grid grid-cols-3 gap-4 mt-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1">Trials</Label>
+                    <Input type="number" value={tOptunaNTrials} onChange={e => setTOptunaNTrials(Number(e.target.value))} min={10} max={500} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1">Timeout (sec)</Label>
+                    <Input type="number" value={tOptunaTimeout} onChange={e => setTOptunaTimeout(Number(e.target.value))} min={60} max={3600} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1">CV Folds</Label>
+                    <Input type="number" value={tOptunaFolds} onChange={e => setTOptunaFolds(Number(e.target.value))} min={2} max={10} />
+                  </div>
+                </div>
+              )}
+              {tUseOptuna && (
+                <p className="text-xs text-muted-foreground">
+                  When enabled, the hyperparameter fields above are ignored — Optuna searches for optimal values automatically.
+                  More trials = better results but longer training time.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Level 3 Advanced ML config */}
           {tLevel === 3 && (
             <div className="space-y-3 p-3 rounded-lg border border-card-border bg-background/40">
@@ -889,6 +962,13 @@ export default function MLPage() {
                   </Button>
                   <Button onClick={() => { setPDsId(0); setPredictions(null); setView("predict"); }} className="gap-1.5">
                     <Play className="h-3.5 w-3.5" /> Run Predictions
+                  </Button>
+                  <Button onClick={() => {
+                    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+                    const url = `${API_BASE}/api/ml/export/${selected.id}?format=joblib`;
+                    window.open(url + (token ? `&token=${token}` : ""), "_blank");
+                  }} variant="outline" className="gap-1.5 border-card-border">
+                    <Download className="h-3.5 w-3.5" /> Export
                   </Button>
                   </>
                 )}
@@ -973,6 +1053,48 @@ export default function MLPage() {
                         <span className="text-muted-foreground">Filtered Accuracy</span>
                         <span className="text-green-400 font-medium">{pct(selected.val_metrics.meta_filtered_accuracy as number)}</span>
                       </div>
+                    </div>
+                  )}
+                  {/* Optuna results */}
+                  {selected.val_metrics.optuna && (
+                    <div className="pt-2 border-t border-card-border">
+                      <span className="text-xs text-amber-400 font-medium">Optuna Auto-Tuning</span>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-muted-foreground">Best CV Score</span>
+                        <span className="text-amber-400 font-medium">
+                          {pct((selected.val_metrics.optuna as unknown as {best_value: number}).best_value)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Trials</span>
+                        <span>{(selected.val_metrics.optuna as unknown as {n_trials: number}).n_trials}</span>
+                      </div>
+                      {(selected.val_metrics.optuna as unknown as {best_params: Record<string, number>}).best_params && (
+                        <div className="mt-2 space-y-0.5">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Best Parameters</span>
+                          {Object.entries((selected.val_metrics.optuna as unknown as {best_params: Record<string, number>}).best_params).map(([k, v]) => (
+                            <div key={k} className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">{k}</span>
+                              <span>{typeof v === "number" ? (v < 0.01 ? v.toExponential(2) : v.toFixed(4)) : String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(selected.val_metrics.optuna as unknown as {param_importances: Record<string, number>}).param_importances &&
+                        Object.keys((selected.val_metrics.optuna as unknown as {param_importances: Record<string, number>}).param_importances).length > 0 && (
+                        <div className="mt-2 space-y-0.5">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Parameter Importance</span>
+                          {Object.entries((selected.val_metrics.optuna as unknown as {param_importances: Record<string, number>}).param_importances).map(([k, v]) => (
+                            <div key={k} className="flex items-center gap-2 text-xs">
+                              <span className="text-muted-foreground w-28 truncate">{k}</span>
+                              <div className="flex-1 h-1.5 bg-card-border rounded-full">
+                                <div className="h-full bg-amber-400 rounded-full" style={{ width: `${(v as number) * 100}%` }} />
+                              </div>
+                              <span className="w-10 text-right">{pct(v as number)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

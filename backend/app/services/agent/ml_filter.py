@@ -47,6 +47,8 @@ class MLSignalFilter:
         self._scaler = None
         self._feature_names: list[str] = []
         self._loaded = False
+        self._is_onnx = False
+        self._onnx_session = None
         # Meta-labeling support
         self._is_meta_model = False
         self._primary_model = None
@@ -63,6 +65,10 @@ class MLSignalFilter:
             return False
 
         try:
+            # ONNX model path
+            if self.model_path.endswith(".onnx"):
+                return self._load_onnx()
+
             import joblib
             saved = joblib.load(self.model_path)
             self._model = saved["model"]
@@ -83,6 +89,34 @@ class MLSignalFilter:
             return True
         except Exception as e:
             logger.error("[MLFilter] Failed to load model: %s", e)
+            return False
+
+    def _load_onnx(self) -> bool:
+        """Load an ONNX model for inference."""
+        try:
+            import onnxruntime as ort
+            self._onnx_session = ort.InferenceSession(self.model_path)
+            self._is_onnx = True
+            # Try to get feature names from companion metadata file
+            meta_path = self.model_path.replace(".onnx", "_meta.json")
+            if os.path.exists(meta_path):
+                import json
+                with open(meta_path) as f:
+                    meta = json.load(f)
+                    self._feature_names = meta.get("feature_names", [])
+            else:
+                # Infer from ONNX input shape
+                input_shape = self._onnx_session.get_inputs()[0].shape
+                n_features = input_shape[1] if len(input_shape) > 1 else 0
+                self._feature_names = [f"f_{i}" for i in range(n_features)]
+            self._loaded = True
+            logger.info("[MLFilter] Loaded ONNX model from %s (%d features)", self.model_path, len(self._feature_names))
+            return True
+        except ImportError:
+            logger.error("[MLFilter] onnxruntime not installed")
+            return False
+        except Exception as e:
+            logger.error("[MLFilter] Failed to load ONNX model: %s", e)
             return False
 
     def predict(self, bars: list[dict]) -> Optional[dict]:
@@ -144,14 +178,27 @@ class MLSignalFilter:
             if self._scaler is not None:
                 last_row = list(self._scaler.transform([last_row])[0])
 
-            # Make prediction
-            raw_pred = float(self._model.predict([last_row])[0])
+            # Make prediction (ONNX or sklearn)
+            if self._is_onnx and self._onnx_session:
+                import numpy as np
+                input_name = self._onnx_session.get_inputs()[0].name
+                X = np.array([last_row], dtype=np.float32)
+                result = self._onnx_session.run(None, {input_name: X})
+                raw_pred = float(result[0].flatten()[0])
+                # Try to get probabilities from second output
+                confidence = 0.5
+                if len(result) > 1:
+                    proba = result[1]
+                    if hasattr(proba, '__len__') and len(proba) > 0:
+                        confidence = float(np.max(proba[0]))
+            else:
+                raw_pred = float(self._model.predict([last_row])[0])
 
-            # Get confidence from predict_proba if available
-            confidence = 0.5
-            if hasattr(self._model, "predict_proba"):
-                proba = self._model.predict_proba([last_row])
-                confidence = float(max(proba[0]))
+                # Get confidence from predict_proba if available
+                confidence = 0.5
+                if hasattr(self._model, "predict_proba"):
+                    proba = self._model.predict_proba([last_row])
+                    confidence = float(max(proba[0]))
 
             # Determine direction
             target_type = self.target_config.get("type", "direction")

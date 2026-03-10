@@ -293,6 +293,157 @@ def _feat_regime(c: np.ndarray, highs_list: list[float],
     }
 
 
+def _feat_fractal_dimension(c: np.ndarray) -> dict[str, np.ndarray]:
+    """Higuchi fractal dimension — measures market complexity (1.0=smooth, 2.0=noisy)."""
+    n = len(c)
+    out = {}
+    window = 50
+    k_max = 8
+    fd = np.full(n, np.nan)
+
+    for i in range(window, n):
+        x = c[i - window + 1: i + 1]
+        L_k = np.zeros(k_max)
+        for k in range(1, k_max + 1):
+            n_k = (window - 1) // k
+            if n_k < 1:
+                break
+            lengths = []
+            for m in range(1, k + 1):
+                idx = np.arange(0, n_k) * k + m - 1
+                idx = idx[idx < window]
+                if len(idx) < 2:
+                    continue
+                seg = x[idx]
+                length = np.sum(np.abs(np.diff(seg))) * (window - 1) / (k * len(idx) * k)
+                lengths.append(length)
+            if lengths:
+                L_k[k - 1] = np.mean(lengths)
+        valid = L_k > 0
+        if np.sum(valid) >= 3:
+            log_k = np.log(np.arange(1, k_max + 1)[valid])
+            log_L = np.log(L_k[valid])
+            slope = np.polyfit(log_k, log_L, 1)[0]
+            fd[i] = -slope
+
+    out["fractal_dimension"] = fd
+    return out
+
+
+def _feat_hurst_exponent(c: np.ndarray) -> dict[str, np.ndarray]:
+    """R/S analysis for Hurst exponent — trend persistence measure.
+
+    H > 0.5: trending, H < 0.5: mean-reverting, H = 0.5: random walk.
+    """
+    n = len(c)
+    window = 100
+    hurst = np.full(n, np.nan)
+
+    for i in range(window, n):
+        x = c[i - window + 1: i + 1]
+        returns = np.diff(np.log(np.maximum(x, 1e-12)))
+        lags = [2, 4, 8, 16, 32]
+        rs_values = []
+        lag_values = []
+
+        for lag in lags:
+            if lag >= len(returns):
+                break
+            n_segments = len(returns) // lag
+            if n_segments < 1:
+                continue
+            rs_list = []
+            for seg_i in range(n_segments):
+                seg = returns[seg_i * lag: (seg_i + 1) * lag]
+                mean_seg = np.mean(seg)
+                deviations = np.cumsum(seg - mean_seg)
+                r = np.max(deviations) - np.min(deviations)
+                s = np.std(seg, ddof=1) if np.std(seg) > 1e-12 else 1e-12
+                rs_list.append(r / s)
+            if rs_list:
+                rs_values.append(np.log(np.mean(rs_list)))
+                lag_values.append(np.log(lag))
+
+        if len(rs_values) >= 3:
+            hurst[i] = np.polyfit(lag_values, rs_values, 1)[0]
+
+    return {"hurst_exponent": hurst}
+
+
+def _feat_order_flow_imbalance(
+    c: np.ndarray, v: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Volume-weighted directional pressure."""
+    n = len(c)
+    out = {}
+
+    # Direction: +1 if close > prev close, -1 otherwise
+    direction = np.zeros(n)
+    direction[1:] = np.sign(c[1:] - c[:-1])
+    direction[direction == 0] = 1.0  # flat → treat as up
+
+    # Directional volume
+    dir_vol = direction * v
+
+    # Rolling imbalance: sum(dir_vol) / sum(abs(vol)) over window
+    for window in (10, 20):
+        imb = np.full(n, np.nan)
+        cum_dv = np.cumsum(dir_vol)
+        cum_v = np.cumsum(v)
+        for i in range(window, n):
+            sv = cum_v[i] - cum_v[i - window]
+            if sv > 0:
+                imb[i] = (cum_dv[i] - cum_dv[i - window]) / sv
+        out[f"order_flow_imbalance_{window}"] = imb
+
+    # Buy pressure ratio: up-volume / total volume
+    up_vol = np.where(direction > 0, v, 0.0)
+    cum_up = np.cumsum(up_vol)
+    buy_pressure = np.full(n, np.nan)
+    for i in range(20, n):
+        total = cum_v[i] - cum_v[i - 20]
+        if total > 0:
+            buy_pressure[i] = (cum_up[i] - cum_up[i - 20]) / total
+    out["buy_pressure_ratio_20"] = buy_pressure
+
+    return out
+
+
+def _feat_microstructure(
+    h: np.ndarray, l: np.ndarray, c: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Parkinson & Garman-Klass volatility estimators."""
+    n = len(c)
+    out = {}
+
+    # Parkinson volatility (uses high-low range)
+    log_hl = np.log(np.maximum(h, 1e-12) / np.maximum(l, 1e-12))
+    parkinson_sq = log_hl ** 2 / (4 * np.log(2))
+
+    for window in (10, 20):
+        park = np.full(n, np.nan)
+        cs = np.cumsum(parkinson_sq)
+        for i in range(window, n):
+            park[i] = np.sqrt((cs[i] - cs[i - window]) / window)
+        out[f"parkinson_vol_{window}"] = park
+
+    # Garman-Klass volatility (uses OHLC)
+    log_hl2 = 0.5 * log_hl ** 2
+    log_co = np.zeros(n)
+    log_co[1:] = np.log(np.maximum(c[1:], 1e-12) / np.maximum(c[:-1], 1e-12))
+    gk_sq = log_hl2 - (2 * np.log(2) - 1) * log_co ** 2
+
+    for window in (10, 20):
+        gk = np.full(n, np.nan)
+        cs = np.cumsum(gk_sq)
+        for i in range(window, n):
+            val = (cs[i] - cs[i - window]) / window
+            gk[i] = np.sqrt(max(val, 0))
+        out[f"garman_klass_vol_{window}"] = gk
+
+    return out
+
+
 def _feat_momentum(c: np.ndarray) -> dict[str, np.ndarray]:
     """Rate of change + price acceleration."""
     n = len(c)
@@ -397,6 +548,16 @@ def compute_features(
     # ── Momentum features ─────────────────
     if "momentum" in selected:
         all_features.update(_feat_momentum(c))
+
+    # ── Advanced features ─────────────────
+    if "fractal_dimension" in selected:
+        all_features.update(_feat_fractal_dimension(c))
+    if "hurst_exponent" in selected:
+        all_features.update(_feat_hurst_exponent(c))
+    if "order_flow_imbalance" in selected:
+        all_features.update(_feat_order_flow_imbalance(c, v))
+    if "microstructure" in selected:
+        all_features.update(_feat_microstructure(h, l, c))
 
     # ── Build matrix ──────────────────────
     feature_names = list(all_features.keys())
