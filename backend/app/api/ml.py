@@ -1260,6 +1260,75 @@ async def lstm_predict(
     return result
 
 
+# ── RL Agent ─────────────────────────────────────────
+
+@router.post("/rl/train")
+async def train_rl_agent(
+    datasource_id: int = Query(...),
+    model_id: int = Query(0),
+    timesteps: int = Query(500000),
+    hidden_1: int = Query(256),
+    hidden_2: int = Query(256),
+    learning_rate: float = Query(3e-4),
+    commission: float = Query(0.0002),
+    spread: float = Query(0.0001),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Train PPO RL agent. Requires SB3, gymnasium, torch (local only)."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    if len(ohlcv_data) < 500:
+        raise HTTPException(400, f"Need at least 500 bars, got {len(ohlcv_data)}")
+
+    def _train():
+        from app.services.ml.rl_trainer import RLTrainer
+        trainer = RLTrainer(model_id=model_id)
+        return trainer.train(
+            ohlcv_data=ohlcv_data,
+            total_timesteps=timesteps,
+            hidden_sizes=(hidden_1, hidden_2),
+            learning_rate=learning_rate,
+            commission=commission,
+            spread=spread,
+        )
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _train)
+    return result
+
+
+@router.post("/rl/evaluate")
+async def evaluate_rl_agent(
+    datasource_id: int = Query(...),
+    model_id: int = Query(0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Evaluate a trained RL agent on a dataset."""
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise HTTPException(404, "DataSource not found")
+
+    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+
+    def _eval():
+        from app.services.ml.rl_trainer import RLTrainer
+        trainer = RLTrainer(model_id=model_id)
+        feature_matrix = trainer._build_features(ohlcv_data)
+        return trainer.evaluate(ohlcv_data, feature_matrix)
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(_train_pool, _eval)
+
+    if not result:
+        raise HTTPException(400, "RL model not trained or evaluation failed")
+    return result
+
+
 # ── Helpers ───────────────────────────────────────────
 
 def _load_csv_ohlcv(file_path: str) -> list[dict]:

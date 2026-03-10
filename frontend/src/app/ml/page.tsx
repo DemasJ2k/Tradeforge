@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity, TrendingUp } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity, TrendingUp, Bot } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ const levelLabel = (l: number) =>
 
 export default function MLPage() {
   /* ── state ──────────────────────────────────── */
-  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime" | "forecast">("list");
+  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime" | "forecast" | "rl">("list");
   const [models, setModels] = useState<MLModelListItem[]>([]);
   const [selected, setSelected] = useState<MLModelDetail | null>(null);
   const [predictions, setPredictions] = useState<MLPredictionResult | null>(null);
@@ -110,6 +110,17 @@ export default function MLPage() {
   const [lstmResult, setLstmResult] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [lstmForecast, setLstmForecast] = useState<any>(null);
+
+  // RL agent
+  const [rlDsId, setRlDsId] = useState<number>(0);
+  const [rlModelId, setRlModelId] = useState(0);
+  const [rlTimesteps, setRlTimesteps] = useState(500000);
+  const [rlHidden, setRlHidden] = useState(256);
+  const [rlTraining, setRlTraining] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [rlResult, setRlResult] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [rlEvalResult, setRlEvalResult] = useState<any>(null);
 
   // Meta-labeling
   const [metaTraining, setMetaTraining] = useState(false);
@@ -537,6 +548,42 @@ export default function MLPage() {
     }
   };
 
+  /* ── RL handlers ────────────────────────── */
+  const handleRlTrain = async () => {
+    if (!rlDsId) { setError("Select a datasource"); return; }
+    setRlTraining(true);
+    setError("");
+    setRlResult(null);
+    try {
+      const params = new URLSearchParams({
+        datasource_id: String(rlDsId),
+        model_id: String(rlModelId),
+        timesteps: String(rlTimesteps),
+        hidden_1: String(rlHidden),
+        hidden_2: String(rlHidden),
+      });
+      const result = await api.post(`/api/ml/rl/train?${params}`, {});
+      setRlResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "RL training failed");
+    } finally {
+      setRlTraining(false);
+    }
+  };
+
+  const handleRlEval = async () => {
+    if (!rlDsId) { setError("Select a datasource"); return; }
+    setError("");
+    try {
+      const result = await api.post(
+        `/api/ml/rl/evaluate?datasource_id=${rlDsId}&model_id=${rlModelId}`, {}
+      );
+      setRlEvalResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "RL evaluation failed");
+    }
+  };
+
   /* ═══════════════ RENDER ═══════════════════════ */
   return (
     <div className="space-y-4">
@@ -587,6 +634,9 @@ export default function MLPage() {
           </Button>
           <Button variant="outline" onClick={() => setView("forecast")} className="gap-1.5">
             <TrendingUp className="h-4 w-4" /> Forecast
+          </Button>
+          <Button variant="outline" onClick={() => setView("rl")} className="gap-1.5">
+            <Bot className="h-4 w-4" /> RL Agent
           </Button>
           <Button onClick={() => setView("train")} className="gap-1.5">
             <Brain className="h-4 w-4" /> Train New Model
@@ -1828,6 +1878,158 @@ export default function MLPage() {
                     <div className="text-[10px] text-red-400">Short Setup</div>
                     <div>TP: <span className="font-bold">{lstmForecast.tp_price_short?.toFixed(2)}</span></div>
                     <div>SL: <span className="font-bold">{lstmForecast.sl_price_short?.toFixed(2)}</span></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── RL AGENT VIEW ──────────── */}
+      {view === "rl" && (
+        <div className="space-y-4">
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-accent flex items-center gap-2">
+                <Bot className="h-4 w-4" /> PPO Reinforcement Learning Agent
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Train an autonomous trading agent using Proximal Policy Optimization (PPO).
+                The agent learns to trade by interacting with a simulated environment.
+                Requires SB3 + PyTorch for training (local only). Inference uses ONNX Runtime.
+              </p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">Datasource</Label>
+                  <select
+                    className="w-full mt-1 rounded-md bg-zinc-900 border border-zinc-700 text-sm p-2"
+                    value={rlDsId}
+                    onChange={e => setRlDsId(Number(e.target.value))}
+                  >
+                    <option value={0}>Select datasource...</option>
+                    {dataSources.map(ds => (
+                      <option key={ds.id} value={ds.id}>{ds.filename}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Model ID</Label>
+                  <Input type="number" className="mt-1" value={rlModelId} onChange={e => setRlModelId(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Timesteps</Label>
+                  <Input type="number" className="mt-1" value={rlTimesteps} onChange={e => setRlTimesteps(Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Hidden Size</Label>
+                  <Input type="number" className="mt-1" value={rlHidden} onChange={e => setRlHidden(Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleRlTrain} disabled={rlTraining || !rlDsId} className="gap-1.5">
+                  {rlTraining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                  Train Agent
+                </Button>
+                <Button variant="outline" onClick={handleRlEval} disabled={!rlDsId}>
+                  <Play className="h-4 w-4 mr-1" /> Evaluate
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* RL Training Result */}
+          {rlResult && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold text-green-400">Training Complete</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div><span className="text-muted-foreground">Model:</span> {rlResult.model_path?.split("/").pop()}</div>
+                  <div><span className="text-muted-foreground">Timesteps:</span> {rlResult.total_timesteps?.toLocaleString()}</div>
+                  <div><span className="text-muted-foreground">Train:</span> {rlResult.n_train_bars} bars</div>
+                  <div><span className="text-muted-foreground">Eval:</span> {rlResult.n_eval_bars} bars</div>
+                  <div><span className="text-muted-foreground">Features:</span> {rlResult.n_features}</div>
+                  <div><span className="text-muted-foreground">Network:</span> {rlResult.hidden_sizes?.join(" × ")}</div>
+                  <div><span className="text-muted-foreground">ONNX:</span> {rlResult.onnx_path ? "Exported" : "Failed"}</div>
+                </div>
+                {rlResult.eval_results && (
+                  <div className="mt-3 p-3 rounded-lg border border-zinc-700 bg-zinc-900/50">
+                    <h5 className="text-xs font-semibold text-accent mb-2">Evaluation Results</h5>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">P&L</span>
+                        <div className={`font-bold ${rlResult.eval_results.total_pnl > 0 ? "text-green-400" : "text-red-400"}`}>
+                          ${rlResult.eval_results.total_pnl?.toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Trades</span>
+                        <div className="font-bold">{rlResult.eval_results.total_trades}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Win Rate</span>
+                        <div className="font-bold">{(rlResult.eval_results.win_rate * 100).toFixed(1)}%</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Max DD</span>
+                        <div className="font-bold text-orange-400">{(rlResult.eval_results.max_drawdown * 100).toFixed(1)}%</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Balance</span>
+                        <div className="font-bold">${rlResult.eval_results.final_balance?.toFixed(0)}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Reward</span>
+                        <div className="font-bold">{rlResult.eval_results.total_reward?.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    {rlResult.eval_results.actions && (
+                      <div className="mt-2 flex gap-3 text-[10px]">
+                        {Object.entries(rlResult.eval_results.actions).map(([k, v]) => (
+                          <span key={k} className="text-muted-foreground">
+                            {k === "0" ? "wait" : k === "1" ? "buy" : k === "2" ? "sell" : k === "3" ? "close" : "trail"}: <span className="text-foreground">{String(v)}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Standalone Evaluation */}
+          {rlEvalResult && !rlResult && (
+            <Card className="bg-card-bg border-card-border">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="text-sm font-semibold">Evaluation Results</h4>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-sm">
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">P&L</div>
+                    <div className={`font-bold ${rlEvalResult.total_pnl > 0 ? "text-green-400" : "text-red-400"}`}>
+                      ${rlEvalResult.total_pnl?.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">Trades</div>
+                    <div className="font-bold">{rlEvalResult.total_trades}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">Win Rate</div>
+                    <div className="font-bold">{(rlEvalResult.win_rate * 100).toFixed(1)}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">Max DD</div>
+                    <div className="font-bold text-orange-400">{(rlEvalResult.max_drawdown * 100).toFixed(1)}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">Balance</div>
+                    <div className="font-bold">${rlEvalResult.final_balance?.toFixed(0)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted-foreground">Steps</div>
+                    <div className="font-bold">{rlEvalResult.steps}</div>
                   </div>
                 </div>
               </CardContent>
