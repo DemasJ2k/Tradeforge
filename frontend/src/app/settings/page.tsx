@@ -747,8 +747,8 @@ export default function SettingsPage() {
     setBrokerMsg(p => ({ ...p, ctrader: '' }));
     try {
       const r = await fetch(`${API}/api/broker/ctrader/auth-url`, { headers: authHeaders() });
-      if (!r.ok) throw new Error((await r.json()).detail || 'Failed to get auth URL');
       const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Failed to get auth URL');
       window.location.href = d.auth_url;
     } catch (e: unknown) {
       setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'OAuth failed' }));
@@ -756,30 +756,20 @@ export default function SettingsPage() {
     }
   };
 
-  // cTrader OAuth: fetch accounts after OAuth tokens are saved
+  // cTrader: fetch accounts using stored token (for account switching)
   const fetchCtraderAccounts = async () => {
     setBrokerBusy(p => ({ ...p, ctrader: true }));
-    setBrokerMsg(p => ({ ...p, ctrader: '' }));
+    setBrokerMsg(p => ({ ...p, ctrader: 'Fetching accounts...' }));
     try {
-      // Get access token from stored credentials
-      const credsR = await fetch(`${API}/api/settings/broker-credentials`, { headers: authHeaders() });
-      if (!credsR.ok) throw new Error('Failed to load credentials');
-      const credsD = await credsR.json();
-      const ctraderCred = (credsD.brokers || []).find((b: BrokerCredentialMasked) => b.broker === 'ctrader');
-      if (!ctraderCred?.configured) throw new Error('cTrader not configured — complete OAuth first');
-
-      // Use the connect endpoint to get accounts via stored token
-      const r = await fetch(`${API}/api/settings/broker-credentials/ctrader/connect`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      if (r.ok) {
-        setBrokerMsg(p => ({ ...p, ctrader: 'Connected!' }));
-        await loadBrokerCreds();
-        setCtraderStep('idle');
-      } else {
-        throw new Error((await r.json()).detail || 'Connection failed');
-      }
+      // Fetch accounts using stored token (backend reads from DB)
+      const r = await fetch(`${API}/api/broker/ctrader/accounts`, { headers: authHeaders() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Failed to fetch accounts');
+      const accounts = d.accounts || [];
+      if (accounts.length === 0) throw new Error('No trading accounts found');
+      setCtraderAccounts(accounts);
+      setCtraderStep('picking');
+      setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
     } catch (e: unknown) {
       setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'Failed to fetch accounts' }));
     } finally {
@@ -1957,7 +1947,16 @@ export default function SettingsPage() {
                           {/* Auto-connect toggle */}
                           <Toggle
                             value={brokerAutoConnect[broker.id] ?? false}
-                            onChange={v => setBrokerAutoConnect(p => ({ ...p, [broker.id]: v }))}
+                            onChange={async v => {
+                              setBrokerAutoConnect(p => ({ ...p, [broker.id]: v }));
+                              try {
+                                await fetch(`${API}/api/settings/broker-credentials/${broker.id}/auto-connect`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                  body: JSON.stringify({ auto_connect: v }),
+                                });
+                              } catch { /* silent */ }
+                            }}
                             label="Auto-connect on app startup"
                           />
 
@@ -2058,15 +2057,28 @@ export default function SettingsPage() {
                           )}
 
                           {cred?.configured && (
-                            <p className="text-xs text-muted-foreground/60">
-                              Stored fields: {cred.fields_set.join(', ')}
-                            </p>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground/60">
+                                Account: {cred.fields_set.includes('account_id') ? '✓ Selected' : '⚠ No account selected'}
+                                {cred.fields_set.includes('access_token') && ' • OAuth: ✓'}
+                                {cred.fields_set.includes('practice') && ` • ${cred.fields_set.includes('practice') ? 'Demo/Live' : ''}`}
+                              </p>
+                            </div>
                           )}
 
                           {/* Auto-connect toggle */}
                           <Toggle
                             value={brokerAutoConnect['ctrader'] ?? false}
-                            onChange={v => setBrokerAutoConnect(p => ({ ...p, ctrader: v }))}
+                            onChange={async v => {
+                              setBrokerAutoConnect(p => ({ ...p, ctrader: v }));
+                              try {
+                                await fetch(`${API}/api/settings/broker-credentials/ctrader/auto-connect`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                  body: JSON.stringify({ auto_connect: v }),
+                                });
+                              } catch { /* silent */ }
+                            }}
                             label="Auto-connect on app startup"
                           />
 
@@ -2082,6 +2094,9 @@ export default function SettingsPage() {
                                 <button onClick={() => connectBroker('ctrader')} disabled={busy} className={btnPrimary}>
                                   {busy ? 'Connecting...' : 'Connect'}
                                 </button>
+                                <button onClick={fetchCtraderAccounts} disabled={busy} className={btnSecondary}>
+                                  Change Account
+                                </button>
                                 <button onClick={startCtraderOAuth} disabled={busy} className={btnSecondary}>
                                   Re-authorize
                                 </button>
@@ -2090,6 +2105,9 @@ export default function SettingsPage() {
                             {cred?.connected && (
                               <>
                                 <span className="px-3 py-2 text-sm text-green-400 font-medium">Connected</span>
+                                <button onClick={fetchCtraderAccounts} disabled={busy} className={btnSecondary}>
+                                  Change Account
+                                </button>
                                 <button onClick={startCtraderOAuth} disabled={busy} className={btnSecondary}>
                                   Re-authorize
                                 </button>

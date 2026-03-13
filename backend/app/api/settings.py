@@ -384,6 +384,23 @@ def delete_broker_credentials(
     return {"status": "ok", "broker": broker_name}
 
 
+@router.patch("/broker-credentials/{broker_name}/auto-connect")
+def toggle_broker_auto_connect(
+    broker_name: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle auto-connect for a broker (merges into existing creds)."""
+    s = _get_or_create_settings(db, current_user)
+    creds = _load_broker_creds(s)
+    entry = creds.get(broker_name, {})
+    entry["auto_connect"] = bool(payload.get("auto_connect", False))
+    creds[broker_name] = entry
+    _save_broker_creds(s, creds, db)
+    return {"status": "ok", "broker": broker_name, "auto_connect": entry["auto_connect"]}
+
+
 @router.post("/broker-credentials/{broker_name}/connect")
 async def connect_saved_broker(
     broker_name: str,
@@ -529,10 +546,41 @@ async def auto_connect_brokers(
                     cid=entry.get("cid", ""),
                     sec=entry.get("sec", ""),
                 )
+            elif broker_name == "ctrader":
+                import os as _os
+                from app.services.broker.ctrader import CTraderAdapter
+                adapter = CTraderAdapter(
+                    client_id=_os.getenv("CTRADER_CLIENT_ID", ""),
+                    client_secret=_os.getenv("CTRADER_CLIENT_SECRET", ""),
+                    access_token=entry.get("access_token", ""),
+                    account_id=entry.get("account_id", ""),
+                    server="demo" if entry.get("practice", True) else "live",
+                )
             else:
                 continue
 
             ok = await broker_manager.connect_broker(broker_name, adapter)
+
+            # cTrader: if connect fails, try refreshing the OAuth token and retry
+            if not ok and broker_name == "ctrader" and entry.get("refresh_token"):
+                try:
+                    from app.api.ctrader_oauth import _refresh_tokens_if_needed
+                    updated = await _refresh_tokens_if_needed(db, current_user, dict(entry))
+                    import os as _os2
+                    from app.services.broker.ctrader import CTraderAdapter as _CTA2
+                    adapter = _CTA2(
+                        client_id=_os2.getenv("CTRADER_CLIENT_ID", ""),
+                        client_secret=_os2.getenv("CTRADER_CLIENT_SECRET", ""),
+                        access_token=updated["access_token"],
+                        account_id=entry.get("account_id", ""),
+                        server="demo" if entry.get("practice", True) else "live",
+                    )
+                    ok = await broker_manager.connect_broker(broker_name, adapter)
+                    if ok:
+                        _logger.info("cTrader auto-connected after token refresh")
+                except Exception as refresh_err:
+                    _logger.warning("cTrader auto-connect token refresh failed: %s", refresh_err)
+
             results[broker_name] = "connected" if ok else "failed"
 
             if ok:
