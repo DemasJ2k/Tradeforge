@@ -238,8 +238,48 @@ class PaperTradeMonitor:
             exit_result["exit_reason"], exit_result["pnl"],
         )
 
+        # Record RL performance metrics (if agent uses RL filter)
+        self._record_rl_performance(db, trade, exit_result)
+
         # Broadcast via WebSocket
         self._broadcast_close(trade, exit_result)
+
+    def _record_rl_performance(self, db, trade: AgentTrade, exit_result: dict):
+        """Record trade result in RL performance monitor if agent uses RL filter."""
+        try:
+            agent = db.query(TradingAgent).filter(TradingAgent.id == trade.agent_id).first()
+            if not agent:
+                return
+            risk_config = agent.risk_config or {}
+            if not risk_config.get("rl_enhanced") or not risk_config.get("rl_model_id"):
+                return
+
+            from app.services.agent.rl_performance_monitor import rl_performance_monitor
+            model_id = int(risk_config["rl_model_id"])
+            pnl = exit_result.get("pnl", 0.0)
+
+            alert = rl_performance_monitor.record_trade(model_id, pnl)
+            if alert:
+                # Log the alert
+                log = AgentLog(
+                    agent_id=trade.agent_id,
+                    level="warn" if alert["level"] == "warning" else "error",
+                    message=alert["message"],
+                    data=alert.get("metrics", {}),
+                )
+                db.add(log)
+
+                # Broadcast alert via WebSocket
+                try:
+                    from app.core.websocket import manager as ws_manager
+                    asyncio.ensure_future(ws_manager.broadcast_to_channel(
+                        f"agent:{trade.agent_id}",
+                        {"type": "rl_performance_alert", "data": alert},
+                    ))
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("[TradeMonitor] RL performance tracking error: %s", e)
 
     def _broadcast_close(self, trade: AgentTrade, exit_result: dict):
         """Broadcast trade close event via WebSocket."""

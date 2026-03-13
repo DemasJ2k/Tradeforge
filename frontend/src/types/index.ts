@@ -835,6 +835,10 @@ export interface AgentRiskConfig {
   position_size_type?: string;
   position_size_value?: number;
   max_exposure_per_symbol?: number;
+  // RL signal filter
+  rl_enhanced?: boolean;
+  rl_model_id?: number;
+  rl_mode?: "filter" | "autonomous";
 }
 
 export interface Agent {

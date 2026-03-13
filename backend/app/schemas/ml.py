@@ -132,3 +132,18 @@ class FeatureListResponse(BaseModel):
 
 class ModelCompareResponse(BaseModel):
     models: list[dict]                       # [{id, name, train_metrics, val_metrics}]
+
+
+# ── RL Model Registration ────────────────────────────
+
+class RLModelRegisterRequest(BaseModel):
+    name: str
+    symbol: str = ""
+    timeframe: str = "M5"
+    onnx_filename: str                       # filename in data/ml_models/ (e.g. "rl_lw_us30.onnx")
+    eval_avg_pnl: float = 0.0
+    eval_avg_wr: float = 0.0
+    eval_avg_trades: float = 0.0
+    eval_avg_dd: float = 0.0
+    timesteps: int = 0
+    feature_space: str = "lw_25"             # identifies the feature pipeline

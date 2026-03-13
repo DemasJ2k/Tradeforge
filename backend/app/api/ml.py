@@ -31,6 +31,7 @@ from app.schemas.ml import (
     MLPredictionResponse,
     FeatureListResponse,
     ModelCompareResponse,
+    RLModelRegisterRequest,
 )
 from app.services.ml.features import _DEFAULT_FEATURES
 
@@ -89,6 +90,7 @@ async def get_available_features(user: User = Depends(get_current_user)):
 async def list_models(
     level: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    model_type: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -101,6 +103,8 @@ async def list_models(
         q = q.filter(MLModel.level == level)
     if status:
         q = q.filter(MLModel.status == status)
+    if model_type:
+        q = q.filter(MLModel.model_type == model_type)
 
     models = q.order_by(MLModel.created_at.desc()).all()
 
@@ -170,6 +174,64 @@ async def delete_model(
     m.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "deleted", "model_id": model_id}
+
+
+@router.post("/register-rl-model")
+async def register_rl_model(
+    req: RLModelRegisterRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Register a pre-trained RL model (ONNX) in the ML model registry.
+
+    The ONNX file must already exist in data/ml_models/.
+    This creates a DB record so the model can be selected in the agent UI.
+    """
+
+    model_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "ml_models")
+    onnx_path = os.path.join(model_dir, req.onnx_filename)
+
+    if not os.path.exists(onnx_path):
+        raise HTTPException(404, f"ONNX file not found: {req.onnx_filename}")
+
+    # Check for stats file
+    stats_path = onnx_path.replace(".onnx", "_stats.npz")
+    has_stats = os.path.exists(stats_path)
+
+    model = MLModel(
+        name=req.name,
+        level=3,
+        model_type="rl_ppo",
+        creator_id=user.id,
+        symbol=req.symbol,
+        timeframe=req.timeframe,
+        features_config={"feature_space": req.feature_space, "obs_dims": 32},
+        target_config={"action_space": 3, "actions": ["skip", "take", "close"]},
+        hyperparams={"algorithm": "PPO", "timesteps": req.timesteps},
+        train_metrics={
+            "eval_avg_pnl": req.eval_avg_pnl,
+            "eval_avg_wr": req.eval_avg_wr,
+            "eval_avg_trades": req.eval_avg_trades,
+            "eval_avg_dd": req.eval_avg_dd,
+        },
+        val_metrics={"has_normalization_stats": has_stats},
+        feature_importance={},
+        status="ready",
+        model_path=onnx_path,
+        trained_at=datetime.now(timezone.utc),
+    )
+    db.add(model)
+    db.commit()
+    db.refresh(model)
+
+    logger.info("Registered RL model: %s (id=%d, path=%s)", req.name, model.id, onnx_path)
+    return {
+        "status": "registered",
+        "model_id": model.id,
+        "name": req.name,
+        "onnx_path": onnx_path,
+        "has_stats": has_stats,
+    }
 
 
 # ── Training ──────────────────────────────────────────

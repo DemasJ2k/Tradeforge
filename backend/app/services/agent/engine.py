@@ -43,6 +43,7 @@ class AgentRunner:
         self._evaluator: Optional[MSSEvaluator] = None
         self._risk_manager: Optional[RiskManager] = None
         self._ml_filter: Optional[MLSignalFilter] = None
+        self._rl_signal_filter = None  # RL PPO signal filter
         self._regime_detector = None  # HMM regime detector
         self._lstm_forecaster = None  # LSTM price range forecaster
         self._mode = "paper"
@@ -126,6 +127,24 @@ class AgentRunner:
                                     self.agent_id, ml_model.name, ml_mode)
                     else:
                         self._ml_filter = None
+
+            # Initialize RL signal filter (if configured in risk_config)
+            rl_enhanced = (agent.risk_config or {}).get("rl_enhanced", False)
+            rl_model_id = (agent.risk_config or {}).get("rl_model_id")
+            if rl_enhanced and rl_model_id:
+                rl_model = db.query(MLModel).filter(MLModel.id == int(rl_model_id)).first()
+                if rl_model and rl_model.status == "ready" and rl_model.model_path:
+                    try:
+                        from app.services.agent.rl_signal_filter import RLSignalFilter
+                        self._rl_signal_filter = RLSignalFilter(onnx_path=rl_model.model_path)
+                        if self._rl_signal_filter.load():
+                            logger.info("[Agent %d] RL filter loaded: %s (model_id=%s)",
+                                        self.agent_id, rl_model.name, rl_model_id)
+                        else:
+                            self._rl_signal_filter = None
+                    except Exception as e:
+                        logger.warning("[Agent %d] Failed to load RL filter: %s", self.agent_id, e)
+                        self._rl_signal_filter = None
 
             # Initialize regime detector (if regime model exists)
             regime_model_id = (agent.risk_config or {}).get("regime_model_id")
@@ -585,6 +604,42 @@ class AgentRunner:
                 regime_context,
             )
             signal.confidence = adjusted["combined_confidence"]
+
+        # ── RL signal filter ──
+        if self._rl_signal_filter:
+            rl_result = self._rl_signal_filter.evaluate_signal(
+                strategy_direction=signal.direction,
+                strategy_confidence=signal.confidence,
+                bars=self._bar_buffer,
+                position_dir=self._active_direction,
+            )
+
+            self._log("rl_filter", rl_result["reason"], data={
+                "rl_action": rl_result["rl_action"],
+                "rl_confidence": rl_result["rl_confidence"],
+                "approved": rl_result["approved"],
+                "probabilities": rl_result.get("probabilities", {}),
+            })
+
+            # Handle CLOSE action — RL wants to close existing position
+            if rl_result.get("close_position") and self._active_direction != 0:
+                current_price = self._bar_buffer[-1]["close"]
+                closed_count = trade_monitor.close_trade_by_reversal(
+                    agent_id=self.agent_id,
+                    symbol=self._symbol,
+                    current_price=current_price,
+                )
+                if closed_count > 0:
+                    self._log("trade", f"RL close: closed {closed_count} trade(s)")
+                    self._active_direction = 0
+                    self._risk_manager.set_open_positions(
+                        trade_monitor.get_open_trade_count(self.agent_id)
+                    )
+
+            if not rl_result["approved"]:
+                return
+
+            signal.confidence = rl_result["combined_confidence"]
 
         # ── LSTM dynamic SL/TP ──
         if self._lstm_forecaster:

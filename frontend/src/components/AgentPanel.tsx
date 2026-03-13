@@ -85,6 +85,10 @@ export default function AgentPanel() {
   const [cMlModelId, setCMlModelId] = useState<number | null>(null);
   const [cBroker, setCBroker] = useState<string>("");
   const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
+  const [rlModels, setRlModels] = useState<{ id: number; name: string; symbol: string; train_metrics?: Record<string, number> }[]>([]);
+  const [cRlEnhanced, setCRlEnhanced] = useState(false);
+  const [cRlModelId, setCRlModelId] = useState<number | null>(null);
+  const [cRlMode, setCRlMode] = useState<"filter" | "autonomous">("filter");
   const [propFirmAccounts, setPropFirmAccounts] = useState<{ id: number; account_name: string; firm_name: string; status: string }[]>([]);
   const [cPropFirmId, setCPropFirmId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
@@ -127,6 +131,9 @@ export default function AgentPanel() {
   const [editMaxPositions, setEditMaxPositions] = useState(3);
   const [editMaxDailyLoss, setEditMaxDailyLoss] = useState(5);
   const [editMaxDrawdown, setEditMaxDrawdown] = useState(10);
+  const [editRlEnhanced, setEditRlEnhanced] = useState(false);
+  const [editRlModelId, setEditRlModelId] = useState<number | null>(null);
+  const [editRlMode, setEditRlMode] = useState<"filter" | "autonomous">("filter");
   const [editMsg, setEditMsg] = useState("");
 
   // ── Load agents & strategies on mount ──
@@ -142,6 +149,10 @@ export default function AgentPanel() {
     api
       .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>("/api/ml/models?status=ready")
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
+      .catch(() => {});
+    api
+      .get<{ id: number; name: string; symbol: string; train_metrics?: Record<string, number> }[]>("/api/ml/models?status=ready&model_type=rl_ppo")
+      .then((models) => setRlModels(Array.isArray(models) ? models : []))
       .catch(() => {});
     api
       .get<{ id: number; account_name: string; firm_name: string; status: string }[]>("/api/prop-firms/")
@@ -219,6 +230,11 @@ export default function AgentPanel() {
           max_open_positions: parseInt(cMaxOpenPositions) || 3,
           max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 0,
           max_drawdown_pct: parseFloat(cMaxDrawdown) || 0,
+          ...(cRlEnhanced && cRlModelId ? {
+            rl_enhanced: true,
+            rl_model_id: cRlModelId,
+            rl_mode: cRlMode,
+          } : {}),
         },
       };
       await createAgent(data);
@@ -227,6 +243,9 @@ export default function AgentPanel() {
       setCStrategyId(null);
       setCMlModelId(null);
       setCPropFirmId(null);
+      setCRlEnhanced(false);
+      setCRlModelId(null);
+      setCRlMode("filter");
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -378,6 +397,9 @@ export default function AgentPanel() {
                             {agent.broker_name && (
                               <span className="ml-1 capitalize text-accent/70">- {agent.broker_name}</span>
                             )}
+                            {agent.risk_config?.rl_enhanced && (
+                              <Badge className="ml-1.5 bg-purple-500/20 text-purple-400 text-[9px] py-0">RL</Badge>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -480,6 +502,9 @@ export default function AgentPanel() {
                               setEditMaxPositions(agent.risk_config?.max_open_positions ?? 3);
                               setEditMaxDailyLoss(agent.risk_config?.max_daily_loss_pct ?? 5);
                               setEditMaxDrawdown(agent.risk_config?.max_drawdown_pct ?? 10);
+                              setEditRlEnhanced(agent.risk_config?.rl_enhanced ?? false);
+                              setEditRlModelId(agent.risk_config?.rl_model_id ?? null);
+                              setEditRlMode(agent.risk_config?.rl_mode ?? "filter");
                               setEditMsg("");
                             }}
                             title="Edit agent"
@@ -680,6 +705,81 @@ export default function AgentPanel() {
               </select>
             </div>
 
+            {/* RL-Enhanced Toggle */}
+            <div className="border-t border-card-border pt-3">
+              <div className="flex items-center gap-3 mb-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={cRlEnhanced}
+                  onClick={() => setCRlEnhanced(!cRlEnhanced)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cRlEnhanced ? "bg-purple-600" : "bg-zinc-600"}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${cRlEnhanced ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+                <Label className="text-xs font-semibold text-foreground">
+                  RL-Enhanced
+                  {cRlEnhanced && <Badge className="ml-2 bg-purple-500/20 text-purple-400 text-[10px]">AI</Badge>}
+                </Label>
+              </div>
+              {cRlEnhanced && (
+                <div className="space-y-2 pl-1">
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">RL Model</Label>
+                    <select
+                      value={cRlModelId ?? ""}
+                      onChange={(e) => setCRlModelId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select RL model...</option>
+                      {rlModels.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {m.symbol ? `(${m.symbol})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">RL Mode</Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCRlMode("filter")}
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${cRlMode === "filter" ? "border-purple-500 bg-purple-500/10 text-purple-400" : "border-card-border text-muted-foreground hover:border-zinc-500"}`}
+                      >
+                        Filter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCRlMode("autonomous")}
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${cRlMode === "autonomous" ? "border-purple-500 bg-purple-500/10 text-purple-400" : "border-card-border text-muted-foreground hover:border-zinc-500"}`}
+                      >
+                        Autonomous
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      {cRlMode === "filter" ? "RL gates strategy signals (safer)" : "RL trades independently (advanced)"}
+                    </p>
+                  </div>
+                  {cRlModelId && rlModels.find(m => m.id === cRlModelId)?.train_metrics && (
+                    <div className="flex gap-2 text-[10px]">
+                      {(() => {
+                        const metrics = rlModels.find(m => m.id === cRlModelId)?.train_metrics;
+                        if (!metrics) return null;
+                        return (
+                          <>
+                            {metrics.eval_avg_wr != null && <Badge className="bg-green-500/10 text-green-400">WR {metrics.eval_avg_wr}%</Badge>}
+                            {metrics.eval_avg_pnl != null && <Badge className={`${metrics.eval_avg_pnl >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>PnL ${metrics.eval_avg_pnl}</Badge>}
+                            {metrics.eval_avg_dd != null && <Badge className="bg-yellow-500/10 text-yellow-400">DD {metrics.eval_avg_dd}%</Badge>}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Prop Firm Account (optional) */}
             {propFirmAccounts.length > 0 && (
               <div>
@@ -809,6 +909,47 @@ export default function AgentPanel() {
                 ))}
               </select>
             </div>
+            {/* RL-Enhanced Toggle (Edit) */}
+            <div className="border-t border-card-border pt-3">
+              <div className="flex items-center gap-3 mb-2">
+                <button type="button" role="switch" aria-checked={editRlEnhanced}
+                  onClick={() => setEditRlEnhanced(!editRlEnhanced)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${editRlEnhanced ? "bg-purple-600" : "bg-zinc-600"}`}>
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${editRlEnhanced ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+                <Label className="text-xs font-semibold text-foreground">
+                  RL-Enhanced
+                  {editRlEnhanced && <Badge className="ml-2 bg-purple-500/20 text-purple-400 text-[10px]">AI</Badge>}
+                </Label>
+              </div>
+              {editRlEnhanced && (
+                <div className="space-y-2 pl-1">
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">RL Model</Label>
+                    <select value={editRlModelId ?? ""} onChange={e => setEditRlModelId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                      <option value="">Select RL model...</option>
+                      {rlModels.map(m => (
+                        <option key={m.id} value={m.id}>{m.name} {m.symbol ? `(${m.symbol})` : ""}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">RL Mode</Label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setEditRlMode("filter")}
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${editRlMode === "filter" ? "border-purple-500 bg-purple-500/10 text-purple-400" : "border-card-border text-muted-foreground hover:border-zinc-500"}`}>
+                        Filter
+                      </button>
+                      <button type="button" onClick={() => setEditRlMode("autonomous")}
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-xs transition-colors ${editRlMode === "autonomous" ? "border-purple-500 bg-purple-500/10 text-purple-400" : "border-card-border text-muted-foreground hover:border-zinc-500"}`}>
+                        Autonomous
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <div>
               <Label className="block text-xs text-muted-foreground mb-1.5">Position Sizing</Label>
               <div className="flex rounded-lg border border-card-border overflow-hidden mb-2">
@@ -851,7 +992,17 @@ export default function AgentPanel() {
                 try {
                   await api.put(`/api/agents/${editAgent.id}`, {
                     name: editName, mode: editMode, ml_model_id: editMlModelId,
-                    risk_config: { ...editAgent.risk_config, position_size_type: editSizeType, position_size_value: editSizeValue, max_open_positions: editMaxPositions, max_daily_loss_pct: editMaxDailyLoss, max_drawdown_pct: editMaxDrawdown },
+                    risk_config: {
+                      ...editAgent.risk_config,
+                      position_size_type: editSizeType,
+                      position_size_value: editSizeValue,
+                      max_open_positions: editMaxPositions,
+                      max_daily_loss_pct: editMaxDailyLoss,
+                      max_drawdown_pct: editMaxDrawdown,
+                      rl_enhanced: editRlEnhanced,
+                      rl_model_id: editRlEnhanced ? editRlModelId : undefined,
+                      rl_mode: editRlEnhanced ? editRlMode : undefined,
+                    },
                   });
                   setEditMsg("\u2713 Agent updated successfully");
                   setTimeout(() => setEditAgent(null), 1200);
@@ -1024,6 +1175,7 @@ function AgentInlineDetail({
                     log.level === "error" ? "bg-red-500/5 text-red-400"
                     : log.level === "warn" ? "bg-yellow-500/5 text-yellow-400"
                     : log.level === "trade" ? "bg-green-500/5 text-green-400"
+                    : log.level === "rl_filter" ? "bg-purple-500/5 text-purple-400"
                     : "text-muted-foreground"
                   }`}
                 >
@@ -1034,9 +1186,10 @@ function AgentInlineDetail({
                     log.level === "error" ? "text-red-400"
                     : log.level === "warn" ? "text-yellow-400"
                     : log.level === "trade" ? "text-green-400"
+                    : log.level === "rl_filter" ? "text-purple-400"
                     : "text-zinc-500"
                   }`}>
-                    {log.level}
+                    {log.level === "rl_filter" ? "RL" : log.level}
                   </span>
                   <span className="break-all">{log.message}</span>
                 </div>
