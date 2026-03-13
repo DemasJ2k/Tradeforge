@@ -1310,10 +1310,131 @@ def _seed_all_strategies():
         db.close()
 
 
+def _register_rl_models():
+    """Auto-register pre-trained RL ONNX models into the database on startup.
+
+    Checks for ONNX files in data/ml_models/ and creates corresponding MLModel
+    records if they don't already exist.  This ensures Render deployments
+    automatically have RL models available in the UI without manual DB scripts.
+    """
+    from datetime import datetime, timezone
+    from app.core.database import SessionLocal
+    from app.models.ml import MLModel
+
+    _log = logging.getLogger(__name__)
+
+    # Master catalog of RL models shipped with the repo
+    RL_CATALOG = [
+        {
+            "name": "RL LW US30 PPO",
+            "symbol": "US30",
+            "timeframe": "M5",
+            "onnx_filename": "rl_lw_us30.onnx",
+            "eval_avg_pnl": 640.44,
+            "eval_avg_wr": 55.1,
+            "eval_avg_trades": 563.7,
+            "eval_avg_dd": 4.9,
+            "timesteps": 500000,
+            "feature_space": "lw_25",
+        },
+        {
+            "name": "RL LW XAUUSD PPO",
+            "symbol": "XAUUSD",
+            "timeframe": "M5",
+            "onnx_filename": "rl_lw_xauusd.onnx",
+            "eval_avg_pnl": 29.04,
+            "eval_avg_wr": 53.6,
+            "eval_avg_trades": 587.4,
+            "eval_avg_dd": 0.6,
+            "timesteps": 500000,
+            "feature_space": "lw_25",
+        },
+        {
+            "name": "RL MB BTCUSD PPO",
+            "symbol": "BTCUSD",
+            "timeframe": "M5",
+            "onnx_filename": "rl_mb_btcusd.onnx",
+            "eval_avg_pnl": 335.73,
+            "eval_avg_wr": 51.3,
+            "eval_avg_trades": 225.0,
+            "eval_avg_dd": 17.2,
+            "timesteps": 1000000,
+            "feature_space": "mb_25",
+        },
+    ]
+
+    base_dir = os.path.join(os.path.dirname(__file__), "app", "data", "ml_models")
+    # Also check the backend/data/ml_models path (Render working directory)
+    alt_base_dir = os.path.join(os.path.dirname(__file__), "data", "ml_models")
+
+    db = SessionLocal()
+    try:
+        registered = 0
+        for m in RL_CATALOG:
+            # Skip if already registered
+            existing = db.query(MLModel).filter(
+                MLModel.name == m["name"],
+                MLModel.model_type == "rl_ppo",
+            ).first()
+            if existing:
+                _log.debug("RL model already registered: %s (id=%d)", m["name"], existing.id)
+                continue
+
+            # Find the ONNX file on disk
+            rel_path = os.path.join("data", "ml_models", m["onnx_filename"])
+            abs_path = os.path.join(alt_base_dir, m["onnx_filename"])
+            if not os.path.exists(abs_path):
+                abs_path = os.path.join(base_dir, m["onnx_filename"])
+            if not os.path.exists(abs_path):
+                _log.info("RL ONNX file not found, skipping: %s", m["onnx_filename"])
+                continue
+
+            ml_record = MLModel(
+                name=m["name"],
+                level=3,
+                model_type="rl_ppo",
+                symbol=m["symbol"],
+                timeframe=m["timeframe"],
+                status="ready",
+                model_path=rel_path,
+                features_config={"feature_space": m["feature_space"], "obs_dims": 32},
+                target_config={"action_space": 3, "actions": ["skip", "take", "close"]},
+                hyperparams={
+                    "algorithm": "PPO",
+                    "timesteps": m["timesteps"],
+                    "feature_space": m["feature_space"],
+                },
+                train_metrics={
+                    "eval_avg_pnl": m["eval_avg_pnl"],
+                    "eval_avg_wr": m["eval_avg_wr"],
+                    "eval_avg_trades": m["eval_avg_trades"],
+                    "eval_avg_dd": m["eval_avg_dd"],
+                },
+                val_metrics={},
+                feature_importance={},
+                trained_at=datetime.now(timezone.utc),
+            )
+            db.add(ml_record)
+            db.flush()
+            registered += 1
+            _log.info("Registered RL model: %s (id=%d, symbol=%s)",
+                       m["name"], ml_record.id, m["symbol"])
+
+        db.commit()
+        if registered:
+            _log.info("Auto-registered %d new RL model(s)", registered)
+    except Exception as e:
+        db.rollback()
+        _log.error("Failed to register RL models: %s", e)
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
+    _register_rl_models()
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     _recalculate_agent_pnl()
     await ws_manager.start()
