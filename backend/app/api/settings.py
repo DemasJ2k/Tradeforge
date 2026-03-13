@@ -442,6 +442,28 @@ async def connect_saved_broker(
         raise HTTPException(400, f"Unsupported broker: {broker_name}")
 
     success = await broker_manager.connect_broker(broker_name, adapter)
+
+    # cTrader: if connect fails, try refreshing the OAuth token and retry
+    if not success and broker_name == "ctrader" and entry.get("refresh_token"):
+        _logger.info("cTrader connect failed — attempting token refresh...")
+        try:
+            from app.api.ctrader_oauth import _refresh_tokens_if_needed
+            updated_entry = await _refresh_tokens_if_needed(db, current_user, dict(entry))
+            import os as _os
+            from app.services.broker.ctrader import CTraderAdapter as _CTA
+            adapter = _CTA(
+                client_id=_os.getenv("CTRADER_CLIENT_ID", ""),
+                client_secret=_os.getenv("CTRADER_CLIENT_SECRET", ""),
+                access_token=updated_entry["access_token"],
+                account_id=entry.get("account_id", ""),
+                server="demo" if entry.get("practice", True) else "live",
+            )
+            success = await broker_manager.connect_broker(broker_name, adapter)
+            if success:
+                _logger.info("cTrader connected after token refresh")
+        except Exception as refresh_err:
+            _logger.warning("cTrader token refresh failed: %s", refresh_err)
+
     if not success:
         detail = getattr(adapter, "_last_error", "") or "Unknown error"
         raise HTTPException(400, f"Failed to connect to {broker_name}: {detail}")

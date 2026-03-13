@@ -138,6 +138,9 @@ class CTraderAdapter(BrokerAdapter):
         self._request_semaphore = asyncio.Semaphore(40)
         self._last_request_time = 0.0
 
+        # Last error message (for UI feedback)
+        self._last_error = ""
+
     # ── Helpers ────────────────────────────────────────
 
     def _next_msg_id(self) -> str:
@@ -332,10 +335,27 @@ class CTraderAdapter(BrokerAdapter):
     # ── Connection ─────────────────────────────────────
 
     async def connect(self) -> bool:
+        self._last_error = ""
         try:
             import websockets
         except ImportError:
-            logger.error("websockets package not installed. Run: pip install websockets")
+            self._last_error = "websockets package not installed"
+            logger.error(self._last_error)
+            return False
+
+        if not self._client_id or not self._client_secret:
+            self._last_error = "CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not configured"
+            logger.error(self._last_error)
+            return False
+
+        if not self._access_token:
+            self._last_error = "No cTrader access token — complete OAuth flow first"
+            logger.error(self._last_error)
+            return False
+
+        if not self._account_id:
+            self._last_error = "No cTrader account selected — pick an account first"
+            logger.error(self._last_error)
             return False
 
         url = f"wss://{self._host}:{self._PORT}"
@@ -354,6 +374,8 @@ class CTraderAdapter(BrokerAdapter):
                 "clientSecret": self._client_secret,
             })
             if resp.get("payloadType") != PROTO_OA_APPLICATION_AUTH_RES:
+                err = resp.get("payload", {}).get("description", "Unknown error")
+                self._last_error = f"App auth failed: {err}"
                 logger.error("cTrader app auth failed: %s", resp)
                 return False
             logger.info("cTrader application authenticated")
@@ -364,6 +386,8 @@ class CTraderAdapter(BrokerAdapter):
                 "accessToken": self._access_token,
             })
             if resp.get("payloadType") != PROTO_OA_ACCOUNT_AUTH_RES:
+                err = resp.get("payload", {}).get("description", "Unknown error")
+                self._last_error = f"Account auth failed: {err} (token may be expired)"
                 logger.error("cTrader account auth failed: %s", resp)
                 return False
             logger.info("cTrader account %d authenticated", self._account_id)
@@ -381,6 +405,7 @@ class CTraderAdapter(BrokerAdapter):
             return True
 
         except Exception as e:
+            self._last_error = f"Connection failed: {str(e)}"
             logger.error("cTrader connect failed: %s", e)
             self._connected = False
             return False

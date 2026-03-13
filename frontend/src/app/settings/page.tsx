@@ -824,12 +824,12 @@ export default function SettingsPage() {
           const r = await fetch(`${API}/api/broker/ctrader/callback?code=${encodeURIComponent(ctraderCode)}`, {
             headers: authHeaders(),
           });
-          if (!r.ok) throw new Error((await r.json()).detail || 'Token exchange failed');
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || 'Token exchange failed');
           setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Fetching accounts...' }));
           await loadBrokerCreds();
 
-          // Fetch trading accounts
-          const d = await r.json();
+          // Fetch trading accounts using the access token from the callback
           const acctR = await fetch(`${API}/api/broker/ctrader/accounts?access_token=${encodeURIComponent(d.access_token)}`, {
             headers: authHeaders(),
           });
@@ -839,7 +839,8 @@ export default function SettingsPage() {
             setCtraderStep('picking');
             setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
           } else {
-            setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Click Connect to link your account.' }));
+            const errD = await acctR.json().catch(() => ({}));
+            setBrokerMsg(p => ({ ...p, ctrader: errD.detail || 'OAuth complete! Click Connect to link your account.' }));
           }
         } catch (e: unknown) {
           setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'OAuth failed' }));
