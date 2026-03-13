@@ -1,21 +1,19 @@
-Phase 3: LSTM/GRU price range forecasting + dynamic SL/TP
+Track B: BTCUSD Momentum-Breakout RL model + multi-feature-space support
 
-Backend:
-- New: LSTMForecaster class with LSTM/GRU architecture (hidden=128,
-  layers=2, dropout=0.2). Predicts future price distribution (mean,
-  std, p20, p80) for dynamic SL/TP placement
-- Train with PyTorch locally, export ONNX for Render inference
-- Agent engine: load LSTM forecaster, adjust SL/TP based on predicted
-  price ranges (BUY: TP at p80, SL at p20; SELL: inverse)
-- API: POST /api/ml/lstm/train, GET /api/ml/lstm/predict/{symbol}
-- New: scripts/train_lstm_local.py for standalone local training
+Train and integrate a PPO RL agent for BTCUSD M5 using a custom
+Momentum-Breakout strategy (ATR envelope + ROC momentum + RSI guard).
+Model achieves +$335 avg PnL, 51.3% WR, 17.2% max DD on 1M timesteps.
 
-Frontend:
-- ML Lab: add Forecast view with LSTM/GRU training form (cell type,
-  hidden size, seq length, horizon, epochs)
-- ML Lab: display training results (val loss, direction accuracy,
-  loss curve bars)
-- ML Lab: show forecast with price distribution, predicted range,
-  and derived long/short SL/TP levels
+New files:
+- train_rl_btcusd_momentum.py: Custom BTC training env with ATR envelope breakout detection
+- check_btc_data.py: Data inspection utility for BTCUSD M5 CSV
+
+Modified:
+- rl_signal_filter.py: Support both lw_25 (Larry Williams) and mb_25 (Momentum-Breakout) feature spaces
+  - Added EMA20 + ROC10 indicator helpers for MB features
+  - New _build_mb_features_for_bar() with ATR envelope breakout + momentum signal
+  - Feature space auto-selected from model's features_config
+- engine.py: Pass feature_space from MLModel.features_config to RLSignalFilter
+- register_rl_models.py: Added BTCUSD model entry (feature_space=mb_25)
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

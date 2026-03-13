@@ -136,7 +136,11 @@ class AgentRunner:
                 if rl_model and rl_model.status == "ready" and rl_model.model_path:
                     try:
                         from app.services.agent.rl_signal_filter import RLSignalFilter
-                        self._rl_signal_filter = RLSignalFilter(onnx_path=rl_model.model_path)
+                        rl_feature_space = (rl_model.features_config or {}).get("feature_space", "lw_25")
+                        self._rl_signal_filter = RLSignalFilter(
+                            onnx_path=rl_model.model_path,
+                            feature_space=rl_feature_space,
+                        )
                         if self._rl_signal_filter.load():
                             logger.info("[Agent %d] RL filter loaded: %s (model_id=%s)",
                                         self.agent_id, rl_model.name, rl_model_id)

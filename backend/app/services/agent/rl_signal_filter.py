@@ -1,10 +1,14 @@
 """
-RL Signal Filter — PPO-based filter for Larry Williams breakout signals.
+RL Signal Filter — PPO-based filter for strategy signals.
 
-Loads an ONNX policy trained on LW breakout signals and decides:
-  0 = SKIP (reject this breakout signal)
+Loads an ONNX PPO policy and decides:
+  0 = SKIP (reject this signal)
   1 = TAKE (accept the signal, enter trade)
   2 = CLOSE (close current position)
+
+Supports multiple feature spaces:
+  - lw_25: Larry Williams breakout (prev_range breakout levels)
+  - mb_25: Momentum-Breakout (ATR envelope + ROC momentum + RSI guard)
 
 Feature space: 25 technical features + 7 position context = 32 dims.
 Requires only onnxruntime + numpy (no SB3/gymnasium).
@@ -79,6 +83,29 @@ def _compute_rsi(bars: list[dict], period: int = 14) -> np.ndarray:
             rs = avg_gain / avg_loss
             out[i] = 100 - (100 / (1 + rs))
     return out
+
+
+def _compute_ema(values: np.ndarray, period: int) -> np.ndarray:
+    """Exponential moving average (for MB feature space)."""
+    n = len(values)
+    ema = np.zeros(n)
+    if n < period:
+        return ema
+    ema[period - 1] = np.mean(values[:period])
+    mult = 2.0 / (period + 1)
+    for i in range(period, n):
+        ema[i] = values[i] * mult + ema[i - 1] * (1 - mult)
+    return ema
+
+
+def _compute_roc(closes: np.ndarray, period: int = 10) -> np.ndarray:
+    """Rate of Change (for MB feature space)."""
+    n = len(closes)
+    roc = np.zeros(n)
+    for i in range(period, n):
+        if closes[i - period] != 0:
+            roc[i] = (closes[i] - closes[i - period]) / closes[i - period] * 100
+    return roc
 
 
 # ── Feature builder (exact replica of build_feature_matrix) ──
@@ -209,23 +236,157 @@ def _build_features_for_bar(
     return feat
 
 
+# ── MB Feature builder (momentum-breakout, from train_rl_btcusd_momentum.py) ──
+
+
+def _build_mb_features_for_bar(
+    bars: list[dict],
+    bar_idx: int,
+    atr: np.ndarray,
+    wr: np.ndarray,
+    rsi: np.ndarray,
+    ema20: np.ndarray,
+    roc10: np.ndarray,
+    atr_breakout_mult: float = 2.0,
+) -> np.ndarray:
+    """Build 25-dim feature vector for a single bar (Momentum-Breakout space).
+
+    Shared features 0-13 and 17-23 are identical to LW.
+    Differs in features 14-16 and 24:
+      14: breakout_up   - how far price is above upper ATR band (norm by ATR)
+      15: breakout_down - how far price is below lower ATR band (norm by ATR)
+      16: roc_10        - 10-bar rate of change (normalized)
+      24: signal_type   - momentum-breakout signal (-1=short, 0=none, 1=long)
+    """
+    feat = np.zeros(25, dtype=np.float32)
+    i = bar_idx
+    c = bars[i]["close"]
+    if c == 0 or i < 30:
+        return feat
+
+    # ── Shared features 0-13 (identical to LW) ──
+
+    # Returns
+    for j, lb in enumerate([1, 3, 5, 10]):
+        if i >= lb:
+            pc = bars[i - lb]["close"]
+            feat[j] = (c - pc) / pc if pc != 0 else 0
+
+    # Volatility
+    for j, w in enumerate([5, 10, 20]):
+        if i >= w:
+            seg = [b["close"] for b in bars[i - w:i + 1]]
+            seg_arr = np.array(seg)
+            rets = np.diff(seg_arr) / seg_arr[:-1]
+            feat[4 + j] = np.std(rets) * 100
+
+    # ATR, RSI, WR
+    feat[7] = atr[i] / c if c != 0 else 0
+    feat[8] = (rsi[i] - 50) / 50
+    feat[9] = (wr[i] + 50) / 50
+
+    # Candle shape
+    o = bars[i]["open"]
+    h = bars[i]["high"]
+    low = bars[i]["low"]
+    full = h - low
+    if full > 0:
+        feat[10] = (c - o) / full
+        feat[11] = (h - max(c, o)) / full
+        feat[12] = (min(c, o) - low) / full
+
+    # Volume ratio
+    if i >= 20:
+        vols = [bars[k]["volume"] for k in range(i - 19, i + 1)]
+        avg_vol = np.mean(vols)
+        feat[13] = bars[i]["volume"] / avg_vol if avg_vol > 0 else 1.0
+
+    # ── MB-specific features 14-16 (ATR envelope breakout + ROC) ──
+
+    upper_band = ema20[i] + atr[i] * atr_breakout_mult
+    lower_band = ema20[i] - atr[i] * atr_breakout_mult
+    if atr[i] > 0:
+        feat[14] = max(0, (c - upper_band) / atr[i])
+        feat[15] = max(0, (lower_band - c) / atr[i])
+
+    # ROC(10) normalized (replaces prev_range in LW)
+    feat[16] = roc10[i] / 100.0
+
+    # ── Shared features 17-23 ──
+
+    # Hour encoding
+    try:
+        time_str = bars[i].get("time", "")
+        if isinstance(time_str, str):
+            if "T" in time_str:
+                hour = int(time_str.split("T")[1].split(":")[0])
+            else:
+                parts = time_str.split(" ")
+                hour = int(parts[1].split(":")[0]) if len(parts) >= 2 else 12
+        else:
+            hour = 12
+    except (ValueError, IndexError):
+        hour = 12
+    feat[17] = np.sin(2 * np.pi * hour / 24)
+    feat[18] = np.cos(2 * np.pi * hour / 24)
+
+    # ATR slope
+    if i >= 5:
+        feat[19] = (atr[i] - atr[i - 5]) / atr[i] if atr[i] > 0 else 0
+
+    # Momentum
+    if i >= 10:
+        feat[20] = (c - bars[i - 10]["close"]) / bars[i - 10]["close"] * 100
+    if i >= 20:
+        feat[21] = (c - bars[i - 20]["close"]) / bars[i - 20]["close"] * 100
+
+    # Distance from recent high/low
+    if i >= 20:
+        h20 = max(b["high"] for b in bars[i - 20:i + 1])
+        l20 = min(b["low"] for b in bars[i - 20:i + 1])
+        rng = h20 - l20
+        if rng > 0:
+            feat[22] = (h20 - c) / rng
+            feat[23] = (c - l20) / rng
+
+    # ── MB-specific feature 24 (momentum-breakout signal) ──
+    # Long: price above upper band + positive momentum + RSI not overbought
+    if c > upper_band and roc10[i] > 0 and rsi[i] < 80:
+        feat[24] = 1.0
+    # Short: price below lower band + negative momentum + RSI not oversold
+    elif c < lower_band and roc10[i] < 0 and rsi[i] > 20:
+        feat[24] = -1.0
+
+    # Clean
+    feat = np.nan_to_num(feat, nan=0.0, posinf=0.0, neginf=0.0)
+    return feat
+
+
 # ── RL Signal Filter ─────────────────────────────────────────────────
 
 
 class RLSignalFilter:
     """
-    RL-based signal filter for Larry Williams strategy signals.
+    RL-based signal filter for strategy signals.
 
     Loads an ONNX PPO policy and filters strategy signals using the same
     feature space as the training environment.
+
+    Supports feature spaces:
+      - "lw_25": Larry Williams breakout (prev_range breakout levels)
+      - "mb_25": Momentum-Breakout (ATR envelope + ROC + RSI guard)
 
     Action space: 0=SKIP, 1=TAKE, 2=CLOSE
     Observation: 25 features + 7 context = 32 dims
     """
 
-    def __init__(self, onnx_path: str, stats_path: Optional[str] = None):
+    SUPPORTED_FEATURE_SPACES = {"lw_25", "mb_25"}
+
+    def __init__(self, onnx_path: str, stats_path: Optional[str] = None,
+                 feature_space: str = "lw_25"):
         self.onnx_path = onnx_path
         self.stats_path = stats_path or onnx_path.replace(".onnx", "_stats.npz")
+        self.feature_space = feature_space if feature_space in self.SUPPORTED_FEATURE_SPACES else "lw_25"
         self._session = None
         self._obs_mean = None
         self._obs_var = None
@@ -237,6 +398,8 @@ class RLSignalFilter:
         self._atr = None
         self._wr = None
         self._rsi = None
+        self._ema20 = None   # Only for mb_25
+        self._roc10 = None   # Only for mb_25
 
     def load(self) -> bool:
         """Load ONNX model and normalization stats."""
@@ -278,6 +441,11 @@ class RLSignalFilter:
             self._atr = _compute_atr(bars, 20)
             self._wr = _compute_williams_r(bars, 14)
             self._rsi = _compute_rsi(bars, 14)
+            # MB feature space also needs EMA20 and ROC10
+            if self.feature_space == "mb_25":
+                closes = np.array([b["close"] for b in bars])
+                self._ema20 = _compute_ema(closes, 20)
+                self._roc10 = _compute_roc(closes, 10)
             self._cached_n_bars = n
 
     def evaluate_signal(
@@ -336,11 +504,18 @@ class RLSignalFilter:
             # Update cached indicators
             self._update_indicators(bars)
 
-            # Build features for the last bar
+            # Build features for the last bar (select feature builder by space)
             bar_idx = len(bars) - 1
-            features = _build_features_for_bar(
-                bars, bar_idx, self._atr, self._wr, self._rsi,
-            )
+            if self.feature_space == "mb_25":
+                features = _build_mb_features_for_bar(
+                    bars, bar_idx, self._atr, self._wr, self._rsi,
+                    self._ema20, self._roc10,
+                    atr_breakout_mult=2.0,
+                )
+            else:
+                features = _build_features_for_bar(
+                    bars, bar_idx, self._atr, self._wr, self._rsi,
+                )
 
             # Build context vector (7 dims, same order as training env _get_obs)
             context = np.array([

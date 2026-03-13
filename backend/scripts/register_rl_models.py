@@ -52,6 +52,18 @@ MODELS = [
         "timesteps": 500000,
         "feature_space": "lw_25",
     },
+    {
+        "name": "RL MB BTCUSD PPO",
+        "symbol": "BTCUSD",
+        "timeframe": "M5",
+        "onnx_filename": "rl_mb_btcusd.onnx",
+        "eval_avg_pnl": 335.73,
+        "eval_avg_wr": 51.3,
+        "eval_avg_trades": 225.0,
+        "eval_avg_dd": 17.2,
+        "timesteps": 1000000,
+        "feature_space": "mb_25",
+    },
 ]
 
 
