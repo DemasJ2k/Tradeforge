@@ -6,13 +6,13 @@ class BacktestRequest(BaseModel):
     strategy_id: int
     datasource_id: int
     initial_balance: float = 10000.0
-    spread_points: float = 0.0
-    commission_per_lot: float = 0.0
+    spread_points: float = 0.3            # Realistic default (0.3 pts ~= $30/lot gold)
+    commission_per_lot: float = 7.0       # Realistic default ($7/lot round-trip)
     point_value: float = 1.0
     # V2 engine selection
     engine_version: str = "v1"            # "v1" or "v2"
     # V2-specific options (ignored when engine_version="v1")
-    slippage_pct: float = 0.0             # Random slippage as fraction of price
+    slippage_pct: float = 0.02            # Realistic default (0.02% slippage per fill)
     commission_pct: float = 0.0           # Percentage commission (e.g. 0.001 = 0.1%)
     margin_rate: float = 0.01             # Margin rate for position sizing
     use_fast_core: bool = False           # Use Rust/fallback fast runner
@@ -100,8 +100,8 @@ class WalkForwardRequest(BaseModel):
     train_pct: float = 70.0
     mode: str = "anchored"  # "anchored" or "rolling"
     initial_balance: float = 10000.0
-    spread_points: float = 0.0
-    commission_per_lot: float = 0.0
+    spread_points: float = 0.3            # Realistic default
+    commission_per_lot: float = 7.0       # Realistic default
     point_value: float = 1.0
 
 

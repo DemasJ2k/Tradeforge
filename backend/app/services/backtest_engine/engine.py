@@ -123,6 +123,10 @@ class Engine:
             latency_ms=self.config.latency_ms,
         )
 
+        # Deferred market orders: orders placed in on_bar(bar[i]) fill at bar[i+1].open
+        # This prevents look-ahead bias (strategy sees bar close but fills at same bar open).
+        self._deferred_entries: list[tuple[Order, str, BracketOrder | None]] = []
+
         # Strategy context
         self.ctx = StrategyContext(
             data_feed=self.feed,
@@ -157,19 +161,23 @@ class Engine:
             # Update context
             self.ctx._set_bar(i, bar)
 
-            # 1. Check pending SL/TP/limit orders against intra-bar ticks
+            # 1. Fill deferred market entries from PREVIOUS bar at this bar's open
+            #    (eliminates look-ahead: strategy decided at bar[i-1] close, fills at bar[i] open)
+            self._fill_deferred_entries(sym, bar)
+
+            # 2. Check pending SL/TP/limit orders against intra-bar ticks
             self._process_pending_orders(sym, bar, sd.get_bar(i - 1) if i > 0 else None)
 
-            # 2. Update trailing stops
+            # 3. Update trailing stops
             self._update_trailing_stops(sym, bar)
 
-            # 3. Let strategy place new orders
+            # 4. Let strategy place new orders
             self.strategy.on_bar(bar)
 
-            # 4. Process new orders from strategy
+            # 5. Process new orders from strategy (market entries are deferred)
             self._process_new_orders(sym, bar)
 
-            # 5. Snapshot equity
+            # 6. Snapshot equity
             prices = {sym: bar.close}
             eq = self.portfolio.snapshot(prices)
 
@@ -207,7 +215,11 @@ class Engine:
                 self._execute_fill(fill, bar)
 
     def _process_new_orders(self, symbol: str, bar: Bar) -> None:
-        """Process orders submitted by strategy during on_bar()."""
+        """Process orders submitted by strategy during on_bar().
+
+        Market ENTRY orders are deferred to the next bar's open to prevent
+        look-ahead bias. EXIT orders fill immediately (same bar).
+        """
         orders, brackets = self.ctx._drain_orders()
 
         # Process bracket orders first
@@ -224,18 +236,14 @@ class Engine:
 
             self.order_book.add_bracket(bracket)
 
-            # Fill entry (market order) immediately
+            # Defer market entry to next bar's open (no look-ahead)
             if bracket.entry and bracket.entry.order_type == OrderType.MARKET:
-                fill = self.fill_engine.fill_market_order(
-                    bracket.entry, bar, self.instrument
-                )
-                if fill.filled:
-                    self._execute_fill(fill, bar)
+                self._deferred_entries.append((bracket.entry, symbol, bracket))
 
         # Process standalone orders
         for order in orders:
             if order.role == OrderRole.EXIT:
-                # Exit orders always go through
+                # Exit orders fill immediately (same bar) — no look-ahead concern
                 if order.order_type == OrderType.MARKET:
                     fill = self.fill_engine.fill_market_order(
                         order, bar, self.instrument
@@ -254,13 +262,40 @@ class Engine:
                     self._maybe_close_opposite(symbol, order, bar)
 
                 if order.order_type == OrderType.MARKET:
-                    fill = self.fill_engine.fill_market_order(
-                        order, bar, self.instrument
-                    )
-                    if fill.filled:
-                        self._execute_fill(fill, bar)
+                    # Defer market entry to next bar's open
+                    self._deferred_entries.append((order, symbol, None))
                 else:
                     self.order_book.add_order(order)
+
+    def _fill_deferred_entries(self, symbol: str, bar: Bar) -> None:
+        """Fill market entries deferred from the previous bar at this bar's open.
+
+        This is the key fix for look-ahead bias: strategy evaluates at bar[i-1]
+        close, entry fills at bar[i] open — matching real trading behavior.
+        """
+        if not self._deferred_entries:
+            return
+
+        pending = self._deferred_entries
+        self._deferred_entries = []
+
+        for order, order_symbol, bracket in pending:
+            if order_symbol != symbol:
+                # Different symbol — re-defer (shouldn't happen in single-symbol mode)
+                self._deferred_entries.append((order, order_symbol, bracket))
+                continue
+
+            # Re-check position limits (may have changed since order was placed)
+            if order.role == OrderRole.ENTRY and not self._can_open_position(symbol, order):
+                order.reject("max_positions_reached_at_fill")
+                if bracket:
+                    # Cancel the bracket's exit orders since entry was rejected
+                    self.order_book.on_order_filled(order)  # cleans up siblings
+                continue
+
+            fill = self.fill_engine.fill_market_order(order, bar, self.instrument)
+            if fill.filled:
+                self._execute_fill(fill, bar)
 
     def _execute_fill(self, fill: FillResult, bar: Bar) -> None:
         """Execute a fill: update position, portfolio, notify strategy."""
@@ -288,6 +323,10 @@ class Engine:
                 pos.entry_timestamp = bar.timestamp
 
             pos.add(order.quantity, fill.fill_price, fill.commission)
+
+            # Deduct entry commission from balance (was previously only tracked, not deducted)
+            if fill.commission > 0:
+                self.portfolio.apply_pnl(-fill.commission)
 
             # Record trade open
             sl_price = 0.0

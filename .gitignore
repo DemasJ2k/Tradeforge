@@ -19,6 +19,10 @@ frontend_log.txt
 
 # Project local data artifacts
 backend/data/ml_models/
+# Allow small ONNX deploy files (needed for Render)
+!backend/data/ml_models/*.onnx
+!backend/data/ml_models/*.onnx.data
+!backend/data/ml_models/*.npz
 backend/data/*.db
 backend/*.db
 nul

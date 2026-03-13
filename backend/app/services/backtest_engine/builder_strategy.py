@@ -90,6 +90,9 @@ class BuilderStrategy(StrategyBase):
         tp_type = self._risk.get("take_profit_type", "fixed_pips")
         tp_val = self._risk.get("take_profit_value", 100)
 
+        # Use signal bar close as reference price for SL/TP levels.
+        # Actual fill happens on next bar's open (deferred by engine).
+        # The close→open gap is a natural cost captured by the engine.
         entry_price = bar.close
         atr_val = self._get_atr(self.ctx.bar_index)
 

@@ -327,7 +327,11 @@ class StrategyContext:
         return self._sizing_params.get("fixed_lot", 0.01)
 
     def _compute_size(self, stop_loss: float, direction: str) -> float:
-        """Compute size using position sizer."""
+        """Compute size using position sizer.
+
+        Uses bar close as price estimate. Actual fill is deferred to next
+        bar's open by the engine, but close is the best available estimate.
+        """
         if not self._current_bar:
             return self._default_size()
 
