@@ -150,7 +150,7 @@ export default function TradingPage() {
   );
   const [chartBroker, setChartBroker] = useState<string>(() =>
     (typeof window !== "undefined" ? localStorage.getItem("tf_chart_broker") : null) ?? "mt5"
-  ); // "mt5" | "oanda" | "coinbase" | "tradovate" | "static"
+  ); // "mt5" | "oanda" | "coinbase" | "tradovate" | "ctrader" | "static"
   const chartMode = chartBroker === "static" ? "static" : "live";
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_symbol", chartSymbol); }, [chartSymbol]);
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_timeframe", chartTimeframe); }, [chartTimeframe]);
@@ -999,6 +999,7 @@ export default function TradingPage() {
               onChange={e => setChartBroker(e.target.value)}
               className="ml-2 rounded px-2 py-1 text-xs font-medium bg-input-bg border border-card-border text-foreground/90 focus:outline-none focus:border-blue-500"
             >
+              <option value="ctrader">cTrader</option>
               <option value="oanda">Oanda</option>
               <option value="databento">Databento (CME)</option>
               <option value="mt5">MT5 Live</option>

@@ -870,10 +870,29 @@ class CTraderAdapter(BrokerAdapter):
             logger.warning("cTrader get_initial_bars(%s, %s, %d) failed: %s", symbol, timeframe, count, e)
             return []
 
+    def _broker_symbol_name(self, symbol: str) -> Optional[str]:
+        """Get the broker's actual symbol name for a user-provided symbol.
+
+        The price cache is keyed by the broker's symbol name (e.g. "BTC/USD"),
+        but the user may pass "BTCUSD".  This resolves that mismatch.
+        """
+        # Exact match — user name IS the broker name
+        if symbol in self._price_cache or symbol in self._symbol_name_to_id:
+            return symbol
+        # The symbol was mapped by _resolve_symbol_id — look it up
+        sid = self._symbol_name_to_id.get(symbol)
+        if sid:
+            info = self._symbol_cache.get(sid, {})
+            return info.get("symbolName", symbol)
+        return None
+
     async def get_price(self, symbol: str) -> PriceTick:
+        # Resolve user symbol to broker's actual name for cache lookup
+        broker_name = self._broker_symbol_name(symbol)
+
         # Return from cache if available
-        if symbol in self._price_cache:
-            return self._price_cache[symbol]
+        if broker_name and broker_name in self._price_cache:
+            return self._price_cache[broker_name]
 
         # Subscribe to spots for this symbol to get prices
         try:
@@ -882,10 +901,12 @@ class CTraderAdapter(BrokerAdapter):
                 "ctidTraderAccountId": self._account_id,
                 "symbolId": [symbol_id],
             })
+            # Re-resolve broker name after symbol loading
+            broker_name = self._broker_symbol_name(symbol) or symbol
             # Wait briefly for first tick
             await asyncio.sleep(1.0)
-            if symbol in self._price_cache:
-                return self._price_cache[symbol]
+            if broker_name in self._price_cache:
+                return self._price_cache[broker_name]
         except Exception as e:
             logger.warning("cTrader get_price(%s) subscribe failed: %s", symbol, e)
 
@@ -910,10 +931,13 @@ class CTraderAdapter(BrokerAdapter):
             })
 
         # Yield from price cache as updates arrive
+        # Resolve user symbols to broker names for cache lookup
+        sym_to_broker = {sym: (self._broker_symbol_name(sym) or sym) for sym in symbols}
         last_prices: dict[str, float] = {}
         while self._connected:
             for sym in symbols:
-                tick = self._price_cache.get(sym)
+                bname = sym_to_broker[sym]
+                tick = self._price_cache.get(bname)
                 if tick and last_prices.get(sym) != tick.bid:
                     last_prices[sym] = tick.bid
                     yield tick
