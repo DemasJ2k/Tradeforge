@@ -105,8 +105,10 @@ export default function TradingPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Chart state ──
-  const DEFAULT_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
+  const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
   const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
+  const [brokerSymbols, setBrokerSymbols] = useState<string[]>([]);
+  const [brokerSymbolsLoading, setBrokerSymbolsLoading] = useState(false);
   const [chartSymbol, setChartSymbol] = useState(() =>
     (typeof window !== "undefined" ? localStorage.getItem("tf_chart_symbol") : null) ?? "XAUUSD"
   );
@@ -121,10 +123,12 @@ export default function TradingPage() {
     } catch { return []; }
   });
 
+  const availableSymbols = brokerSymbols.length > 0 ? brokerSymbols : FALLBACK_SYMBOLS;
+
   const applySymbol = (sym: string) => {
     const upper = sym.trim().toUpperCase();
     if (!upper) return;
-    if (!DEFAULT_SYMBOLS.includes(upper) && !customSymbols.includes(upper)) {
+    if (!availableSymbols.includes(upper) && !customSymbols.includes(upper)) {
       setCustomSymbols((prev) => [...prev, upper]);
     }
     setChartSymbol(upper);
@@ -137,9 +141,9 @@ export default function TradingPage() {
     });
   };
 
-  const allSymbols = [...new Set([...DEFAULT_SYMBOLS, ...customSymbols])];
+  const allSymbols = [...new Set([...availableSymbols, ...customSymbols])];
   const filteredSymbols = symbolInput
-    ? allSymbols.filter((s) => s.includes(symbolInput.toUpperCase()))
+    ? allSymbols.filter((s) => s.toUpperCase().includes(symbolInput.toUpperCase()))
     : allSymbols;
   const [chartTimeframe, setChartTimeframe] = useState(() =>
     (typeof window !== "undefined" ? localStorage.getItem("tf_chart_timeframe") : null) ?? "H1"
@@ -151,6 +155,25 @@ export default function TradingPage() {
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_symbol", chartSymbol); }, [chartSymbol]);
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_timeframe", chartTimeframe); }, [chartTimeframe]);
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_broker", chartBroker); }, [chartBroker]);
+
+  // Fetch available symbols from the selected broker
+  useEffect(() => {
+    if (!chartBroker || chartBroker === "static") { setBrokerSymbols([]); return; }
+    setBrokerSymbolsLoading(true);
+    api
+      .get<{ symbol: string; display_name: string; asset_class: string; tradeable: boolean }[]>(
+        `/api/broker/symbols?broker=${encodeURIComponent(chartBroker)}`
+      )
+      .then((symbols) => {
+        const names = (Array.isArray(symbols) ? symbols : [])
+          .filter((s) => s.tradeable !== false)
+          .map((s) => s.symbol);
+        setBrokerSymbols(names);
+      })
+      .catch(() => setBrokerSymbols([]))
+      .finally(() => setBrokerSymbolsLoading(false));
+  }, [chartBroker]);
+
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
@@ -924,8 +947,13 @@ export default function TradingPage() {
                           🕐 {s}
                         </button>
                       ))}
-                      <div className="px-3 py-1 text-xs text-muted-foreground font-medium border-b border-card-border">All Symbols</div>
+                      <div className="px-3 py-1 text-xs text-muted-foreground font-medium border-b border-card-border">
+                        {brokerSymbols.length > 0 ? `Broker Symbols (${brokerSymbols.length})` : "All Symbols"}
+                      </div>
                     </>
+                  )}
+                  {brokerSymbolsLoading && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">Loading broker symbols...</div>
                   )}
                   {filteredSymbols.map((s) => (
                     <button

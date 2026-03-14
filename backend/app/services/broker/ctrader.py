@@ -285,8 +285,30 @@ class CTraderAdapter(BrokerAdapter):
         """Convert cTrader volume to lot size."""
         return volume / 100.0
 
+    @staticmethod
+    def _normalize_symbol(name: str) -> str:
+        """Normalize a symbol name for fuzzy matching.
+
+        Strips common suffixes (.m, .e, .pro, etc.), removes separators
+        (/, -, _) and lowercases so that user input like "BTCUSD" can
+        match broker names like "BTC/USD", "BTCUSD.m", "btcusd.pro".
+        """
+        s = name.strip().lower()
+        # Remove common cTrader broker suffixes
+        for suffix in (".m", ".e", ".pro", ".raw", ".ecn", ".std", ".z", ".b"):
+            if s.endswith(suffix):
+                s = s[: -len(suffix)]
+                break
+        # Strip separators
+        s = s.replace("/", "").replace("-", "").replace("_", "").replace(".", "")
+        return s
+
     async def _resolve_symbol_id(self, symbol: str) -> int:
-        """Resolve symbol name to cTrader symbolId."""
+        """Resolve symbol name to cTrader symbolId.
+
+        First tries exact match, then falls back to normalized fuzzy
+        matching so common user inputs work across different brokers.
+        """
         if symbol in self._symbol_name_to_id:
             return self._symbol_name_to_id[symbol]
 
@@ -294,8 +316,25 @@ class CTraderAdapter(BrokerAdapter):
         if not self._symbol_cache:
             await self._load_symbols()
 
+        # Exact match
         if symbol in self._symbol_name_to_id:
             return self._symbol_name_to_id[symbol]
+
+        # Case-insensitive match
+        symbol_upper = symbol.upper()
+        for name, sid in self._symbol_name_to_id.items():
+            if name.upper() == symbol_upper:
+                # Cache the alias for next time
+                self._symbol_name_to_id[symbol] = sid
+                return sid
+
+        # Fuzzy / normalized match
+        normalized_input = self._normalize_symbol(symbol)
+        for name, sid in self._symbol_name_to_id.items():
+            if self._normalize_symbol(name) == normalized_input:
+                logger.info("cTrader symbol mapped: %s -> %s", symbol, name)
+                self._symbol_name_to_id[symbol] = sid
+                return sid
 
         raise ValueError(f"Symbol {symbol} not found in cTrader")
 
@@ -330,7 +369,9 @@ class CTraderAdapter(BrokerAdapter):
             if sid and sid not in self._symbol_cache:
                 self._symbol_cache[sid] = s
 
-        logger.info("cTrader loaded %d symbols", len(self._symbol_cache))
+        symbol_names = sorted(self._symbol_name_to_id.keys())
+        logger.info("cTrader loaded %d symbols: %s", len(self._symbol_cache),
+                     ", ".join(symbol_names[:30]) + ("..." if len(symbol_names) > 30 else ""))
 
     # ── Connection ─────────────────────────────────────
 

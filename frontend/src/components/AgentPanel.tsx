@@ -94,23 +94,45 @@ export default function AgentPanel() {
   const [creating, setCreating] = useState(false);
 
   // Symbol combobox state for create form
-  const AGENT_DEFAULT_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
+  const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
+  const [brokerSymbols, setBrokerSymbols] = useState<string[]>([]);
+  const [brokerSymbolsLoading, setBrokerSymbolsLoading] = useState(false);
   const [cSymbolInput, setCSymbolInput] = useState("XAUUSD");
   const [cSymbolOpen, setCSymbolOpen] = useState(false);
   const [cCustomSymbols, setCCustomSymbols] = useState<string[]>([]);
 
+  // Fetch available symbols when broker selection changes
+  useEffect(() => {
+    if (!cBroker) return;
+    setBrokerSymbolsLoading(true);
+    api
+      .get<{ symbol: string; display_name: string; asset_class: string; tradeable: boolean }[]>(
+        `/api/broker/symbols?broker=${encodeURIComponent(cBroker)}`
+      )
+      .then((symbols) => {
+        const names = (Array.isArray(symbols) ? symbols : [])
+          .filter((s) => s.tradeable !== false)
+          .map((s) => s.symbol);
+        setBrokerSymbols(names);
+      })
+      .catch(() => setBrokerSymbols([]))
+      .finally(() => setBrokerSymbolsLoading(false));
+  }, [cBroker]);
+
+  const availableSymbols = brokerSymbols.length > 0 ? brokerSymbols : FALLBACK_SYMBOLS;
+
   const applyAgentSymbol = (sym: string) => {
     const upper = sym.trim().toUpperCase();
     if (!upper) return;
-    if (!AGENT_DEFAULT_SYMBOLS.includes(upper) && !cCustomSymbols.includes(upper)) {
+    if (!availableSymbols.includes(upper) && !cCustomSymbols.includes(upper)) {
       setCCustomSymbols(prev => [...prev, upper]);
     }
     setCSymbol(upper);
     setCSymbolInput(upper);
     setCSymbolOpen(false);
   };
-  const filteredAgentSymbols = [...AGENT_DEFAULT_SYMBOLS, ...cCustomSymbols].filter(s =>
-    cSymbolInput === "" || s.includes(cSymbolInput.toUpperCase())
+  const filteredAgentSymbols = [...availableSymbols, ...cCustomSymbols].filter(s =>
+    cSymbolInput === "" || s.toUpperCase().includes(cSymbolInput.toUpperCase())
   );
 
   // Risk config form state
@@ -607,7 +629,10 @@ export default function AgentPanel() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-muted-foreground mb-1">Symbol</Label>
+                <Label className="text-xs text-muted-foreground mb-1">
+                  Symbol {brokerSymbolsLoading && <span className="text-muted-foreground/50 ml-1">(loading...)</span>}
+                  {brokerSymbols.length > 0 && <span className="text-green-400/70 ml-1">({brokerSymbols.length} from broker)</span>}
+                </Label>
                 <div className="relative">
                   <input
                     value={cSymbolInput}
@@ -616,7 +641,7 @@ export default function AgentPanel() {
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyAgentSymbol(cSymbolInput); } if (e.key === "Escape") setCSymbolOpen(false); }}
                     onBlur={() => setTimeout(() => setCSymbolOpen(false), 150)}
                     className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
-                    placeholder="Symbol (e.g. XAUUSD)"
+                    placeholder={brokerSymbols.length > 0 ? "Search broker symbols..." : "Symbol (e.g. XAUUSD)"}
                   />
                   {cSymbolOpen && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg border border-card-border bg-card-bg shadow-lg max-h-40 overflow-y-auto">
@@ -626,7 +651,7 @@ export default function AgentPanel() {
                           {s}
                         </button>
                       ))}
-                      {cSymbolInput && !filteredAgentSymbols.includes(cSymbolInput) && (
+                      {cSymbolInput && !filteredAgentSymbols.includes(cSymbolInput.toUpperCase()) && (
                         <button onMouseDown={() => applyAgentSymbol(cSymbolInput)}
                           className="w-full text-left px-3 py-1.5 text-sm text-accent hover:bg-card-border transition-colors">
                           + Use &quot;{cSymbolInput}&quot;
