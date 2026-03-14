@@ -103,7 +103,7 @@ class CTraderAdapter(BrokerAdapter):
 
     _DEMO_HOST = "demo.ctraderapi.com"
     _LIVE_HOST = "live.ctraderapi.com"
-    _PORT = 5035
+    _PORT = 5036  # JSON mode (5035 = protobuf only)
 
     def __init__(
         self,
@@ -363,7 +363,7 @@ class CTraderAdapter(BrokerAdapter):
 
         try:
             ssl_ctx = ssl.create_default_context()
-            self._ws = await websockets.connect(url, ssl=ssl_ctx)
+            self._ws = await websockets.connect(url, ssl=ssl_ctx, ping_interval=None)
 
             # Start receive loop
             self._recv_task = asyncio.create_task(self._recv_loop())

@@ -612,7 +612,9 @@ export default function SettingsPage() {
 
   // cTrader OAuth state
   const [ctraderAccounts, setCtraderAccounts] = useState<{ account_id: string; is_live: boolean; broker_title: string }[]>([]);
-  const [ctraderStep, setCtraderStep] = useState<'idle' | 'picking'>('idle');
+  const [ctraderStep, setCtraderStep] = useState<'idle' | 'picking' | 'manual'>('idle');
+  const [ctraderManualId, setCtraderManualId] = useState('');
+  const [ctraderManualLive, setCtraderManualLive] = useState(false);
 
   // Notification channel state
   const [notifTesting, setNotifTesting] = useState<string | null>(null); // 'email' | 'telegram' | null
@@ -771,7 +773,9 @@ export default function SettingsPage() {
       setCtraderStep('picking');
       setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
     } catch (e: unknown) {
-      setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'Failed to fetch accounts' }));
+      // Fall back to manual entry if account fetch fails
+      setCtraderStep('manual');
+      setBrokerMsg(p => ({ ...p, ctrader: 'Auto-discovery failed — enter your account ID manually' }));
     } finally {
       setBrokerBusy(p => ({ ...p, ctrader: false }));
     }
@@ -825,12 +829,19 @@ export default function SettingsPage() {
           });
           if (acctR.ok) {
             const acctD = await acctR.json();
-            setCtraderAccounts(acctD.accounts || []);
-            setCtraderStep('picking');
-            setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
+            const accounts = acctD.accounts || [];
+            if (accounts.length > 0) {
+              setCtraderAccounts(accounts);
+              setCtraderStep('picking');
+              setBrokerMsg(p => ({ ...p, ctrader: 'Select a trading account below' }));
+            } else {
+              setCtraderStep('manual');
+              setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Enter your account ID below.' }));
+            }
           } else {
-            const errD = await acctR.json().catch(() => ({}));
-            setBrokerMsg(p => ({ ...p, ctrader: errD.detail || 'OAuth complete! Click Connect to link your account.' }));
+            // Account fetch failed — fall back to manual entry
+            setCtraderStep('manual');
+            setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Enter your account ID manually below.' }));
           }
         } catch (e: unknown) {
           setBrokerMsg(p => ({ ...p, ctrader: e instanceof Error ? e.message : 'OAuth failed' }));
@@ -2053,6 +2064,40 @@ export default function SettingsPage() {
                                   </span>
                                 </button>
                               ))}
+                              <button onClick={() => setCtraderStep('manual')} className="text-xs text-blue-400 hover:text-blue-300 underline mt-1">
+                                Enter account ID manually instead
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Manual account ID entry */}
+                          {ctraderStep === 'manual' && (
+                            <div className="space-y-2 p-3 rounded-lg border border-card-border bg-card-bg">
+                              <p className="text-xs font-medium text-foreground">Enter your cTrader Account ID:</p>
+                              <p className="text-[10px] text-muted-foreground/60">Find this in cTrader Desktop/Web under Settings → Account</p>
+                              <input
+                                type="text"
+                                value={ctraderManualId}
+                                onChange={e => setCtraderManualId(e.target.value)}
+                                placeholder="e.g. 12345678"
+                                className="w-full bg-input-bg border border-card-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground/40 focus:outline-none focus:border-blue-500"
+                              />
+                              <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                                  <input type="checkbox" checked={ctraderManualLive} onChange={e => setCtraderManualLive(e.target.checked)} className="rounded" />
+                                  Live account
+                                </label>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => { if (ctraderManualId.trim()) { saveCtraderAccount(ctraderManualId.trim(), ctraderManualLive); setCtraderManualId(''); } }}
+                                  disabled={busy || !ctraderManualId.trim()}
+                                  className={btnPrimary}
+                                >
+                                  {busy ? 'Saving...' : 'Save Account'}
+                                </button>
+                                <button onClick={() => setCtraderStep('idle')} className={btnSecondary}>Cancel</button>
+                              </div>
                             </div>
                           )}
 
@@ -2063,6 +2108,11 @@ export default function SettingsPage() {
                                 {cred.fields_set.includes('access_token') && ' • OAuth: ✓'}
                                 {cred.fields_set.includes('practice') && ` • ${cred.fields_set.includes('practice') ? 'Demo/Live' : ''}`}
                               </p>
+                              {!cred.fields_set.includes('account_id') && ctraderStep === 'idle' && (
+                                <button onClick={() => setCtraderStep('manual')} className="text-xs text-blue-400 hover:text-blue-300 underline">
+                                  Enter account ID manually
+                                </button>
+                              )}
                             </div>
                           )}
 

@@ -28,10 +28,10 @@ router = APIRouter(prefix="/api/broker/ctrader", tags=["cTrader OAuth"])
 _AUTH_URL = "https://openapi.ctrader.com/apps/auth"
 _TOKEN_URL = "https://openapi.ctrader.com/apps/token"
 
-# WebSocket hosts for Open API
+# WebSocket hosts for Open API (port 5036 = JSON mode, 5035 = protobuf only)
 _DEMO_WS_HOST = "demo.ctraderapi.com"
 _LIVE_WS_HOST = "live.ctraderapi.com"
-_WS_PORT = 5035
+_WS_PORT = 5036
 
 
 def _get_client_id() -> str:
@@ -248,7 +248,7 @@ async def _fetch_accounts_via_ws(access_token: str, client_id: str, client_secre
     url = f"wss://{_DEMO_WS_HOST}:{_WS_PORT}"
     ssl_ctx = ssl.create_default_context()
 
-    async with websockets.connect(url, ssl=ssl_ctx) as ws:
+    async with websockets.connect(url, ssl=ssl_ctx, ping_interval=None) as ws:
         # 1. Application auth
         await ws.send(json.dumps({
             "clientMsgId": "auth_1",
