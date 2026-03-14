@@ -208,7 +208,7 @@ class BrokerPriceStreamer:
     def _pick_broker(broker_manager) -> Optional[str]:
         """Pick the best available non-MT5 broker."""
         # Prefer non-MT5 brokers in priority order
-        preferred = ["oanda", "coinbase", "tradovate"]
+        preferred = ["ctrader", "oanda", "coinbase", "tradovate"]
         for name in preferred:
             if broker_manager.get_adapter(name):
                 return name
