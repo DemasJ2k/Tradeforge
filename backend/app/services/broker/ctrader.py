@@ -395,15 +395,20 @@ class CTraderAdapter(BrokerAdapter):
 
     async def _load_symbols(self):
         """Load symbol list from cTrader and populate caches."""
+        logger.info("cTrader _load_symbols: requesting symbol list for account %d", self._account_id)
         resp = await self._send(PROTO_OA_SYMBOLS_LIST_REQ, {
             "ctidTraderAccountId": self._account_id,
         })
+        logger.info("cTrader _load_symbols: response payloadType=%s, payload keys=%s",
+                     resp.get("payloadType"), list(resp.get("payload", {}).keys()))
         symbols = resp.get("payload", {}).get("symbol", [])
+        logger.info("cTrader _load_symbols: got %d light symbols", len(symbols))
 
         # Get detailed info for all symbols
         symbol_ids = [s.get("symbolId") for s in symbols if s.get("symbolId")]
 
         if symbol_ids:
+            logger.info("cTrader _load_symbols: fetching details for %d symbols in batches of 50", len(symbol_ids))
             # Request details in batches of 50
             for i in range(0, len(symbol_ids), 50):
                 batch = symbol_ids[i:i + 50]
@@ -411,12 +416,16 @@ class CTraderAdapter(BrokerAdapter):
                     "ctidTraderAccountId": self._account_id,
                     "symbolId": batch,
                 })
-                for sym in detail_resp.get("payload", {}).get("symbol", []):
+                detail_symbols = detail_resp.get("payload", {}).get("symbol", [])
+                logger.info("cTrader _load_symbols: batch %d got %d detailed symbols", i // 50, len(detail_symbols))
+                for sym in detail_symbols:
                     sid = sym.get("symbolId", 0)
                     name = sym.get("symbolName", "")
                     self._symbol_cache[sid] = sym
                     if name:
                         self._symbol_name_to_id[name] = sid
+        else:
+            logger.warning("cTrader _load_symbols: no symbol IDs found in response")
 
         # Also map light symbol data
         for s in symbols:
@@ -819,6 +828,7 @@ class CTraderAdapter(BrokerAdapter):
     # ── Market Data ────────────────────────────────────
 
     async def get_symbols(self) -> list[SymbolInfo]:
+        logger.info("cTrader get_symbols called, cache size=%d", len(self._symbol_cache))
         if not self._symbol_cache:
             await self._load_symbols()
 

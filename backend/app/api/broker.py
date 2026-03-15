@@ -429,7 +429,8 @@ async def get_symbols(
             symbols = await adapter.get_symbols() if ok else []
         except Exception:
             symbols = []
-    except Exception:
+    except Exception as e:
+        logger.warning("get_symbols failed for broker=%s: %s", broker, e)
         symbols = []
 
     if search:
@@ -503,7 +504,7 @@ async def get_candles(
             logger.warning("get_candles retry failed for %s/%s: %s", symbol, timeframe, e2)
             return []
     except Exception as e:
-        logger.warning("get_candles failed for %s/%s: %s", symbol, timeframe, e)
+        logger.warning("get_candles failed for %s/%s (broker=%s): %s", symbol, timeframe, broker, e, exc_info=True)
         return []
 
     # Return time as Unix float to match CandleInput format expected by the chart
