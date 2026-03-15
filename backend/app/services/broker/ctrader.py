@@ -151,7 +151,8 @@ class CTraderAdapter(BrokerAdapter):
 
     async def _send(self, payload_type: int, payload: dict, msg_id: str | None = None) -> dict:
         """Send a JSON message and wait for the response."""
-        if not self._ws:
+        if not self._ws or (hasattr(self._ws, 'closed') and self._ws.closed):
+            self._connected = False
             raise ConnectionError("Not connected to cTrader")
 
         msg_id = msg_id or self._next_msg_id()
@@ -529,7 +530,16 @@ class CTraderAdapter(BrokerAdapter):
         logger.info("cTrader disconnected")
 
     async def is_connected(self) -> bool:
-        return self._connected and self._ws is not None
+        if not self._connected or not self._ws:
+            return False
+        # Check if WebSocket is actually open
+        try:
+            if hasattr(self._ws, 'closed') and self._ws.closed:
+                self._connected = False
+                return False
+        except Exception:
+            pass
+        return True
 
     # ── Account ────────────────────────────────────────
 

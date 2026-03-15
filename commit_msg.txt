@@ -1,13 +1,7 @@
-Add cTrader data integration + fix 60+ audit issues
+Fix cTrader WS connection stability: reconnect on stale connections
 
-- cTrader: fuzzy symbol resolution with aliases (XAUUSD->XAU/USD, US30->DJ30, etc.)
-- cTrader: add to Trading page chart dropdown and Data page Fetch from Broker
-- cTrader: add fetch-broker handler in datasource.py for historical data download
-- cTrader: validate account_id on init, log execution events
-- Backend: wrap all startup services in try/except for resilience
-- Backend: replace silent except-pass with logger.warning in agent.py
-- Frontend: fix OAuth token exposure (remove access_token from query string)
-- Frontend: add 404 not-found page
-- render.yaml: add PLATFORM_LLM_API_KEY environment variable
+- ctrader.py: check ws.closed in is_connected() and _send()
+- broker.py: auto-reconnect on ConnectionError in candles/symbols endpoints
+- Merged fuzzy symbol resolution: normalize (strip suffixes) + aliases + slash variants
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

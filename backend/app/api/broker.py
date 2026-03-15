@@ -420,7 +420,17 @@ async def get_symbols(
 ):
     """Get tradeable instruments from broker."""
     adapter = _get_adapter(broker)
-    symbols = await adapter.get_symbols()
+    try:
+        symbols = await adapter.get_symbols()
+    except (ConnectionError, TimeoutError):
+        # Connection dropped — try reconnecting
+        try:
+            ok = await adapter.connect()
+            symbols = await adapter.get_symbols() if ok else []
+        except Exception:
+            symbols = []
+    except Exception:
+        symbols = []
 
     if search:
         search_lower = search.lower()
@@ -479,6 +489,19 @@ async def get_candles(
     adapter = _get_adapter(broker)
     try:
         candles = await adapter.get_candles(symbol, timeframe, count)
+    except (ConnectionError, TimeoutError) as e:
+        # Connection dropped — try reconnecting once
+        logger.info("get_candles connection lost for %s, attempting reconnect...", broker)
+        try:
+            ok = await adapter.connect()
+            if ok:
+                candles = await adapter.get_candles(symbol, timeframe, count)
+            else:
+                logger.warning("get_candles reconnect failed for %s", broker)
+                return []
+        except Exception as e2:
+            logger.warning("get_candles retry failed for %s/%s: %s", symbol, timeframe, e2)
+            return []
     except Exception as e:
         logger.warning("get_candles failed for %s/%s: %s", symbol, timeframe, e)
         return []
