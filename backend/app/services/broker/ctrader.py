@@ -918,6 +918,15 @@ class CTraderAdapter(BrokerAdapter):
         resp = await self._send(PROTO_OA_GET_TRENDBARS_REQ, payload)
         bars = resp.get("payload", {}).get("trendbar", [])
 
+        if bars:
+            b0 = bars[0]
+            logger.info(
+                "cTrader trendbar[0] for %s (id=%d, digits=%d): low=%s deltaOpen=%s deltaHigh=%s deltaClose=%s => open=%s",
+                symbol, symbol_id, digits,
+                b0.get("low"), b0.get("deltaOpen"), b0.get("deltaHigh"), b0.get("deltaClose"),
+                self._convert_price(b0.get("low", 0) + b0.get("deltaOpen", 0), digits),
+            )
+
         candles: list[Candle] = []
         for bar in bars:
             ts_ms = bar.get("utcTimestampInMinutes", 0) * 60 * 1000
