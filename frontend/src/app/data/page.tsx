@@ -19,6 +19,7 @@ const BROKERS = [
   { id: "oanda", label: "Oanda" },
   { id: "coinbase", label: "Coinbase" },
   { id: "tradovate", label: "Tradovate" },
+  { id: "ctrader", label: "cTrader" },
 ];
 
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];

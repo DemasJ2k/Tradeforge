@@ -546,6 +546,34 @@ async def fetch_from_broker(
                     sec=entry.get("sec", ""),
                     demo=entry.get("practice", True),
                 )
+            elif req.broker == "ctrader":
+                import os
+                from app.services.broker.ctrader import CTraderAdapter
+                client_id = os.getenv("CTRADER_CLIENT_ID", "")
+                client_secret = os.getenv("CTRADER_CLIENT_SECRET", "")
+                access_token = entry.get("access_token", "")
+                account_id = entry.get("account_id", "")
+                if not access_token or not account_id:
+                    missing = []
+                    if not access_token:
+                        missing.append("OAuth token (re-authorize)")
+                    if not account_id:
+                        missing.append("Account ID")
+                    raise HTTPException(
+                        400,
+                        f"cTrader credentials incomplete — missing: {', '.join(missing)}. "
+                        "Go to Settings → Brokers → cTrader to complete setup."
+                    )
+                if not client_id or not client_secret:
+                    raise HTTPException(400, "cTrader OAuth not configured on the server")
+                server = "live" if not entry.get("practice", True) else "demo"
+                adapter = CTraderAdapter(
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    access_token=access_token,
+                    account_id=account_id,
+                    server=server,
+                )
             else:
                 raise HTTPException(400, f"Unsupported broker for data fetch: {req.broker}")
 

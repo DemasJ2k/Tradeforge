@@ -4,11 +4,14 @@ Algo Trading Agent API endpoints.
 CRUD for agents, start/stop/pause controls, trade confirmation, logs.
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 from app.models.user import User
 from app.models.agent import TradingAgent, AgentLog, AgentTrade
 from app.schemas.agent import (
@@ -350,8 +353,8 @@ async def start_agent(
             "symbol": agent.symbol,
             "strategy_id": agent.strategy_id,
         })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Webhook fire failed (agent_started): %s", e)
 
     return _agent_to_response(agent)
 
@@ -379,8 +382,8 @@ async def stop_agent(
             "name": agent.name,
             "symbol": agent.symbol,
         })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Webhook fire failed (agent_stopped): %s", e)
 
     return _agent_to_response(agent)
 
@@ -519,8 +522,8 @@ async def confirm_trade(
             if order.filled_time:
                 trade.filled_time = order.filled_time
             executed = True
-    except Exception:
-        pass  # Fall through — mark as confirmed even if execution fails
+    except Exception as e:
+        logger.warning("Broker execution failed for trade %d: %s", trade_id, e)
 
     trade.status = "executed" if executed else "confirmed"
     db.commit()

@@ -823,8 +823,8 @@ export default function SettingsPage() {
           setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Fetching accounts...' }));
           await loadBrokerCreds();
 
-          // Fetch trading accounts using the access token from the callback
-          const acctR = await fetch(`${API}/api/broker/ctrader/accounts?access_token=${encodeURIComponent(d.access_token)}`, {
+          // Fetch trading accounts (backend uses stored token from the callback exchange)
+          const acctR = await fetch(`${API}/api/broker/ctrader/accounts`, {
             headers: authHeaders(),
           });
           if (acctR.ok) {

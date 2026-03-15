@@ -47,6 +47,9 @@ services:
         sync: false
       - key: CTRADER_CLIENT_SECRET
         sync: false
+      # Platform LLM (AI chat features)
+      - key: PLATFORM_LLM_API_KEY
+        sync: false
       # MT5 Remote Bridge
       - key: MT5_BRIDGE_URL
         sync: false

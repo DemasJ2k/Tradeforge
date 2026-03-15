@@ -116,7 +116,9 @@ class CTraderAdapter(BrokerAdapter):
         self._client_id = client_id
         self._client_secret = client_secret
         self._access_token = access_token
-        self._account_id = int(account_id) if account_id else 0
+        if not account_id:
+            raise ValueError("cTrader account_id is required")
+        self._account_id = int(account_id)
         self._server = server.lower()
         self._host = self._DEMO_HOST if self._server == "demo" else self._LIVE_HOST
 
@@ -210,8 +212,7 @@ class CTraderAdapter(BrokerAdapter):
 
                 # Handle execution events (order fills, etc.)
                 if payload_type == PROTO_OA_EXECUTION_EVENT:
-                    # Could dispatch to callbacks in the future
-                    pass
+                    logger.debug("cTrader execution event: %s", msg.get("payload", {}).get("executionType", "?"))
 
                 # Resolve pending request
                 if msg_id and msg_id in self._pending_requests:
@@ -285,6 +286,25 @@ class CTraderAdapter(BrokerAdapter):
         """Convert cTrader volume to lot size."""
         return volume / 100.0
 
+    # Common symbol aliases for broker-specific naming conventions
+    _SYMBOL_ALIASES: dict[str, list[str]] = {
+        "US30": ["DJ30", "WS30", "DJI", "USTEC30", "US Wall Street 30"],
+        "NAS100": ["USTEC", "NQ100", "NDX100", "US Tech 100"],
+        "XAUUSD": ["XAU/USD", "GOLD", "Gold"],
+        "XAGUSD": ["XAG/USD", "SILVER", "Silver"],
+        "BTCUSD": ["BTC/USD", "BITCOIN", "Bitcoin"],
+        "ETHUSD": ["ETH/USD", "ETHEREUM", "Ethereum"],
+        "EURUSD": ["EUR/USD"],
+        "GBPUSD": ["GBP/USD"],
+        "USDJPY": ["USD/JPY"],
+        "AUDUSD": ["AUD/USD"],
+        "USDCAD": ["USD/CAD"],
+        "USDCHF": ["USD/CHF"],
+        "NZDUSD": ["NZD/USD"],
+        "EURJPY": ["EUR/JPY"],
+        "GBPJPY": ["GBP/JPY"],
+    }
+
     @staticmethod
     def _normalize_symbol(name: str) -> str:
         """Normalize a symbol name for fuzzy matching.
@@ -304,31 +324,29 @@ class CTraderAdapter(BrokerAdapter):
         return s
 
     async def _resolve_symbol_id(self, symbol: str) -> int:
-        """Resolve symbol name to cTrader symbolId.
+        """Resolve symbol name to cTrader symbolId with fuzzy matching.
 
-        First tries exact match, then falls back to normalized fuzzy
-        matching so common user inputs work across different brokers.
+        Tries in order: exact match, case-insensitive, normalized (strip
+        suffixes/separators), slash variants, aliases, and substring match.
         """
-        if symbol in self._symbol_name_to_id:
-            return self._symbol_name_to_id[symbol]
-
-        # Try loading symbols if cache is empty
+        # Ensure symbols are loaded
         if not self._symbol_cache:
             await self._load_symbols()
 
-        # Exact match
+        # 1. Exact match
         if symbol in self._symbol_name_to_id:
             return self._symbol_name_to_id[symbol]
 
-        # Case-insensitive match
-        symbol_upper = symbol.upper()
-        for name, sid in self._symbol_name_to_id.items():
-            if name.upper() == symbol_upper:
-                # Cache the alias for next time
-                self._symbol_name_to_id[symbol] = sid
-                return sid
+        # Build uppercase lookup for case-insensitive matching
+        upper_map = {k.upper(): k for k in self._symbol_name_to_id}
+        sym_upper = symbol.upper()
 
-        # Fuzzy / normalized match
+        # 2. Case-insensitive match
+        if sym_upper in upper_map:
+            self._symbol_name_to_id[symbol] = self._symbol_name_to_id[upper_map[sym_upper]]
+            return self._symbol_name_to_id[symbol]
+
+        # 3. Normalized match (strips broker suffixes like .m, .pro, .ecn)
         normalized_input = self._normalize_symbol(symbol)
         for name, sid in self._symbol_name_to_id.items():
             if self._normalize_symbol(name) == normalized_input:
@@ -336,7 +354,43 @@ class CTraderAdapter(BrokerAdapter):
                 self._symbol_name_to_id[symbol] = sid
                 return sid
 
-        raise ValueError(f"Symbol {symbol} not found in cTrader")
+        # 4. Strip slashes: "XAU/USD" -> "XAUUSD"
+        stripped = sym_upper.replace("/", "").replace(" ", "")
+        if stripped in upper_map:
+            return self._symbol_name_to_id[upper_map[stripped]]
+
+        # 5. Insert slash for common forex/metals/crypto patterns
+        for split_pos in (3, 4):
+            if len(sym_upper) >= split_pos + 3:
+                slashed = f"{sym_upper[:split_pos]}/{sym_upper[split_pos:]}"
+                if slashed in upper_map:
+                    return self._symbol_name_to_id[upper_map[slashed]]
+
+        # 6. Check known aliases
+        for canonical, aliases in self._SYMBOL_ALIASES.items():
+            if sym_upper == canonical.upper() or sym_upper in [a.upper() for a in aliases]:
+                for candidate in [canonical] + aliases:
+                    cand_upper = candidate.upper()
+                    if cand_upper in upper_map:
+                        return self._symbol_name_to_id[upper_map[cand_upper]]
+
+        # 7. Substring match (find symbols containing the query)
+        matches = [k for k in self._symbol_name_to_id
+                   if sym_upper in k.upper() or k.upper() in sym_upper]
+        if len(matches) == 1:
+            logger.info("cTrader fuzzy match: '%s' -> '%s'", symbol, matches[0])
+            return self._symbol_name_to_id[matches[0]]
+
+        # Log available symbols for debugging
+        available = sorted(self._symbol_name_to_id.keys())[:50]
+        logger.warning(
+            "Symbol '%s' not found in cTrader. Available symbols (first 50): %s",
+            symbol, ", ".join(available)
+        )
+        raise ValueError(
+            f"Symbol {symbol} not found in cTrader. "
+            f"Try one of: {', '.join(available[:20])}"
+        )
 
     async def _load_symbols(self):
         """Load symbol list from cTrader and populate caches."""

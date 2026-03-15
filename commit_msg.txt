@@ -1,28 +1,13 @@
-Fix V3 backtest engine: eliminate look-ahead bias + realistic costs
+Add cTrader data integration + fix 60+ audit issues
 
-Major backtest accuracy improvements:
-
-1. DEFERRED MARKET ENTRIES (eliminates look-ahead bias):
-   - Strategy evaluates at bar[i] close, but entry now fills at bar[i+1] open
-   - Previously filled at bar[i] open (strategy could see close then time-travel
-     back to fill at open — impossible in live trading)
-   - Exit orders still fill immediately (no look-ahead concern for exits)
-   - New _fill_deferred_entries() processes pending entries each bar
-
-2. ENTRY COMMISSION NOW DEDUCTED:
-   - Entry-side commission was tracked but never deducted from portfolio balance
-   - Only exit commission was applied to PnL — underreporting costs by ~50%
-   - Now deducts entry commission via portfolio.apply_pnl(-commission)
-
-3. REALISTIC DEFAULT COSTS:
-   - spread_points: 0.0 → 0.3 (≈$30/lot gold round-trip)
-   - commission_per_lot: 0.0 → 7.0 ($7/lot round-trip)
-   - slippage_pct: 0.0 → 0.02 (0.02% per fill)
-   - Applied to both BacktestRequest and WalkForwardRequest schemas
-
-4. ONNX MODEL FILES ADDED TO REPO:
-   - .gitignore updated to allow *.onnx, *.onnx.data, *.npz files
-   - rl_lw_us30, rl_lw_xauusd, rl_mb_btcusd models included (~300KB total)
-   - Enables RL inference on Render without external file storage
+- cTrader: fuzzy symbol resolution with aliases (XAUUSD->XAU/USD, US30->DJ30, etc.)
+- cTrader: add to Trading page chart dropdown and Data page Fetch from Broker
+- cTrader: add fetch-broker handler in datasource.py for historical data download
+- cTrader: validate account_id on init, log execution events
+- Backend: wrap all startup services in try/except for resilience
+- Backend: replace silent except-pass with logger.warning in agent.py
+- Frontend: fix OAuth token exposure (remove access_token from query string)
+- Frontend: add 404 not-found page
+- render.yaml: add PLATFORM_LLM_API_KEY environment variable
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

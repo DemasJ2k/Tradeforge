@@ -1438,7 +1438,10 @@ async def startup_event():
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     _recalculate_agent_pnl()
     await ws_manager.start()
-    await tick_aggregator.start()
+    try:
+        await tick_aggregator.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("TickAggregator start skipped: %s", e)
     try:
         await mt5_streamer.start()
     except Exception as e:
@@ -1458,14 +1461,26 @@ async def startup_event():
         from app.services.market.provider import market_data, DabentoProvider
         market_data.register("databento", DabentoProvider(api_key=settings.DATABENTO_API_KEY))
         logging.getLogger(__name__).info("Databento registered as market data provider")
-    await algo_engine.start()
+    try:
+        await algo_engine.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("AlgoEngine start skipped: %s", e)
     # Start paper trade monitor (simulates SL/TP exits for paper agent trades)
     trade_monitor.subscribe_to_ticks(ws_manager)
-    await trade_monitor.start()
+    try:
+        await trade_monitor.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("TradeMonitor start skipped: %s", e)
     # Start broker reconciler (syncs executed trades with broker state)
-    await broker_reconciler.start()
+    try:
+        await broker_reconciler.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("BrokerReconciler start skipped: %s", e)
     # Start watchlist alert checker (evaluates price alerts periodically)
-    await alert_checker.start()
+    try:
+        await alert_checker.start()
+    except Exception as e:
+        logging.getLogger(__name__).warning("AlertChecker start skipped: %s", e)
     # Register Telegram bot webhook (so /start commands auto-link users)
     if settings.TELEGRAM_BOT_TOKEN:
         from app.api.telegram_webhook import setup_telegram_webhook

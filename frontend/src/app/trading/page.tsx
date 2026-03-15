@@ -1005,6 +1005,7 @@ export default function TradingPage() {
               <option value="mt5">MT5 Live</option>
               <option value="coinbase">Coinbase</option>
               <option value="tradovate">Tradovate</option>
+              <option value="ctrader">cTrader</option>
               <option value="static">Chart Data</option>
             </select>
           </div>
