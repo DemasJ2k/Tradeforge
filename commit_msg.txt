@@ -1,7 +1,3 @@
-Fix cTrader WS connection stability: reconnect on stale connections
-
-- ctrader.py: check ws.closed in is_connected() and _send()
-- broker.py: auto-reconnect on ConnectionError in candles/symbols endpoints
-- Merged fuzzy symbol resolution: normalize (strip suffixes) + aliases + slash variants
+Fix duplicate cTrader option in Trading page chart dropdown
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
