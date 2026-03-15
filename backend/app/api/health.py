@@ -4,7 +4,7 @@ from app.core.config import settings
 
 router = APIRouter(tags=["health"])
 
-_DEPLOY_TAG = "2026-03-15-fix-symbol-names"
+_DEPLOY_TAG = "2026-03-15-fix-price-100k"
 
 
 @router.get("/api/health")
