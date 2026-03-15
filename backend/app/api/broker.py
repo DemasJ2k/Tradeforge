@@ -159,7 +159,11 @@ async def broker_status(user: User = Depends(get_current_user)):
 
 
 @router.get("/debug/{broker_name}")
-async def broker_debug(broker_name: str, user: User = Depends(get_current_user)):
+async def broker_debug(
+    broker_name: str,
+    symbol: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+):
     """Debug endpoint: internal state of a broker adapter."""
     adapter = _get_adapter(broker_name)
     info: dict = {"broker": broker_name, "connected": False}
@@ -174,6 +178,21 @@ async def broker_debug(broker_name: str, user: User = Depends(get_current_user))
         info["symbol_cache_size"] = len(adapter._symbol_cache)
         info["symbol_name_to_id_size"] = len(adapter._symbol_name_to_id)
         info["symbol_names_sample"] = sorted(adapter._symbol_name_to_id.keys())[:20]
+        # Lookup a specific symbol
+        if symbol and hasattr(adapter, "_resolve_symbol_id"):
+            try:
+                sid = await adapter._resolve_symbol_id(symbol)
+                sym_data = adapter._symbol_cache.get(sid, {})
+                info["symbol_lookup"] = {
+                    "query": symbol,
+                    "resolved_id": sid,
+                    "digits": sym_data.get("digits", "NOT_FOUND"),
+                    "pipPosition": sym_data.get("pipPosition", "NOT_FOUND"),
+                    "symbolName": sym_data.get("symbolName", "NOT_FOUND"),
+                    "keys": list(sym_data.keys())[:15],
+                }
+            except Exception as e:
+                info["symbol_lookup"] = {"query": symbol, "error": str(e)}
         # Sample a few cache entries to see their structure
         cache_sample = []
         for sid, sym_data in list(adapter._symbol_cache.items())[:3]:
