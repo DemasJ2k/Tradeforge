@@ -427,11 +427,16 @@ class CTraderAdapter(BrokerAdapter):
         else:
             logger.warning("cTrader _load_symbols: no symbol IDs found in response")
 
-        # Also map light symbol data
+        # Also map light symbol data (fallback if detail fetch failed)
         for s in symbols:
             sid = s.get("symbolId", 0)
-            if sid and sid not in self._symbol_cache:
-                self._symbol_cache[sid] = s
+            if sid:
+                if sid not in self._symbol_cache:
+                    self._symbol_cache[sid] = s
+                # Map name from light symbols too (ProtoOALightSymbol has symbolName)
+                name = s.get("symbolName", "")
+                if name and name not in self._symbol_name_to_id:
+                    self._symbol_name_to_id[name] = sid
 
         symbol_names = sorted(self._symbol_name_to_id.keys())
         logger.info("cTrader loaded %d symbols: %s", len(self._symbol_cache),
