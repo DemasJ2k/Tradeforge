@@ -174,6 +174,11 @@ async def broker_debug(broker_name: str, user: User = Depends(get_current_user))
         info["symbol_cache_size"] = len(adapter._symbol_cache)
         info["symbol_name_to_id_size"] = len(adapter._symbol_name_to_id)
         info["symbol_names_sample"] = sorted(adapter._symbol_name_to_id.keys())[:20]
+        # Sample a few cache entries to see their structure
+        cache_sample = []
+        for sid, sym_data in list(adapter._symbol_cache.items())[:3]:
+            cache_sample.append({"symbolId": sid, "keys": list(sym_data.keys()), "data": {k: sym_data[k] for k in list(sym_data.keys())[:8]}})
+        info["cache_sample"] = cache_sample
     if hasattr(adapter, "_last_error"):
         info["last_error"] = adapter._last_error
     if hasattr(adapter, "_account_id"):
