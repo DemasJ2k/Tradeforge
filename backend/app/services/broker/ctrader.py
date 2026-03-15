@@ -249,10 +249,9 @@ class CTraderAdapter(BrokerAdapter):
 
         symbol_name = sym_info.get("symbolName", str(symbol_id))
         digits = sym_info.get("digits", 5)
-        divisor = 10 ** digits
 
-        bid = payload.get("bid", 0) / divisor if "bid" in payload else None
-        ask = payload.get("ask", 0) / divisor if "ask" in payload else None
+        bid = round(payload.get("bid", 0) / 100000.0, digits) if "bid" in payload else None
+        ask = round(payload.get("ask", 0) / 100000.0, digits) if "ask" in payload else None
 
         # Update from last known values if partial update
         last = self._price_cache.get(symbol_name)
@@ -271,13 +270,21 @@ class CTraderAdapter(BrokerAdapter):
             )
             self._price_cache[symbol_name] = tick
 
-    def _convert_price(self, price_int: int, digits: int) -> float:
-        """Convert cTrader integer price to float."""
-        return price_int / (10 ** digits)
+    @staticmethod
+    def _convert_price(price_int: int, digits: int) -> float:
+        """Convert cTrader integer price to float.
 
-    def _to_price_int(self, price: float, digits: int) -> int:
-        """Convert float price to cTrader integer format."""
-        return int(round(price * (10 ** digits)))
+        All cTrader Open API prices (spot, trendbar, position, order)
+        are encoded with a fixed factor of 100000. Divide by 100000
+        then round to the symbol's digit precision.
+        See: https://help.ctrader.com/open-api/symbol-data/
+        """
+        return round(price_int / 100000.0, digits)
+
+    @staticmethod
+    def _to_price_int(price: float, digits: int) -> int:
+        """Convert float price to cTrader integer format (× 100000)."""
+        return int(round(price * 100000))
 
     def _to_volume(self, lots: float) -> int:
         """Convert lot size to cTrader volume (lots * 100 for most instruments)."""
@@ -917,15 +924,6 @@ class CTraderAdapter(BrokerAdapter):
 
         resp = await self._send(PROTO_OA_GET_TRENDBARS_REQ, payload)
         bars = resp.get("payload", {}).get("trendbar", [])
-
-        if bars:
-            b0 = bars[0]
-            logger.info(
-                "cTrader trendbar[0] for %s (id=%d, digits=%d): low=%s deltaOpen=%s deltaHigh=%s deltaClose=%s => open=%s",
-                symbol, symbol_id, digits,
-                b0.get("low"), b0.get("deltaOpen"), b0.get("deltaHigh"), b0.get("deltaClose"),
-                self._convert_price(b0.get("low", 0) + b0.get("deltaOpen", 0), digits),
-            )
 
         candles: list[Candle] = []
         for bar in bars:
