@@ -158,6 +158,33 @@ async def broker_status(user: User = Depends(get_current_user)):
     )
 
 
+@router.get("/debug/{broker_name}")
+async def broker_debug(broker_name: str, user: User = Depends(get_current_user)):
+    """Debug endpoint: internal state of a broker adapter."""
+    adapter = _get_adapter(broker_name)
+    info: dict = {"broker": broker_name, "connected": False}
+    if not adapter:
+        return info
+    try:
+        info["connected"] = await adapter.is_connected()
+    except Exception:
+        pass
+    # cTrader-specific debug info
+    if hasattr(adapter, "_symbol_cache"):
+        info["symbol_cache_size"] = len(adapter._symbol_cache)
+        info["symbol_name_to_id_size"] = len(adapter._symbol_name_to_id)
+        info["symbol_names_sample"] = sorted(adapter._symbol_name_to_id.keys())[:20]
+    if hasattr(adapter, "_last_error"):
+        info["last_error"] = adapter._last_error
+    if hasattr(adapter, "_account_id"):
+        info["account_id"] = adapter._account_id
+    if hasattr(adapter, "_server"):
+        info["server"] = adapter._server
+    if hasattr(adapter, "_host"):
+        info["host"] = adapter._host
+    return info
+
+
 # ── Account ────────────────────────────────────────────
 
 @router.get("/account")
