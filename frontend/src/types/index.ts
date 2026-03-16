@@ -198,7 +198,7 @@ export interface Strategy {
     trades: number;
     net_profit_pct: number;
     wf_score: number;
-    robustness: "GOOD" | "MARGINAL" | "POOR";
+    robustness: "STRONG" | "GOOD" | "MARGINAL" | "POOR";
     symbol: string;
     tf: string;
   } | null;
