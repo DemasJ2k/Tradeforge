@@ -520,73 +520,8 @@ def _seed_all_strategies():
             _log.warning("Cannot seed strategies: no users in DB")
             return
 
-        # Master strategy catalog — each entry becomes a system strategy
+        # Master strategy catalog — only active, verified strategies
         catalog = [
-            {
-                "name": "Valentini Auction Market",
-                "file": "s01_valentini_auction_market.py",
-                "description": (
-                    "Volume Profile + Order Flow strategy inspired by Fabio Valentini "
-                    "(3x Robbins World Cup). Detects Point of Control, Value Area, and "
-                    "volume-confirmed breakouts or mean-reversion setups."
-                ),
-                "timeframes": "4H / Daily",
-                "tags": ["volume_profile", "order_flow", "swing"],
-            },
-            {
-                "name": "ICT Silver Bullet",
-                "file": "s02_ict_silver_bullet.py",
-                "description": (
-                    "ICT Silver Bullet time-based strategy. Trades Fair Value Gaps "
-                    "during specific kill zones (3-4AM, 10-11AM, 2-3PM NY). Combines "
-                    "FVG detection with liquidity sweep and market structure shift."
-                ),
-                "timeframes": "1m / 5m / 15m",
-                "tags": ["ict", "smart_money", "scalping", "intraday"],
-            },
-            {
-                "name": "Smart Money Concepts",
-                "file": "s03_smart_money_concepts.py",
-                "description": (
-                    "Full ICT / Smart Money framework. Combines liquidity sweeps, "
-                    "Fair Value Gaps, and Order Block detection for institutional-grade "
-                    "entry points with break-of-structure confirmation."
-                ),
-                "timeframes": "15m / 1H / 4H",
-                "tags": ["ict", "smart_money", "swing"],
-            },
-            {
-                "name": "Triple EMA VWAP Scalper",
-                "file": "s04_triple_ema_vwap_scalper.py",
-                "description": (
-                    "Intraday scalping strategy using 9/20/50 EMA crossovers confirmed "
-                    "by VWAP position. 62% historical win rate. Trades only with "
-                    "institutional flow (price above/below VWAP)."
-                ),
-                "timeframes": "1m / 5m / 15m",
-                "tags": ["ema", "vwap", "scalping", "intraday"],
-            },
-            {
-                "name": "Opening Range Breakout",
-                "file": "s05_opening_range_breakout.py",
-                "description": (
-                    "Trades the breakout of the first 15-minute opening range. "
-                    "Adapts target multiples based on market conditions. "
-                    "Session-aware with volume confirmation."
-                ),
-                "timeframes": "5m / 15m",
-                "tags": ["breakout", "intraday", "session"],
-            },
-            {
-                "name": "Supertrend Trend Follower",
-                "file": "s06_supertrend_follower.py",
-                "description": (
-                    "Oliver Seban's Supertrend indicator (11% avg gain/trade over 60 years). "
-                    "ATR-based dynamic trailing stop with EMA trend filter and whipsaw protection."
-                ),
-                "timeframes": "1H / 4H / Daily",
-                "tags": ["supertrend", "trend_following", "swing"],
-            },
             {
                 "name": "Turtle Trading (Donchian)",
                 "file": "s07_turtle_trading.py",
@@ -610,70 +545,27 @@ def _seed_all_strategies():
                 "tags": ["volatility", "breakout", "swing"],
             },
             {
-                "name": "Connors RSI(2) Mean Reversion",
-                "file": "s09_connors_rsi2_mean_reversion.py",
-                "description": (
-                    "Larry Connors' RSI(2) mean reversion — 30%+ annual returns since 1999. "
-                    "Ultra-short RSI(2) catches extreme conditions. 200-SMA trend filter, "
-                    "cumulative RSI variation, and ADX choppy-market filter."
-                ),
-                "timeframes": "Daily",
-                "tags": ["rsi", "mean_reversion", "swing"],
-            },
-            {
                 "name": "TTM Squeeze Momentum",
                 "file": "s10_ttm_squeeze.py",
                 "description": (
                     "John Carter's TTM Squeeze. Bollinger Bands contracting inside "
                     "Keltner Channels signals volatility squeeze. When it fires, "
-                    "enter in direction of Donchian momentum for explosive moves."
+                    "enter in direction of Donchian momentum for explosive moves. "
+                    "STRONG: PF 1.22, WR 45.1%, MaxDD 15.9% on XAUUSD H1."
                 ),
                 "timeframes": "15m / 1H / 4H / Daily",
                 "tags": ["squeeze", "bollinger", "keltner", "momentum"],
-            },
-            {
-                "name": "Ichimoku Cloud Breakout",
-                "file": "s11_ichimoku_cloud.py",
-                "description": (
-                    "Full Ichimoku Kinko Hyo system by Goichi Hosoda (30 years of dev). "
-                    "Tenkan/Kijun cross above cloud with Chikou Span confirmation "
-                    "and Kumo twist filter."
-                ),
-                "timeframes": "4H / Daily / Weekly",
-                "tags": ["ichimoku", "trend_following", "swing", "position"],
-            },
-            {
-                "name": "ADX + Parabolic SAR",
-                "file": "s12_adx_parabolic_sar.py",
-                "description": (
-                    "Combining two J. Welles Wilder classics. ADX confirms strong trend "
-                    "(> 25 and rising), Parabolic SAR provides entry on flip and "
-                    "dynamic trailing exit. DI+/DI- directional confirmation."
-                ),
-                "timeframes": "1H / 4H / Daily",
-                "tags": ["adx", "parabolic_sar", "trend_following"],
             },
             {
                 "name": "Woodies CCI Zero Line Reject",
                 "file": "s13_woodies_cci.py",
                 "description": (
                     "Ken Wood's highest-probability CCI pattern. CCI(14) trends on one "
-                    "side of zero, pulls back to ±50 zone, then resumes direction. "
+                    "side of zero, pulls back to +/-50 zone, then resumes direction. "
                     "Turbo CCI(6) confirms timing."
                 ),
                 "timeframes": "5m / 15m / 1H",
                 "tags": ["cci", "momentum", "intraday"],
-            },
-            {
-                "name": "RSI Divergence Swing",
-                "file": "s14_rsi_divergence.py",
-                "description": (
-                    "Andrew Cardwell-inspired RSI divergence detection. Identifies regular "
-                    "and hidden divergences between price pivot points and RSI values. "
-                    "50-SMA trend filter ensures alignment."
-                ),
-                "timeframes": "1H / 4H / Daily",
-                "tags": ["rsi", "divergence", "swing"],
             },
             {
                 "name": "Bollinger Band Squeeze Breakout",
@@ -681,109 +573,11 @@ def _seed_all_strategies():
                 "description": (
                     "John Bollinger's bandwidth analysis. Detects when Bollinger Bandwidth "
                     "hits bottom-5% of its range (squeeze). Enters on expansion using "
-                    "%B for direction confirmation."
+                    "%%B for direction confirmation. "
+                    "STRONG: PF 1.208, WR 38.1%, MaxDD 18.4% on US100 H1."
                 ),
                 "timeframes": "15m / 1H / 4H",
                 "tags": ["bollinger", "squeeze", "breakout"],
-            },
-            {
-                "name": "VWAP Mean Reversion Bands",
-                "file": "s16_vwap_mean_reversion.py",
-                "description": (
-                    "Brian Shannon-inspired VWAP band strategy. Price reverts to "
-                    "institutional fair value (VWAP). Trades bounces from ±2σ bands "
-                    "with volume spike and reversal candle confirmation."
-                ),
-                "timeframes": "1m / 5m / 15m",
-                "tags": ["vwap", "mean_reversion", "scalping", "intraday"],
-            },
-            {
-                "name": "EMA Ribbon Momentum (Guppy)",
-                "file": "s17_ema_ribbon.py",
-                "description": (
-                    "Daryl Guppy's Multiple Moving Average system. Ribbon of 6 EMAs "
-                    "(8,13,21,34,55,89). Enters when short-term EMAs fan out from "
-                    "long-term EMAs with expanding spread."
-                ),
-                "timeframes": "15m / 1H / 4H / Daily",
-                "tags": ["ema", "guppy", "momentum", "trend_following"],
-            },
-            {
-                "name": "Keltner Channel Breakout",
-                "file": "s18_keltner_breakout.py",
-                "description": (
-                    "Chester Keltner / Linda Raschke modernized channel system. "
-                    "EMA(20) ± 2.5×ATR(10) channels. Breakout entry + ADX filter "
-                    "to avoid choppy markets. Exit on channel re-entry."
-                ),
-                "timeframes": "15m / 1H / 4H",
-                "tags": ["keltner", "breakout", "momentum"],
-            },
-            {
-                "name": "Stochastic RSI Momentum",
-                "file": "s19_stoch_rsi_momentum.py",
-                "description": (
-                    "Chande & Kroll's Stochastic RSI. Applies stochastic formula to "
-                    "RSI for faster oscillation. K/D crossovers in oversold/overbought "
-                    "zones with EMA trend filter."
-                ),
-                "timeframes": "5m / 15m / 1H",
-                "tags": ["stochastic_rsi", "momentum", "intraday"],
-            },
-            {
-                "name": "Unger Multi-Strategy Rotation",
-                "file": "s20_unger_rotation.py",
-                "description": (
-                    "Andrea Unger's approach (4x World Champion). Regime detection "
-                    "using ADX + volatility. Switches between Donchian breakout "
-                    "(trending) and RSI+BB mean reversion (ranging) automatically."
-                ),
-                "timeframes": "1H / 4H / Daily",
-                "tags": ["rotation", "regime", "trend_following", "mean_reversion"],
-            },
-            {
-                "name": "Hull MA Crossover",
-                "file": "s21_hull_ma_crossover.py",
-                "description": (
-                    "Alan Hull's lag-reduced moving average. Dual HMA crossover "
-                    "(fast 9 / slow 21) for minimal-lag momentum signals. "
-                    "ADX filter ensures trend presence."
-                ),
-                "timeframes": "15m / 1H / 4H",
-                "tags": ["hull_ma", "crossover", "momentum"],
-            },
-            {
-                "name": "Nill Dual Momentum Swing",
-                "file": "s22_nill_momentum_swing.py",
-                "description": (
-                    "Inspired by Patrick Nill (9x Robbins Cup, 70-200%/yr). "
-                    "Dual ROC (fast 10, slow 30) alignment with MFI money flow "
-                    "confirmation. Enters on momentum flip."
-                ),
-                "timeframes": "4H / Daily",
-                "tags": ["roc", "mfi", "momentum", "swing"],
-            },
-            {
-                "name": "Awesome Oscillator Saucer",
-                "file": "s23_ao_saucer.py",
-                "description": (
-                    "Bill Williams Trading Chaos: AO Saucer pattern, Twin Peaks "
-                    "divergence, and Zero Line Cross. Multiple confirmation modes "
-                    "for trend continuation entries."
-                ),
-                "timeframes": "15m / 1H / 4H / Daily",
-                "tags": ["awesome_oscillator", "williams", "momentum"],
-            },
-            {
-                "name": "MACD Histogram Divergence",
-                "file": "s24_macd_histogram_div.py",
-                "description": (
-                    "Alexander Elder's MACD histogram method. Detects divergence "
-                    "between histogram peaks/troughs and price action. Early signal "
-                    "before classic MACD cross. 50-SMA trend filter."
-                ),
-                "timeframes": "1H / 4H / Daily",
-                "tags": ["macd", "divergence", "momentum", "swing"],
             },
             {
                 "name": "London Breakout Session",
@@ -791,48 +585,12 @@ def _seed_all_strategies():
                 "description": (
                     "Institutional London session strategy. Captures Asian range "
                     "(00-08 GMT) and trades the breakout at London open. Range-size "
-                    "ATR filter to avoid false signals. Session-end auto-close."
+                    "ATR filter to avoid false signals. Session-end auto-close. "
+                    "STRONG: PF 1.260, WR 50.0%, MaxDD 4.8% on XAUUSD M15."
                 ),
                 "timeframes": "5m / 15m",
                 "tags": ["session", "breakout", "intraday"],
             },
-            {
-                "name": "Market Structure Signals (BOS/CHoCH)",
-                "file": "s26_market_structure_signals.py",
-                "description": (
-                    "Break of Structure (BOS) and Change of Character (CHoCH) "
-                    "breakout strategy based on ProjectSyndicate's Market Structure "
-                    "Signals indicator. Detects pivot highs/lows, classifies breakouts, "
-                    "and uses ATR-based TP/SL with optional EMA trend filter."
-                ),
-                "timeframes": "15m / 1H / 4H",
-                "tags": ["market_structure", "bos", "choch", "breakout"],
-            },
-            {
-                "name": "Institutional Composite (ICT/SMC)",
-                "file": "s27_institutional_composite.py",
-                "description": (
-                    "Research-based institutional strategy combining ICT, SMC, and "
-                    "Wyckoff concepts. Uses Kill Zone timing, liquidity sweep detection, "
-                    "Fair Value Gaps, Order Blocks, and Premium/Discount zones. Trades "
-                    "where institutions trade, at institutional price levels."
-                ),
-                "timeframes": "M5 / M15 / 1H",
-                "tags": ["institutional", "ict", "smc", "liquidity", "smart_money"],
-            },
-            {
-                "name": "News Event Guard",
-                "file": "s28_news_event_guard.py",
-                "description": (
-                    "News-aware strategy that manages risk around high-impact economic events. "
-                    "Three modes: Defensive (closes positions before NFP/FOMC/CPI), Reactive "
-                    "(trades post-news breakouts), and Straddle (pending orders before release). "
-                    "Integrates with the News service for real-time event awareness."
-                ),
-                "timeframes": "M1 / M5 / M15",
-                "tags": ["news", "defensive", "event_trading", "risk_management"],
-            },
-            # ── Wave 2: Asset-specific strategies (s29-s40) ──
             {
                 "name": "NAS100 Opening Range Breakout",
                 "file": "s29_nas100_opening_range_breakout.py",
@@ -843,127 +601,6 @@ def _seed_all_strategies():
                 ),
                 "timeframes": "M5",
                 "tags": ["nas100", "breakout", "opening_range", "intraday"],
-            },
-            {
-                "name": "NAS100 Gap Fill + VWAP Confirmation",
-                "file": "s30_nas100_gap_fill_vwap.py",
-                "description": (
-                    "Gap-fill mean-reversion on NAS100 with session VWAP confirmation. "
-                    "When price opens with a gap vs previous session close, enter on VWAP cross "
-                    "in the gap-fill direction. Historically high fill rate on equity indices."
-                ),
-                "timeframes": "M5",
-                "tags": ["nas100", "gap_fill", "vwap", "mean_reversion", "intraday"],
-            },
-            {
-                "name": "US500 VWAP Mean Reversion",
-                "file": "s31_us500_vwap_mean_reversion.py",
-                "description": (
-                    "Intraday mean reversion back to session VWAP on US500 (S&P 500). "
-                    "Enters on reversal candle when price deviates from VWAP during "
-                    "ranging conditions (low ADX). Targets snap-back to fair value."
-                ),
-                "timeframes": "M5",
-                "tags": ["us500", "vwap", "mean_reversion", "intraday"],
-            },
-            {
-                "name": "US500 RSI(2) Mean Reversion",
-                "file": "s32_us500_rsi2_mean_reversion.py",
-                "description": (
-                    "Ultra-short RSI(2) mean reversion on US500. Identifies extreme "
-                    "overbought/oversold with EMA trend filter. Buys oversold dips "
-                    "in uptrends, sells overbought rallies in downtrends."
-                ),
-                "timeframes": "M30",
-                "tags": ["us500", "rsi", "mean_reversion", "swing"],
-            },
-            {
-                "name": "XAUUSD London Breakout (Gold-Optimized)",
-                "file": "s33_xauusd_london_breakout.py",
-                "description": (
-                    "Classic London session breakout tuned for XAUUSD. Gold forms a "
-                    "range during Asia (00-07 UTC), then breaks out at London open "
-                    "with institutional momentum. ATR-filtered for range quality."
-                ),
-                "timeframes": "M5 / M15",
-                "tags": ["xauusd", "gold", "london_breakout", "session", "intraday"],
-            },
-            {
-                "name": "XAUUSD NY Momentum (London-to-NY Continuation)",
-                "file": "s34_xauusd_ny_momentum.py",
-                "description": (
-                    "Institutional order-flow continuation from London into NY session. "
-                    "Measures London directional move (07-13 UTC), enters on Fibonacci "
-                    "continuation if move is significant relative to ATR."
-                ),
-                "timeframes": "M15 / H1",
-                "tags": ["xauusd", "gold", "momentum", "session", "continuation"],
-            },
-            {
-                "name": "XAGUSD EMA Momentum Crossover",
-                "file": "s35_xagusd_ema_momentum.py",
-                "description": (
-                    "Fast/slow EMA crossover on silver (XAGUSD) filtered by ADX for "
-                    "momentum confirmation. Enters long on fast EMA crossing above slow "
-                    "with trending ADX, and vice versa for shorts."
-                ),
-                "timeframes": "M5",
-                "tags": ["xagusd", "silver", "ema", "crossover", "momentum"],
-            },
-            {
-                "name": "XAGUSD Bollinger Band Mean Reversion",
-                "file": "s36_xagusd_bb_reversion.py",
-                "description": (
-                    "Bollinger Band touch with reversal candle confirmation on XAGUSD. "
-                    "Enters long on lower band touch with bullish reversal, short on "
-                    "upper band touch with bearish reversal. RSI filter for extremes."
-                ),
-                "timeframes": "H1",
-                "tags": ["xagusd", "silver", "bollinger", "mean_reversion"],
-            },
-            {
-                "name": "BTCUSD CME Gap Fill",
-                "file": "s37_btcusd_cme_gap_fill.py",
-                "description": (
-                    "Exploits BTC CME futures weekend gaps. Bitcoin CME closes Friday "
-                    "17:00 ET, reopens Sunday 18:00 ET. ~70-80% of gaps fill within "
-                    "first hours of Monday trading. Volume and momentum confirmation."
-                ),
-                "timeframes": "M15 / H1",
-                "tags": ["btcusd", "bitcoin", "gap_fill", "cme", "mean_reversion"],
-            },
-            {
-                "name": "BTCUSD SuperTrend Momentum",
-                "file": "s38_btcusd_supertrend_momentum.py",
-                "description": (
-                    "SuperTrend direction + EMA pullback on BTCUSD. Waits for price to "
-                    "pull back to 21 EMA in SuperTrend direction, confirms with RSI "
-                    "(30-70 neutral zone) and ADX (>20 trending) before entry."
-                ),
-                "timeframes": "H1 / H4",
-                "tags": ["btcusd", "bitcoin", "supertrend", "momentum", "pullback"],
-            },
-            {
-                "name": "ETHUSD Momentum Scalper (EMA Cross + Volume + ADX)",
-                "file": "s39_ethusd_momentum_scalper.py",
-                "description": (
-                    "Captures ETH momentum bursts during US/London overlap using "
-                    "fast/slow EMA crossovers confirmed by volume spikes and ADX "
-                    "trend strength. ETH's higher volatility amplifies R:R on breakouts."
-                ),
-                "timeframes": "M5",
-                "tags": ["ethusd", "ethereum", "scalping", "momentum", "ema"],
-            },
-            {
-                "name": "ETHUSD Bollinger Band Mean Reversion",
-                "file": "s40_ethusd_bb_reversion.py",
-                "description": (
-                    "Mean reversion at Bollinger Band extremes on ETHUSD H4. "
-                    "Trades reversals when bands are wide (not in squeeze) and price "
-                    "overextends beyond bands with a reversal candle back inside."
-                ),
-                "timeframes": "H4",
-                "tags": ["ethusd", "ethereum", "bollinger", "mean_reversion"],
             },
             {
                 "name": "BTCUSD RSI Micro Scalper",
@@ -1013,6 +650,17 @@ def _seed_all_strategies():
                 "timeframes": "M5",
                 "tags": ["xagusd", "silver", "stochastic", "scalping", "mean_reversion"],
             },
+            {
+                "name": "Larry Williams V2 (Trend-Filtered)",
+                "file": "s08c_larry_williams_v2.py",
+                "description": (
+                    "Optimized Larry Williams volatility breakout with SMA50 trend filter. "
+                    "Wider TP (6x ATR) and SL (2x ATR) compensate for deferred entry. "
+                    "PF 1.098, WR 27.9%, MaxDD 30.4% on US30 H1 over 12 years."
+                ),
+                "timeframes": "H1",
+                "tags": ["volatility", "breakout", "trend_following", "williams"],
+            },
         ]
 
         # Optimized parameters and verified performance from Optuna + Walk-Forward validation
@@ -1037,9 +685,9 @@ def _seed_all_strategies():
                 "params": {"bb_period": 16, "bb_mult": 1.75, "kc_period": 18, "kc_mult": 1.7,
                            "mom_period": 9, "atr_period": 14, "atr_sl_mult": 1.0,
                            "atr_tp_mult": 6.5, "min_squeeze_bars": 2, "risk_per_trade": 0.005},
-                "performance": {"profit_factor": 1.35, "win_rate": 18.7, "max_dd_pct": 14.52,
-                                "sharpe": 0.27, "trades": 626, "net_profit_pct": 159.83,
-                                "wf_score": 100.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+                "performance": {"profit_factor": 1.220, "win_rate": 45.1, "max_dd_pct": 15.9,
+                                "sharpe": 1.5, "trades": 1204, "net_profit_pct": 428.4,
+                                "wf_score": 85.0, "robustness": "STRONG", "symbol": "XAUUSD", "tf": "H1"},
             },
             "s11_ichimoku_cloud.py": {
                 "params": {"tenkan_period": 7, "kijun_period": 33, "senkou_b_period": 47,
@@ -1064,9 +712,9 @@ def _seed_all_strategies():
                            "atr_period": 19, "atr_sl_mult": 1.35, "atr_tp_mult": 8.9,
                            "require_momentum": False, "exit_bb_revert": False,
                            "risk_per_trade": 0.005},
-                "performance": {"profit_factor": 1.92, "win_rate": 23.4, "max_dd_pct": 3.98,
-                                "sharpe": 0.45, "trades": 77, "net_profit_pct": 32.2,
-                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "H1"},
+                "performance": {"profit_factor": 1.208, "win_rate": 38.1, "max_dd_pct": 18.4,
+                                "sharpe": 1.2, "trades": 727, "net_profit_pct": 161.9,
+                                "wf_score": 80.0, "robustness": "STRONG", "symbol": "US100", "tf": "H1"},
             },
             "s17_ema_ribbon.py": {
                 "params": {"short_emas": [8, 13, 21], "long_emas": [34, 55, 89],
@@ -1107,9 +755,9 @@ def _seed_all_strategies():
                            "target_range_mult": 2.05, "sl_at_range_opposite": False,
                            "atr_period": 18, "atr_sl_mult": 3.55, "min_range_atr": 0.15,
                            "max_range_atr": 3.1, "risk_per_trade": 0.005, "max_daily_trades": 3},
-                "performance": {"profit_factor": 1.62, "win_rate": 59.2, "max_dd_pct": 4.91,
-                                "sharpe": 0.09, "trades": 76, "net_profit_pct": 10.16,
-                                "wf_score": 80.0, "robustness": "GOOD", "symbol": "XAUUSD", "tf": "M1"},
+                "performance": {"profit_factor": 1.260, "win_rate": 50.0, "max_dd_pct": 4.8,
+                                "sharpe": 2.0, "trades": 96, "net_profit_pct": 6.7,
+                                "wf_score": 75.0, "robustness": "STRONG", "symbol": "XAUUSD", "tf": "M15"},
             },
             "s26_market_structure_signals.py": {
                 "params": {"swing_length": 12, "bos_confirm": "wick", "choch_only": False,
@@ -1156,6 +804,14 @@ def _seed_all_strategies():
                                 "sharpe": 0.26, "trades": 10542, "net_profit_pct": 192.2,
                                 "trades_per_day": 11.7, "wf_score": 80.0, "robustness": "STRONG",
                                 "symbol": "XAGUSD", "tf": "M5"},
+            },
+            "s08c_larry_williams_v2.py": {
+                "params": {"breakout_factor": 0.5, "atr_period": 14, "atr_sl_mult": 2.0,
+                           "atr_tp_mult": 6.0, "cooldown_bars": 20, "risk_per_trade": 0.01,
+                           "trend_sma_period": 50},
+                "performance": {"profit_factor": 1.098, "win_rate": 27.9, "max_dd_pct": 30.4,
+                                "sharpe": 0.43, "trades": 1380, "net_profit_pct": 297.5,
+                                "wf_score": 70.0, "robustness": "GOOD", "symbol": "US30", "tf": "H1"},
             },
         }
 
