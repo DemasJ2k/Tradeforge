@@ -41,20 +41,20 @@ DEFAULTS = {
     "asian_end_hour":       7,     # 07:00 UTC — London open
     # Entry window
     "entry_start_hour":     7,     # London open
-    "entry_end_hour":       12,    # No entries after noon UTC
+    "entry_end_hour":       14,    # No entries after 14:00 UTC (optimized)
     # Session close
-    "session_end_hour":     16,    # Close all by 16:00 UTC
+    "session_end_hour":     18,    # Close all by 18:00 UTC (optimized)
     # Breakout parameters
-    "breakout_buffer_pct":  0.0003, # 0.03% beyond range edge
-    "min_range_atr_pct":    0.3,    # Min range as % of ATR (filter tiny ranges)
-    "max_range_atr_pct":    2.5,    # Max range as % of ATR (filter already broken ranges)
+    "breakout_buffer_pct":  0.0,   # No buffer — immediate breakout (optimized)
+    "min_range_atr_pct":    0.05,  # Very permissive range filter (optimized)
+    "max_range_atr_pct":    10.0,  # Very permissive upper bound (optimized)
     # ATR for validation
     "atr_period":           14,
     # TP sizing (multiples of Asian range width)
     "tp_range_mult":        2.5,   # TP = 2.5x the Asian range
     # Trailing stop
     "use_trailing":         True,
-    "trail_trigger_range":  1.0,   # Activate trail after 1× range profit
+    "trail_trigger_range":  1.5,   # Activate trail after 1.5× range profit (optimized)
     "trail_distance_range": 1.0,   # Trail at 1× range from best price
     # Risk
     "lot_size":             0.01,
