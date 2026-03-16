@@ -203,9 +203,14 @@ class StrategyContext:
         sym = symbol or self._instrument.symbol
         qty = size or self._compute_size(stop_loss, "long")
 
+        # Store signal price on entry so the engine can adjust SL/TP
+        # when the deferred entry fills at a different price (next bar open).
+        signal_price = self._current_bar.close if self._current_bar else 0
+
         entry = Order(
             symbol=sym, side=OrderSide.BUY, order_type=OrderType.MARKET,
             quantity=qty, role=OrderRole.ENTRY,
+            price=signal_price,
             created_bar_index=self._bar_index, tag=tag,
         )
 
@@ -227,12 +232,11 @@ class StrategyContext:
 
         trail_order = None
         if trail_offset > 0:
-            current_price = self._current_bar.close if self._current_bar else 0
             trail_order = Order(
                 symbol=sym, side=OrderSide.SELL, order_type=OrderType.STOP,
-                quantity=qty, price=current_price - trail_offset,
+                quantity=qty, price=signal_price - trail_offset,
                 role=OrderRole.TRAILING_STOP,
-                trail_offset=trail_offset, trail_trigger=current_price - trail_offset,
+                trail_offset=trail_offset, trail_trigger=signal_price - trail_offset,
                 created_bar_index=self._bar_index, tag=f"trail_{tag}",
             )
 
@@ -251,9 +255,12 @@ class StrategyContext:
         sym = symbol or self._instrument.symbol
         qty = size or self._compute_size(stop_loss, "short")
 
+        signal_price = self._current_bar.close if self._current_bar else 0
+
         entry = Order(
             symbol=sym, side=OrderSide.SELL, order_type=OrderType.MARKET,
             quantity=qty, role=OrderRole.ENTRY,
+            price=signal_price,
             created_bar_index=self._bar_index, tag=tag,
         )
 
@@ -275,12 +282,11 @@ class StrategyContext:
 
         trail_order = None
         if trail_offset > 0:
-            current_price = self._current_bar.close if self._current_bar else 0
             trail_order = Order(
                 symbol=sym, side=OrderSide.BUY, order_type=OrderType.STOP,
-                quantity=qty, price=current_price + trail_offset,
+                quantity=qty, price=signal_price + trail_offset,
                 role=OrderRole.TRAILING_STOP,
-                trail_offset=trail_offset, trail_trigger=current_price + trail_offset,
+                trail_offset=trail_offset, trail_trigger=signal_price + trail_offset,
                 created_bar_index=self._bar_index, tag=f"trail_{tag}",
             )
 

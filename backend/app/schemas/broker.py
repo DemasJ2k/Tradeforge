@@ -57,6 +57,9 @@ class PositionResponse(BaseModel):
     open_time: str
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    agent_name: Optional[str] = None
+    agent_id: Optional[int] = None
+    strategy_name: Optional[str] = None
 
 
 class ClosePositionRequest(BaseModel):
