@@ -854,6 +854,10 @@ def _seed_all_strategies():
                 Strategy.is_system == True, Strategy.name == name
             ).first()
             if existing:
+                # Un-delete if it was soft-deleted
+                if existing.deleted_at is not None:
+                    existing.deleted_at = None
+                    _log.info("Un-deleted strategy: %s", name)
                 # Always sync settings_schema from strategy file (picks up explicit
                 # SETTINGS list with groups, descriptions, proper ranges, etc.)
                 if schema_list:
@@ -874,6 +878,8 @@ def _seed_all_strategies():
                 if opt_params:
                     existing.settings_values = values_dict
                     updated += 1
+                # Sync description
+                existing.description = entry["description"]
                 continue
 
             strat = Strategy(
@@ -895,9 +901,24 @@ def _seed_all_strategies():
             db.add(strat)
             added += 1
 
-        if added or updated:
+        # Soft-delete system strategies NOT in the catalog
+        from datetime import datetime, timezone
+        catalog_names = {e["name"] for e in catalog}
+        catalog_names.add("Market Structure Signal (ADR)")  # Also keep MSS
+        stale = db.query(Strategy).filter(
+            Strategy.is_system == True,
+            Strategy.deleted_at.is_(None),
+            ~Strategy.name.in_(catalog_names),
+        ).all()
+        for s in stale:
+            s.deleted_at = datetime.now(timezone.utc)
+            _log.info("Soft-deleted stale strategy: %s (id=%s)", s.name, s.id)
+        stale_count = len(stale)
+
+        if added or updated or stale_count:
             db.commit()
-            _log.info("Seeded %d new + updated %d existing strategies (catalog: %d)", added, updated, len(catalog))
+            _log.info("Seeded %d new + updated %d + removed %d stale strategies (catalog: %d)",
+                      added, updated, stale_count, len(catalog))
 
         # ── Seed V2-native Market Structure Signal (ADR) strategy ────────
         _log.info("Checking V2 MSS strategy seed...")
