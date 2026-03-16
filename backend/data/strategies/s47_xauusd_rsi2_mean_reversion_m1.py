@@ -63,8 +63,9 @@ DEFAULTS = {
     "tp_target":           "bb_mid",  # "bb_mid" or "atr" — bb_mid is mean reversion target
     "atr_tp_mult":         1.0,   # Only used if tp_target="atr"
     "max_bars_held":       15,    # Time stop: close after 15 M1 bars (15 min)
-    # Risk
-    "risk_per_trade":      0.003,  # 0.3% per trade (conservative for M1)
+    # Risk & sizing
+    "lot_size":            0.01,   # 0.01 lot = 1 oz Gold (micro lot)
+    "risk_per_trade":      0.003,  # 0.3% per trade (informational)
     "max_session_trades":  10,     # Allow more trades on M1 (high frequency)
     "min_bars_between":    3,      # Minimum bars between entries (avoid clustering)
 }
@@ -328,7 +329,7 @@ class XAUUSDRsi2MeanReversion:
                 return
 
             sl = close - sl_dist
-            open_trade(i, "long", close, sl, tp_long, s["risk_per_trade"])
+            open_trade(i, "long", close, sl, tp_long, s["lot_size"])
             self.session_trades += 1
             self.last_entry_bar = i
             # Track entry bar for time stop
@@ -343,7 +344,7 @@ class XAUUSDRsi2MeanReversion:
                 return
 
             sl = close + sl_dist
-            open_trade(i, "short", close, sl, tp_short, s["risk_per_trade"])
+            open_trade(i, "short", close, sl, tp_short, s["lot_size"])
             self.session_trades += 1
             self.last_entry_bar = i
             for t in open_trades:

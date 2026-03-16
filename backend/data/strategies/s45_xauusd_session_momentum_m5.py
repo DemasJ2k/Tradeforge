@@ -63,8 +63,9 @@ DEFAULTS = {
     "atr_period":          14,
     "atr_sl_mult":         1.5,
     "atr_tp_mult":         3.0,
-    # Risk
-    "risk_per_trade":      0.005,  # 0.5% per trade
+    # Risk & sizing
+    "lot_size":            0.01,   # 0.01 lot = 1 oz Gold (micro lot)
+    "risk_per_trade":      0.005,  # 0.5% per trade (informational)
     "max_session_trades":  3,
 }
 
@@ -311,7 +312,7 @@ class XAUUSDSessionMomentum:
                 and close > ef):
             sl = entry - sl_dist
             tp = entry + tp_dist
-            open_trade(i, "long", entry, sl, tp, s["risk_per_trade"])
+            open_trade(i, "long", entry, sl, tp, s["lot_size"])
             self.session_trades += 1
 
         # --- SHORT signal ---
@@ -322,5 +323,5 @@ class XAUUSDSessionMomentum:
                 and close < ef):
             sl = entry + sl_dist
             tp = entry - tp_dist
-            open_trade(i, "short", entry, sl, tp, s["risk_per_trade"])
+            open_trade(i, "short", entry, sl, tp, s["lot_size"])
             self.session_trades += 1

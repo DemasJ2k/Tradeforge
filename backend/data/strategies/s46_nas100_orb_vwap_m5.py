@@ -66,8 +66,9 @@ DEFAULTS = {
     "use_trailing":       True,
     "trail_trigger_atr":  1.0,     # Activate trail after 1× ATR profit
     "trail_distance_atr": 1.5,     # Trail at 1.5× ATR from best
-    # Risk
-    "risk_per_trade":     0.005,
+    # Risk & sizing
+    "lot_size":           0.1,     # 0.1 lot NAS100 contract
+    "risk_per_trade":     0.005,   # Informational
     "max_daily_trades":   2,
 }
 
@@ -311,7 +312,7 @@ class NAS100OrbVwap:
                 return
             sl = close - sl_dist
             tp = close + tp_dist
-            open_trade(i, "long", close, sl, tp, s["risk_per_trade"])
+            open_trade(i, "long", close, sl, tp, s["lot_size"])
             self.daily_trades += 1
 
         # --- SHORT breakout ---
@@ -321,5 +322,5 @@ class NAS100OrbVwap:
                 return
             sl = close + sl_dist
             tp = close - tp_dist
-            open_trade(i, "short", close, sl, tp, s["risk_per_trade"])
+            open_trade(i, "short", close, sl, tp, s["lot_size"])
             self.daily_trades += 1
