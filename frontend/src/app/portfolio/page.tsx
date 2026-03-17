@@ -60,17 +60,23 @@ export default function PortfolioPage() {
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
+      setError(null);
       const [sumData, eqData] = await Promise.all([
         api.get<PortfolioSummary>("/api/portfolio/summary"),
         api.get<{ snapshots: EquityPoint[] }>("/api/portfolio/equity-curve?days=30"),
       ]);
       setSummary(sumData);
       setEquityCurve(eqData.snapshots || []);
-    } catch {
-      // Portfolio not created yet — show empty state
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load portfolio";
+      // Auth errors handled by API client redirect — only show real errors
+      if (!msg.includes("401") && !msg.includes("Unauthorized")) {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -88,14 +94,18 @@ export default function PortfolioPage() {
     try {
       await api.post("/api/portfolio/pause-all", {});
       loadData();
-    } catch { /* */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pause agents");
+    }
   };
 
   const handleUnpause = async () => {
     try {
       await api.post("/api/portfolio/unpause", {});
       loadData();
-    } catch { /* */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resume portfolio");
+    }
   };
 
   if (loading) {
@@ -215,6 +225,21 @@ export default function PortfolioPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Error Banner ── */}
+      {error && (
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+            <Button size="sm" variant="outline" onClick={loadData} className="text-xs">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Circuit Breaker Status ── */}
       {isPaused && (
