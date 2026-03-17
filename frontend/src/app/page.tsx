@@ -437,7 +437,7 @@ export default function Dashboard() {
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Quick Overview</h3>
           <div className="space-y-3 text-sm">
             <StatRow icon={<Zap className="h-3.5 w-3.5 text-accent" />} label="Strategies" value={`${s.user} user · ${s.system} system`} />
-            <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Active Agents" value={`${ag.live} live · ${ag.paper} paper`} />
+            <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Active Agents" value={`${ag.running} running · ${ag.paper} paper`} />
             <StatRow icon={<Database className="h-3.5 w-3.5 text-accent" />} label="Data Sources" value={`${data.data_sources} files`} />
             <StatRow icon={<BarChart3 className="h-3.5 w-3.5 text-accent" />} label="Backtests" value={`${data.backtests.total} total`} />
           </div>

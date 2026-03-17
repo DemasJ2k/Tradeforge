@@ -1,10 +1,6 @@
-Train 4 new RL models + add Walk-Forward tab + fix ONNX export
+Fix frontend build: use ag.running instead of ag.live
 
-- Trained rl_mom_btcusd_d1 (87% WR, 1.6% DD), rl_mom_ethusd_d1 (90% WR),
-  rl_ttm_btcusd_h1 (65% WR, 0.2% DD), rl_lw_nas100_h1 (39% WR, 1.1% DD)
-- Fixed ONNX export: opset_version=18 + dynamo=False to avoid Windows
-  charmap codec crash with emoji in torch.onnx dynamo exporter
-- Added Walk-Forward validation tab to Backtest page (3rd tab)
-- Updated Dashboard: "Quick Overview" with Portfolio link, active agents count
+Property 'live' does not exist on agents type - use 'running' which
+is the actual field name in the dashboard data shape.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
