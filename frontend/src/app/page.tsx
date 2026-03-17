@@ -607,102 +607,25 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* ── Prop Firm Status Cards ──────────────────────── */}
-      {data.prop_firm_accounts && data.prop_firm_accounts.length > 0 && (
-        <div className="space-y-3">
+      {/* ── Portfolio Quick Link ──────────────────────── */}
+      <Card className="bg-card-bg border-card-border">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-              <Building2 className="h-3.5 w-3.5 text-accent" />
-              Prop Firm Accounts
-            </h3>
-            <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1">
-              <Link href="/prop-firms">Manage <ArrowRight className="h-3 w-3" /></Link>
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-accent/10 flex items-center justify-center">
+                <BarChart3 className="h-4 w-4 text-accent" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Portfolio Manager</p>
+                <p className="text-xs text-muted-foreground">View drawdown limits, agent performance, and risk controls</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" asChild className="text-accent gap-1">
+              <Link href="/portfolio">Open <ArrowRight className="h-3 w-3" /></Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {data.prop_firm_accounts.map((pf) => (
-              <Card key={pf.id} className="bg-card-bg border-card-border">
-                <CardContent className="p-4 space-y-3">
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{pf.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{pf.firm} · {pf.phase}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold">${fmt(pf.balance)}</p>
-                      <p className="text-[10px] text-muted-foreground">${fmt(pf.account_size)} size</p>
-                    </div>
-                  </div>
-
-                  {/* Profit Target */}
-                  {pf.profit_target > 0 && (
-                    <div>
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className="text-muted-foreground">Profit Target</span>
-                        <span className="text-success">${fmt(pf.profit_made)} / ${fmt(pf.profit_target)} ({pf.profit_pct}%)</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
-                        <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.min(pf.profit_pct, 100)}%` }} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Daily Loss */}
-                  {pf.daily_loss_limit > 0 && (
-                    <div>
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className="text-muted-foreground">Daily Loss</span>
-                        <span className={pf.daily_loss_pct > 80 ? "text-danger" : pf.daily_loss_pct > 50 ? "text-yellow-400" : "text-muted-foreground"}>
-                          ${fmt(pf.daily_loss_used)} / ${fmt(pf.daily_loss_limit)} ({pf.daily_loss_pct}%)
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${pf.daily_loss_pct > 80 ? "bg-danger" : pf.daily_loss_pct > 50 ? "bg-yellow-500" : "bg-accent/60"}`}
-                          style={{ width: `${Math.min(pf.daily_loss_pct, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Max Drawdown */}
-                  {pf.drawdown_limit > 0 && (
-                    <div>
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className="text-muted-foreground">Max Drawdown</span>
-                        <span className={pf.drawdown_pct > 80 ? "text-danger" : pf.drawdown_pct > 50 ? "text-yellow-400" : "text-muted-foreground"}>
-                          ${fmt(pf.drawdown_used)} / ${fmt(pf.drawdown_limit)} ({pf.drawdown_pct}%)
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${pf.drawdown_pct > 80 ? "bg-danger" : pf.drawdown_pct > 50 ? "bg-yellow-500" : "bg-accent/60"}`}
-                          style={{ width: `${Math.min(pf.drawdown_pct, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Alert badge */}
-                  {(pf.daily_loss_pct > 80 || pf.drawdown_pct > 80) && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-danger">
-                      <AlertTriangle className="h-3 w-3" />
-                      Approaching {pf.daily_loss_pct > 80 ? "daily loss" : "drawdown"} limit
-                    </div>
-                  )}
-
-                  {/* Footer stats */}
-                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1 border-t border-card-border">
-                    <span>{pf.open_trades} open trades</span>
-                    {pf.days_left !== null && <span>{pf.days_left} days left</span>}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       <ChatHelpers />
     </div>

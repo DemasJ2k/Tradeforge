@@ -39,6 +39,7 @@ from app.api import telegram_webhook as telegram_webhook_api
 from app.api import prop_firm as prop_firm_api
 from app.api import ctrader_oauth as ctrader_oauth_api
 from app.api import broadcast as broadcast_api
+from app.api import portfolio as portfolio_api
 from app.core.websocket import manager as ws_manager
 from app.services.market.mt5_stream import mt5_streamer
 from app.services.market.aggregator import tick_aggregator
@@ -61,6 +62,7 @@ from app.models import news as news_model  # noqa: F401
 from app.models import watchlist as watchlist_model  # noqa: F401
 from app.models import prop_firm as prop_firm_model  # noqa: F401
 from app.models import broadcast as broadcast_model  # noqa: F401
+from app.models import portfolio as portfolio_model  # noqa: F401
 
 # Ensure data directories exist
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -142,6 +144,8 @@ def _run_schema_migrations():
         ("agent_trades", "broker_pnl",       "REAL"),
         ("agent_trades", "broker_name",      "VARCHAR(50)"),
         ("agent_trades", "exit_reason",      "VARCHAR(30)"),
+        # Portfolio manager link on trading agents
+        ("trading_agents", "portfolio_id", "INTEGER"),
     ]
 
     insp = inspect(engine)
@@ -453,20 +457,21 @@ app.include_router(llm_api.router)
 app.include_router(optimization_api.router)
 app.include_router(optimization_phase_api.router)
 app.include_router(broker_api.router)
-app.include_router(knowledge_api.router)
+# app.include_router(knowledge_api.router)  # Removed in v2 — page deleted
 app.include_router(ml_api.router)
 app.include_router(market_api.router)
 app.include_router(ws_api.router)
 app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
 app.include_router(recycle_bin_api.router)
-app.include_router(news_api.router)
-app.include_router(watchlist_api.router)
+# app.include_router(news_api.router)  # Removed in v2 — page deleted
+# app.include_router(watchlist_api.router)  # Removed in v2 — page deleted
 app.include_router(webhook_api.router)
 app.include_router(telegram_webhook_api.router)
 app.include_router(prop_firm_api.router)
 app.include_router(ctrader_oauth_api.router)
 app.include_router(broadcast_api.router)
+app.include_router(portfolio_api.router)
 
 
 def _seed_admin_user():
@@ -522,6 +527,17 @@ def _seed_all_strategies():
 
         # Master strategy catalog — only active, verified strategies
         catalog = [
+            {
+                "name": "Smart Money Concepts (SMC)",
+                "file": "s03_smart_money_concepts.py",
+                "description": (
+                    "Institutional Smart Money strategy. Detects liquidity sweeps, "
+                    "order blocks, and market structure shifts. GOOD: PF 3.69, "
+                    "WR 93.2%, MaxDD 0.86% on XAUUSD M5."
+                ),
+                "timeframes": "M5 / M15",
+                "tags": ["smc", "liquidity", "order_block", "institutional"],
+            },
             {
                 "name": "Turtle Trading (Donchian)",
                 "file": "s07_turtle_trading.py",
@@ -649,6 +665,39 @@ def _seed_all_strategies():
                 ),
                 "timeframes": "M5",
                 "tags": ["xagusd", "silver", "stochastic", "scalping", "mean_reversion"],
+            },
+            {
+                "name": "Momentum ROC+SMA (Crypto)",
+                "file": "s45_momentum_crypto.py",
+                "description": (
+                    "Walk-forward STRONG momentum strategy for crypto. ROC(10) + SMA(20) "
+                    "trend filter + ATR rising volatility. BTCUSD D1 PF=1.374, "
+                    "ETHUSD D1 PF=1.434. Best performing crypto strategy overall."
+                ),
+                "timeframes": "D1 / H4",
+                "tags": ["momentum", "roc", "crypto", "trend_following"],
+            },
+            {
+                "name": "TTM Squeeze Crypto",
+                "file": "s46_ttm_squeeze_crypto.py",
+                "description": (
+                    "TTM Squeeze adapted for crypto 24/7 markets. BB/KC squeeze "
+                    "detection with momentum breakout. Walk-forward STRONG on "
+                    "BTCUSD H1 PF=1.310 with negative PF degradation (OOS > IS)."
+                ),
+                "timeframes": "H1 / H4",
+                "tags": ["squeeze", "bollinger", "keltner", "crypto"],
+            },
+            {
+                "name": "MACD+RSI Crypto",
+                "file": "s47_macd_rsi_crypto.py",
+                "description": (
+                    "MACD signal cross confirmed by RSI momentum filter for crypto. "
+                    "Walk-forward OK on BTCUSD H1 PF=1.166. Simple but effective "
+                    "dual-confirmation entry."
+                ),
+                "timeframes": "H1 / H4",
+                "tags": ["macd", "rsi", "crypto", "momentum"],
             },
             {
                 "name": "Larry Williams V2 (Trend-Filtered)",
@@ -804,6 +853,31 @@ def _seed_all_strategies():
                                 "sharpe": 0.26, "trades": 10542, "net_profit_pct": 192.2,
                                 "trades_per_day": 11.7, "wf_score": 80.0, "robustness": "STRONG",
                                 "symbol": "XAGUSD", "tf": "M5"},
+            },
+            "s45_momentum_crypto.py": {
+                "params": {"roc_period": 10, "sma_period": 20, "atr_period": 14,
+                           "atr_slope_period": 5, "atr_sl_mult": 2.0, "atr_tp_mult": 4.0,
+                           "cooldown_bars": 5, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.374, "win_rate": 42.0, "max_dd_pct": 5.4,
+                                "sharpe": 1.8, "trades": 54, "net_profit_pct": 65.0,
+                                "wf_score": 87.0, "robustness": "STRONG", "symbol": "BTCUSD", "tf": "D1"},
+            },
+            "s46_ttm_squeeze_crypto.py": {
+                "params": {"bb_period": 20, "bb_mult": 2.0, "kc_period": 20, "kc_mult": 1.5,
+                           "mom_period": 12, "atr_period": 14, "atr_sl_mult": 1.5,
+                           "atr_tp_mult": 6.0, "min_squeeze_bars": 3, "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.310, "win_rate": 20.0, "max_dd_pct": 19.5,
+                                "sharpe": 1.2, "trades": 312, "net_profit_pct": 135.7,
+                                "wf_score": 80.0, "robustness": "STRONG", "symbol": "BTCUSD", "tf": "H1"},
+            },
+            "s47_macd_rsi_crypto.py": {
+                "params": {"macd_fast": 12, "macd_slow": 26, "macd_signal": 9,
+                           "rsi_period": 14, "rsi_bull_level": 50, "rsi_bear_level": 50,
+                           "atr_period": 14, "atr_sl_mult": 2.0, "atr_tp_mult": 4.0,
+                           "risk_per_trade": 0.005},
+                "performance": {"profit_factor": 1.166, "win_rate": 29.7, "max_dd_pct": 14.2,
+                                "sharpe": 0.9, "trades": 750, "net_profit_pct": 82.3,
+                                "wf_score": 70.0, "robustness": "GOOD", "symbol": "BTCUSD", "tf": "H1"},
             },
             "s08c_larry_williams_v2.py": {
                 "params": {"breakout_factor": 0.5, "atr_period": 14, "atr_sl_mult": 2.0,

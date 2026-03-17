@@ -32,6 +32,9 @@ class TradingAgent(Base):
     # Optional prop firm account link for pre-trade rule validation
     prop_firm_account_id = Column(Integer, ForeignKey("prop_firm_accounts.id"), nullable=True)
 
+    # Optional portfolio manager link for cross-agent coordination
+    portfolio_id = Column(Integer, ForeignKey("portfolio_managers.id"), nullable=True)
+
     # Agent mode: paper | confirmation | auto
     mode = Column(String(20), nullable=False, default="paper")
 

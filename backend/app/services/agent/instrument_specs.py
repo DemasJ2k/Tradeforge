@@ -40,9 +40,13 @@ INSTRUMENT_SPECS: dict[str, dict] = {
     "AUS200":  {"type": "index", "contract_size": 1, "pip_size": 1.0},
     "UK100":   {"type": "index", "contract_size": 1, "pip_size": 1.0},
 
+    # US500 / S&P 500
+    "US500":   {"type": "index", "contract_size": 1, "pip_size": 0.1},
+
     # Crypto
     "BTCUSD":  {"type": "crypto", "contract_size": 1, "pip_size": 1.0},
     "ETHUSD":  {"type": "crypto", "contract_size": 1, "pip_size": 0.01},
+    "SOLUSD":  {"type": "crypto", "contract_size": 1, "pip_size": 0.01},
 
     # Energies
     "WTIUSD":  {"type": "energy", "contract_size": 1000, "pip_size": 0.01},
