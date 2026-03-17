@@ -20,7 +20,7 @@ import type {
   BacktestListItem,
 } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket, Database } from 'lucide-react';
+import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket, Database, FlaskConical } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/Skeletons';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -30,6 +30,7 @@ import RunHistorySidebar from './components/RunHistorySidebar';
 import StrategySettingsModal from '@/components/StrategySettingsModal';
 import DeployAgentDialog from './components/DeployAgentDialog';
 import DataSourcesPanel from './components/DataSourcesPanel';
+import WalkForwardPanel from './components/WalkForwardPanel';
 
 export default function BacktestPage() {
   const isMobile = useIsMobile();
@@ -46,7 +47,7 @@ export default function BacktestPage() {
   const [deployOpen, setDeployOpen] = useState(false);
   // Track last run config so we can re-run after settings change
   const [lastRunConfig, setLastRunConfig] = useState<Record<string, unknown> | null>(null);
-  const [activeTab, setActiveTab] = useState<'backtest' | 'datasources'>('backtest');
+  const [activeTab, setActiveTab] = useState<'backtest' | 'datasources' | 'walkforward'>('backtest');
 
   // Load initial data
   useEffect(() => {
@@ -278,6 +279,17 @@ export default function BacktestPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('walkforward')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'walkforward'
+                  ? 'bg-accent text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FlaskConical className="w-4 h-4" />
+              {!isMobile && 'Walk-Forward'}
+            </button>
           </div>
           {activeTab === 'backtest' && result && (
             <span className="text-xs text-muted-foreground font-mono">
@@ -343,6 +355,28 @@ export default function BacktestPage() {
               datasources={datasources}
               onRefresh={refreshDatasources}
             />
+          </div>
+        ) : activeTab === 'walkforward' ? (
+          <div className="flex-1 overflow-auto p-4">
+            {result ? (
+              <WalkForwardPanel
+                strategyId={result.strategy_id}
+                datasourceId={result.datasource_id || 0}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-4 max-w-md">
+                  <FlaskConical className="w-12 h-12 mx-auto text-muted-foreground/30" />
+                  <h2 className="text-xl font-semibold text-muted-foreground">Run a Backtest First</h2>
+                  <p className="text-sm text-muted-foreground/60">
+                    Run a backtest on the Backtest tab, then come here to validate it with walk-forward analysis.
+                  </p>
+                  <Button onClick={() => setActiveTab('backtest')} className="gap-2">
+                    <BarChart3 className="w-4 h-4" /> Go to Backtest
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <>

@@ -619,7 +619,8 @@ def main():
         torch.onnx.export(
             policy, dummy_input, onnx_path,
             input_names=["obs"], output_names=["action"],
-            opset_version=11,
+            opset_version=18,
+            dynamo=False,
         )
         print(f"  ONNX exported: {onnx_path}")
     except Exception as e:

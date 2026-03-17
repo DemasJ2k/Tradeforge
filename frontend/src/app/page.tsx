@@ -434,23 +434,16 @@ export default function Dashboard() {
         {/* Quick Stats */}
         <Card className="bg-card-bg border-card-border">
           <CardContent className="p-5 space-y-4">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Platform Stats</h3>
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Quick Overview</h3>
           <div className="space-y-3 text-sm">
             <StatRow icon={<Zap className="h-3.5 w-3.5 text-accent" />} label="Strategies" value={`${s.user} user · ${s.system} system`} />
+            <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Active Agents" value={`${ag.live} live · ${ag.paper} paper`} />
             <StatRow icon={<Database className="h-3.5 w-3.5 text-accent" />} label="Data Sources" value={`${data.data_sources} files`} />
-            <StatRow icon={<BarChart3 className="h-3.5 w-3.5 text-accent" />} label="Backtests Run" value={`${data.backtests.total}`} />
-            <StatRow
-              label="Last Backtest"
-              value={data.backtests.last_run
-                ? new Date(data.backtests.last_run).toLocaleDateString()
-                : "—"
-              }
-            />
-            <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Agents (Paper)" value={`${ag.paper}`} />
+            <StatRow icon={<BarChart3 className="h-3.5 w-3.5 text-accent" />} label="Backtests" value={`${data.backtests.total} total`} />
           </div>
           <div className="pt-2 border-t border-card-border space-y-1.5">
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
-              <Link href="/strategies"><Plus className="h-3 w-3" /> New Strategy</Link>
+              <Link href="/portfolio"><ArrowRight className="h-3 w-3" /> Portfolio</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
               <Link href="/backtest"><BarChart3 className="h-3 w-3" /> Run Backtest</Link>

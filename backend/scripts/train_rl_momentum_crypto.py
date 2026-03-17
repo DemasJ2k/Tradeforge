@@ -591,7 +591,8 @@ def export_onnx(model, output_path, obs_size=32):
             input_names=["obs"],
             output_names=["action_logits"],
             dynamic_axes={"obs": {0: "batch"}, "action_logits": {0: "batch"}},
-            opset_version=11,
+            opset_version=18,
+            dynamo=False,
         )
         print(f"  ONNX exported: {output_path}")
         return True
