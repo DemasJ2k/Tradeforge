@@ -2,6 +2,7 @@
 Risk Manager for the Algo Trading Engine.
 
 Validates proposed trades against configurable risk limits before execution.
+Includes prop firm presets for common challenge/funded account rules.
 """
 
 import logging
@@ -9,6 +10,79 @@ from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# ── Prop Firm Presets ──────────────────────────────────────────────────
+# Pre-configured risk profiles matching common prop firm rules.
+
+PROP_FIRM_PRESETS = {
+    "prop_firm_conservative": {
+        "max_daily_loss_pct": 4.0,       # 4% daily max loss
+        "max_drawdown_pct": 8.0,         # 8% total max drawdown
+        "max_open_positions": 3,         # Fewer concurrent positions
+        "position_size_type": "percent_risk",
+        "position_size_value": 0.005,    # 0.5% risk per trade
+        "exposure_limit": 0.0,
+        "label": "Prop Firm Conservative",
+        "description": "Strict limits for prop firm challenges (4% daily, 8% total DD)",
+    },
+    "prop_firm_standard": {
+        "max_daily_loss_pct": 5.0,       # 5% daily max loss (FTMO, MFF, etc.)
+        "max_drawdown_pct": 10.0,        # 10% total max drawdown
+        "max_open_positions": 5,
+        "position_size_type": "percent_risk",
+        "position_size_value": 0.01,     # 1% risk per trade
+        "exposure_limit": 0.0,
+        "label": "Prop Firm Standard",
+        "description": "Standard prop firm limits (5% daily, 10% total DD)",
+    },
+    "prop_firm_aggressive": {
+        "max_daily_loss_pct": 5.0,       # Same daily limit
+        "max_drawdown_pct": 12.0,        # Slightly more room
+        "max_open_positions": 6,
+        "position_size_type": "percent_risk",
+        "position_size_value": 0.015,    # 1.5% risk per trade
+        "exposure_limit": 0.0,
+        "label": "Prop Firm Aggressive",
+        "description": "Aggressive within prop firm limits (5% daily, 12% total DD)",
+    },
+    "personal_conservative": {
+        "max_daily_loss_pct": 2.0,
+        "max_drawdown_pct": 5.0,
+        "max_open_positions": 3,
+        "position_size_type": "percent_risk",
+        "position_size_value": 0.005,
+        "exposure_limit": 0.0,
+        "label": "Personal Conservative",
+        "description": "Conservative personal trading (2% daily, 5% total DD)",
+    },
+    "no_limits": {
+        "max_daily_loss_pct": 0.0,
+        "max_drawdown_pct": 0.0,
+        "max_open_positions": 10,
+        "position_size_type": "fixed_lot",
+        "position_size_value": 0.01,
+        "exposure_limit": 0.0,
+        "label": "No Limits",
+        "description": "No risk limits (not recommended for live trading)",
+    },
+}
+
+
+def get_risk_preset(name: str) -> dict:
+    """Get a risk management preset by name. Returns empty dict if not found."""
+    preset = PROP_FIRM_PRESETS.get(name, {})
+    # Return only the config keys (exclude label/description)
+    return {k: v for k, v in preset.items() if k not in ("label", "description")}
+
+
+def list_risk_presets() -> list[dict]:
+    """List all available risk presets with their metadata."""
+    return [
+        {"id": name, "label": preset["label"], "description": preset["description"],
+         "max_daily_loss_pct": preset["max_daily_loss_pct"],
+         "max_drawdown_pct": preset["max_drawdown_pct"]}
+        for name, preset in PROP_FIRM_PRESETS.items()
+    ]
 
 
 @dataclass

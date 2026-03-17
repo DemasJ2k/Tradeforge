@@ -532,13 +532,13 @@ export default function Dashboard() {
               {ag.items.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center justify-between rounded-lg border border-card-border/60 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-card-border/60 px-3 py-2 gap-2"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block h-2 w-2 rounded-full ${statusDot(agent.status)}`} />
-                    <span className="text-sm font-medium">{agent.name}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${statusDot(agent.status)}`} />
+                    <span className="text-sm font-medium truncate">{agent.name}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                     <span>{agent.symbol}</span>
                     <span>{agent.timeframe}</span>
                     <Badge variant="secondary" className={`text-[10px] ${
@@ -682,7 +682,7 @@ function MiniEquityChart({ points }: { points: { date: string; pnl: number }[] }
   const areaD = `${pathD} L${toX(points.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${toX(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-20 sm:h-24" preserveAspectRatio="none">
       {/* Zero line */}
       <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="currentColor" strokeOpacity={0.15} strokeDasharray="4 4" />
       {/* Area fill */}

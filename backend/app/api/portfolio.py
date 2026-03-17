@@ -373,3 +373,10 @@ def update_portfolio_settings(
                 setattr(pm, f"max_{field}", value)
 
     return {"status": "updated"}
+
+
+@router.get("/risk-presets")
+def get_risk_presets():
+    """List available risk management presets (prop firm, conservative, etc.)."""
+    from app.services.agent.risk_manager import list_risk_presets
+    return {"presets": list_risk_presets()}

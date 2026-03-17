@@ -1079,7 +1079,7 @@ export default function TradingPage() {
         </div>
 
         {/* Chart — dominant height */}
-        <div ref={chartContainerRef} className="relative h-[55vh] min-h-[350px]">
+        <div ref={chartContainerRef} className="relative h-[45vh] sm:h-[55vh] min-h-[250px] sm:min-h-[350px]">
         {chartLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading chart data...
