@@ -31,8 +31,11 @@ is auto-wrapped in a single AND group (the legacy flat model).
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -295,6 +298,7 @@ def evaluate_direction(
     direction to fire.  "both" rules are shared across all direction groups.
     """
     if rules is None or (isinstance(rules, list) and len(rules) == 0):
+        logger.warning("evaluate_direction: no entry rules configured — no trades will be generated")
         return ""
 
     # ── Flat legacy list (no type/node_type keys) ─────────────────────
@@ -306,6 +310,8 @@ def evaluate_direction(
     # ── Tree evaluation ──────────────────────────────────────────────
     tree = normalise_rules(rules)
     if not _eval_node(tree, bar_idx, value_fn):
+        if bar_idx == 0:
+            logger.debug("evaluate_direction: tree evaluation failed on bar %d", bar_idx)
         return ""
 
     # Determine direction from leaf conditions
@@ -356,6 +362,8 @@ def _evaluate_direction_flat(
     if not long_rules and not short_rules:
         if all(_eval_single(r, bar_idx, value_fn) for r in rules):
             return _direction_from_flat_rules(rules)
+        if bar_idx == 0:
+            logger.debug("_evaluate_direction_flat: legacy rules did not pass on bar %d", bar_idx)
         return ""
 
     # Evaluate shared "both" rules once

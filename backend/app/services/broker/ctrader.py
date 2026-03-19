@@ -20,6 +20,7 @@ from typing import Optional, AsyncGenerator
 from .base import (
     BrokerAdapter,
     AccountInfo,
+    ClosedTrade,
     Position,
     PositionSide,
     Order,
@@ -65,6 +66,8 @@ PROTO_OA_SUBSCRIBE_SPOTS_RES = 2128
 PROTO_OA_SPOT_EVENT = 2131
 PROTO_OA_GET_TRENDBARS_REQ = 2137
 PROTO_OA_GET_TRENDBARS_RES = 2138
+PROTO_OA_DEAL_LIST_REQ = 2133
+PROTO_OA_DEAL_LIST_RES = 2134
 PROTO_OA_GET_ACCOUNTS_BY_ACCESS_TOKEN_REQ = 2149
 PROTO_OA_GET_ACCOUNTS_BY_ACCESS_TOKEN_RES = 2150
 
@@ -751,6 +754,69 @@ class CTraderAdapter(BrokerAdapter):
             ))
 
         return orders
+
+    # ── Closed Trades ─────────────────────────────────
+
+    async def get_closed_trades(
+        self,
+        since: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> list[ClosedTrade]:
+        """Fetch closed trades (deals) from cTrader deal history."""
+        # cTrader requires a time range; default to last 7 days
+        to_ts = int(time.time() * 1000)
+        if since:
+            from_ts = int(since.timestamp() * 1000)
+        else:
+            from_ts = to_ts - 7 * 24 * 60 * 60 * 1000  # 7 days ago
+
+        try:
+            resp = await self._send(PROTO_OA_DEAL_LIST_REQ, {
+                "ctidTraderAccountId": self._account_id,
+                "fromTimestamp": from_ts,
+                "toTimestamp": to_ts,
+                "maxRows": min(limit, 1000),
+            })
+        except Exception as e:
+            logger.warning("cTrader: failed to get deal history: %s", e)
+            return []
+
+        closed_trades: list[ClosedTrade] = []
+        for deal in resp.get("payload", {}).get("deal", []):
+            # Only closing deals have realized P&L
+            close_pnl = deal.get("closePositionDetail", {})
+            if not close_pnl:
+                continue
+
+            pnl = (close_pnl.get("grossProfit", 0) + close_pnl.get("swap", 0)
+                   + close_pnl.get("commission", 0)) / 100.0
+
+            symbol_id = deal.get("symbolId", 0)
+            sym_info = self._symbol_cache.get(symbol_id, {})
+            symbol_name = sym_info.get("symbolName", str(symbol_id))
+            digits = sym_info.get("digits", 5)
+
+            is_buy = deal.get("tradeSide", "BUY") == "BUY"
+            volume = deal.get("volume", 0)
+            exec_price = self._convert_price(deal.get("executionPrice", 0), digits)
+            entry_price = self._convert_price(close_pnl.get("entryPrice", 0), digits)
+
+            exec_ts = deal.get("executionTimestamp", 0)
+            close_time = (datetime.fromtimestamp(exec_ts / 1000, tz=timezone.utc)
+                          if exec_ts else datetime.now(timezone.utc))
+
+            closed_trades.append(ClosedTrade(
+                trade_id=str(deal.get("dealId", "")),
+                symbol=symbol_name,
+                side="BUY" if is_buy else "SELL",
+                size=self._from_volume(volume),
+                entry_price=entry_price,
+                exit_price=exec_price,
+                pnl=pnl,
+                close_time=close_time,
+            ))
+
+        return closed_trades
 
     # ── Market Data ────────────────────────────────────
 
