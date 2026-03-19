@@ -82,6 +82,10 @@ class BuilderStrategy(StrategyBase):
             return
 
         entry_rules = self.config.get("entry_rules", [])
+        if not entry_rules:
+            if bar_idx == 0:
+                logger.warning("Strategy has no entry_rules — backtest will produce zero trades")
+            return
         direction = self._eval_rules_with_direction(entry_rules, bar_idx)
         if direction:
             self._open_trade(event, direction)

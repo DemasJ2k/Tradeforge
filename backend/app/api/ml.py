@@ -1123,10 +1123,10 @@ async def train_regime_model(
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise HTTPException(404, "DataSource not found")
-    if not ds.file_path:
+    if not ds.filepath:
         raise HTTPException(400, "DataSource has no file")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
     if len(ohlcv_data) < 200:
         raise HTTPException(400, f"Need at least 200 bars, got {len(ohlcv_data)}")
 
@@ -1151,8 +1151,8 @@ async def train_regime_model(
     history = await loop.run_in_executor(_train_pool, _get_history)
 
     if history:
-        symbol = ds.name.split("_")[0] if "_" in ds.name else ds.name
-        timeframe = ds.name.split("_")[1] if "_" in ds.name and len(ds.name.split("_")) > 1 else "H1"
+        symbol = ds.filename.split("_")[0] if "_" in ds.filename else ds.filename
+        timeframe = ds.filename.split("_")[1] if "_" in ds.filename and len(ds.filename.split("_")) > 1 else "H1"
 
         # Clear old history for this symbol+timeframe+model
         db.query(RegimeHistory).filter(
@@ -1197,7 +1197,7 @@ async def get_current_regime(
     if not ds:
         raise HTTPException(404, "DataSource not found")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
 
     def _predict():
         from app.services.ml.regime_detector import RegimeDetector
@@ -1269,7 +1269,7 @@ async def train_lstm_model(
     if not ds:
         raise HTTPException(404, "DataSource not found")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
     min_bars = seq_len + horizon + 100
     if len(ohlcv_data) < min_bars:
         raise HTTPException(400, f"Need at least {min_bars} bars, got {len(ohlcv_data)}")
@@ -1305,7 +1305,7 @@ async def lstm_predict(
     if not ds:
         raise HTTPException(404, "DataSource not found")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
 
     def _predict():
         from app.services.ml.lstm_forecaster import LSTMForecaster
@@ -1342,7 +1342,7 @@ async def train_rl_agent(
     if not ds:
         raise HTTPException(404, "DataSource not found")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
     if len(ohlcv_data) < 500:
         raise HTTPException(400, f"Need at least 500 bars, got {len(ohlcv_data)}")
 
@@ -1375,7 +1375,7 @@ async def evaluate_rl_agent(
     if not ds:
         raise HTTPException(404, "DataSource not found")
 
-    ohlcv_data = _load_csv_ohlcv(ds.file_path)
+    ohlcv_data = _load_csv_ohlcv(ds.filepath)
 
     def _eval():
         from app.services.ml.rl_trainer import RLTrainer

@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-03-16T03:53:57.946664",
+  "s45_best_params": {
+    "adx_threshold": 25,
+    "atr_sl_mult": 1.5,
+    "atr_tp_mult": 3.0,
+    "rsi_cap": 70,
+    "session_start_hour": 7,
+    "session_end_hour": 15,
+    "lot_size": 0.01
+  },
+  "s45_best_result": {
+    "trades": 1523,
+    "win_rate": 37.2,
+    "pf": 1.15,
+    "net": 516.82,
+    "dd": 6.4,
+    "sharpe": 0.69,
+    "avg_win": 6.86,
+    "avg_loss": 3.53
+  },
+  "s46_best_params": {
+    "or_bars": 9,
+    "atr_sl_mult": 2.5,
+    "atr_tp_mult": 5.0,
+    "use_vwap_filter": true,
+    "use_trailing": false,
+    "entry_cutoff_hour": 18,
+    "max_daily_trades": 3,
+    "lot_size": 0.1
+  },
+  "s46_best_result": {
+    "trades": 1772,
+    "win_rate": 37.1,
+    "pf": 0.95,
+    "net": -288.39,
+    "dd": 17.6,
+    "sharpe": -0.36,
+    "avg_win": 7.67,
+    "avg_loss": 4.79
+  },
+  "s47_best_params": {
+    "rsi_oversold": 5,
+    "rsi_overbought": 95,
+    "atr_sl_mult": 1.5,
+    "bb_mult": 1.5,
+    "max_bars_held": 10,
+    "min_bars_between": 2,
+    "lot_size": 0.01,
+    "tp_target": "bb_mid"
+  },
+  "s47_best_result": {
+    "trades": 4421,
+    "win_rate": 47.0,
+    "pf": 1.04,
+    "net": 283.48,
+    "dd": 14.2,
+    "sharpe": 0.19,
+    "avg_win": 3.75,
+    "avg_loss": 3.2
+  }
+}
