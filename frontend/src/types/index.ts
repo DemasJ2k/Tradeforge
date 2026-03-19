@@ -323,6 +323,7 @@ export interface BacktestListItem {
 
 export interface UserSettings {
   display_name: string;
+  timezone: string;
   theme: string;
   accent_color: string;
   font_size: string;

@@ -1002,8 +1002,42 @@ export default function SettingsPage() {
               <Field label="Display Name">
                 <input type="text" value={s.display_name} onChange={e => set('display_name', e.target.value)} className={inputCls} placeholder="Your name" />
               </Field>
+              <Field label="Timezone">
+                <select
+                  value={s.timezone || 'UTC'}
+                  onChange={e => set('timezone', e.target.value)}
+                  className={selectCls}
+                >
+                  {[
+                    { label: 'UTC (UTC+0)', value: 'UTC' },
+                    { label: 'London (UTC+0/+1)', value: 'Europe/London' },
+                    { label: 'Paris (UTC+1/+2)', value: 'Europe/Paris' },
+                    { label: 'Helsinki (UTC+2/+3)', value: 'Europe/Helsinki' },
+                    { label: 'Moscow (UTC+3)', value: 'Europe/Moscow' },
+                    { label: 'Dubai (UTC+4)', value: 'Asia/Dubai' },
+                    { label: 'Kolkata (UTC+5:30)', value: 'Asia/Kolkata' },
+                    { label: 'Bangkok (UTC+7)', value: 'Asia/Bangkok' },
+                    { label: 'Singapore (UTC+8)', value: 'Asia/Singapore' },
+                    { label: 'Hong Kong (UTC+8)', value: 'Asia/Hong_Kong' },
+                    { label: 'Tokyo (UTC+9)', value: 'Asia/Tokyo' },
+                    { label: 'Sydney (UTC+10/+11)', value: 'Australia/Sydney' },
+                    { label: 'Auckland (UTC+12/+13)', value: 'Pacific/Auckland' },
+                    { label: 'New York (UTC-5/-4)', value: 'America/New_York' },
+                    { label: 'Chicago (UTC-6/-5)', value: 'America/Chicago' },
+                    { label: 'Denver (UTC-7/-6)', value: 'America/Denver' },
+                    { label: 'Los Angeles (UTC-8/-7)', value: 'America/Los_Angeles' },
+                    { label: 'Anchorage (UTC-9/-8)', value: 'America/Anchorage' },
+                    { label: 'Honolulu (UTC-10)', value: 'Pacific/Honolulu' },
+                    { label: 'Sao Paulo (UTC-3)', value: 'America/Sao_Paulo' },
+                    { label: 'Johannesburg (UTC+2)', value: 'Africa/Johannesburg' },
+                    { label: 'Lagos (UTC+1)', value: 'Africa/Lagos' },
+                  ].map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
+              </Field>
               <div className="pt-2">
-                <button onClick={() => save({ display_name: s.display_name })} disabled={saving} className={btnPrimary}>
+                <button onClick={() => save({ display_name: s.display_name, timezone: s.timezone || 'UTC' })} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>

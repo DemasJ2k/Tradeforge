@@ -752,11 +752,12 @@ export default function TradingPage() {
   /* ── polling loop ─────────────────────────────── */
   const refreshData = useCallback(async () => {
     try {
+      const bp = brokerName ? `?broker=${brokerName}` : "";
       const [acc, pos, ord, hist] = await Promise.all([
-        api.get<AccountInfo>("/api/broker/account"),
-        api.get<LivePosition[]>("/api/broker/positions"),
-        api.get<LiveOrder[]>("/api/broker/orders"),
-        api.get<TradeHistory[]>("/api/broker/trades?limit=20"),
+        api.get<AccountInfo>(`/api/broker/account${bp}`),
+        api.get<LivePosition[]>(`/api/broker/positions${bp}`),
+        api.get<LiveOrder[]>(`/api/broker/orders${bp}`),
+        api.get<TradeHistory[]>(`/api/broker/trades${bp ? bp + "&" : "?"}limit=20`),
       ]);
       setAccount(acc);
       setPositions(pos);
@@ -767,7 +768,7 @@ export default function TradingPage() {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     }
-  }, []);
+  }, [brokerName]);
 
   const startPolling = useCallback(() => {
     refreshData();

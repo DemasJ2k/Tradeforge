@@ -14,6 +14,7 @@ class UserSettings(Base):
 
     # --- Profile ---
     display_name = Column(String(100), default="")
+    timezone = Column(String(60), default="UTC")  # IANA tz, e.g. "Australia/Sydney"
 
     # --- Appearance ---
     theme = Column(String(20), default="dark")  # dark, light, system
