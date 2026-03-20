@@ -144,6 +144,8 @@ def _run_schema_migrations():
         ("agent_trades", "broker_pnl",       "REAL"),
         ("agent_trades", "broker_name",      "VARCHAR(50)"),
         ("agent_trades", "exit_reason",      "VARCHAR(30)"),
+        # User timezone preference
+        ("user_settings", "timezone",          "VARCHAR(60) DEFAULT 'UTC'"),
         # Portfolio manager link on trading agents
         ("trading_agents", "portfolio_id", "INTEGER"),
     ]

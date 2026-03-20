@@ -7,6 +7,7 @@ class SettingsUpdate(BaseModel):
 
     # Profile
     display_name: Optional[str] = None
+    timezone: Optional[str] = None  # IANA timezone, e.g. "Australia/Sydney"
 
     # Appearance
     theme: Optional[str] = None
@@ -70,6 +71,7 @@ class SettingsUpdate(BaseModel):
 class SettingsResponse(BaseModel):
     # Profile
     display_name: str = ""
+    timezone: str = "UTC"
 
     # Appearance
     theme: str = "dark"

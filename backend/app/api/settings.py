@@ -58,6 +58,7 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
     """Convert DB model to response (never leak raw API keys)."""
     return SettingsResponse(
         display_name=s.display_name or "",
+        timezone=s.timezone or "UTC",
         theme=s.theme or "dark",
         accent_color=s.accent_color or "blue",
         font_size=s.font_size or "normal",

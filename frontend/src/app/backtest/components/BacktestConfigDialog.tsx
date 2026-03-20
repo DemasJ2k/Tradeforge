@@ -101,6 +101,14 @@ export default function BacktestConfigDialog({
 
   const handleRun = () => {
     if (!canRun) return;
+    // Validate entry rules exist for non-RL strategies
+    if (!isRlMode && strategyId) {
+      const selectedStrategy = strategies.find(s => String(s.id) === strategyId);
+      if (selectedStrategy && (!selectedStrategy.entry_rules || selectedStrategy.entry_rules.length === 0)) {
+        alert("This strategy has no entry rules defined. Please add at least one entry rule in the Strategy Editor before running a backtest.");
+        return;
+      }
+    }
     if (balance <= 0) { alert("Initial balance must be greater than 0"); return; }
     if (spread < 0) { alert("Spread cannot be negative"); return; }
     if (commission < 0) { alert("Commission cannot be negative"); return; }

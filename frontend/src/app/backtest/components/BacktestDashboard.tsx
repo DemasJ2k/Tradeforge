@@ -16,7 +16,7 @@ import type { BacktestResponse } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, TrendingUp, TrendingDown, GitCompare, Brain, Bot, Activity } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, GitCompare, Brain, Bot, Activity, AlertTriangle } from 'lucide-react';
 import StatsCards from './StatsCards';
 import EquityCurveChart from './EquityCurveChart';
 import TradeLogTable from './TradeLogTable';
@@ -47,6 +47,16 @@ export default function BacktestDashboard({ result, compareResult, onClearCompar
           <Button variant="ghost" size="sm" onClick={onClearCompare} className="ml-auto h-6 w-6 p-0">
             <X className="w-3 h-3" />
           </Button>
+        </div>
+      )}
+
+      {/* Zero trades warning */}
+      {stats.total_trades === 0 && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="text-sm text-amber-300">
+            No trades were generated. Check that your strategy has entry rules defined with valid indicator references.
+          </span>
         </div>
       )}
 
