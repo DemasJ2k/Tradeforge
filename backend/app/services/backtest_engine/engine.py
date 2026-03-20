@@ -295,6 +295,20 @@ class Engine:
 
             fill = self.fill_engine.fill_market_order(order, bar, self.instrument)
             if fill.filled:
+                # Adjust bracket SL/TP to maintain risk/reward relative to
+                # actual fill price.  The entry was signalled at order.price
+                # (bar[i-1] close) but fills at bar[i] open.  Shift SL/TP by
+                # the same offset so the pip-distance stays the same.
+                if bracket and order.price > 0:
+                    offset = fill.fill_price - order.price
+                    if abs(offset) > 1e-10:
+                        if bracket.stop_loss:
+                            bracket.stop_loss.price += offset
+                        if bracket.take_profit:
+                            bracket.take_profit.price += offset
+                        if bracket.trailing_stop:
+                            bracket.trailing_stop.price += offset
+                            bracket.trailing_stop.trail_trigger += offset
                 self._execute_fill(fill, bar)
 
     def _execute_fill(self, fill: FillResult, bar: Bar) -> None:

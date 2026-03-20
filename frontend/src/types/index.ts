@@ -198,7 +198,7 @@ export interface Strategy {
     trades: number;
     net_profit_pct: number;
     wf_score: number;
-    robustness: "GOOD" | "MARGINAL" | "POOR";
+    robustness: "STRONG" | "GOOD" | "MARGINAL" | "POOR";
     symbol: string;
     tf: string;
   } | null;
@@ -593,6 +593,9 @@ export interface LivePosition {
   open_time: string;
   stop_loss: number | null;
   take_profit: number | null;
+  agent_name: string | null;
+  agent_id: number | null;
+  strategy_name: string | null;
 }
 
 export interface LiveOrder {
@@ -647,6 +650,7 @@ export interface PriceTick {
 
 export interface TradeHistory {
   id: number;
+  source: string;
   broker: string;
   symbol: string;
   direction: string;
@@ -661,6 +665,11 @@ export interface TradeHistory {
   stop_loss: number | null;
   take_profit: number | null;
   exit_reason: string | null;
+  agent_name: string | null;
+  agent_id: number | null;
+  signal_type: string | null;
+  signal_confidence: number | null;
+  duration_seconds: number | null;
 }
 
 // --- Knowledge Base Types ---

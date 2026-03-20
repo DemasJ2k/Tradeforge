@@ -5,7 +5,7 @@ import type { UserSettings, StorageInfo, Invitation, BrokerCredentialMasked } fr
 import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, type LucideIcon } from 'lucide-react';
+import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, Shield, type LucideIcon } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -524,6 +524,253 @@ function WebhookSettingsSection() {
   );
 }
 
+// ─── Prop Firm types ───
+interface PropFirmAccount {
+  id: number;
+  firm_name: string;
+  account_number: string;
+  initial_balance: number;
+  current_balance: number;
+  daily_loss_limit_pct: number;
+  max_drawdown_pct: number;
+  funded_amount: number;
+  status: string;
+  created_at: string;
+}
+
+interface PropFirmDashboard {
+  total_accounts: number;
+  total_funded_capital: number;
+  accounts_at_risk: number;
+  active_accounts: number;
+  breached_accounts: number;
+}
+
+function PropFirmTab() {
+  const [accounts, setAccounts] = useState<PropFirmAccount[]>([]);
+  const [dashboard, setDashboard] = useState<PropFirmDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  // New account form state
+  const [firmName, setFirmName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [initialBalance, setInitialBalance] = useState('');
+  const [dailyLossPct, setDailyLossPct] = useState('5');
+  const [maxDrawdownPct, setMaxDrawdownPct] = useState('10');
+  const [fundedAmount, setFundedAmount] = useState('');
+
+  const loadData = useCallback(async () => {
+    try {
+      const [accRes, dashRes] = await Promise.all([
+        fetch(`${API}/api/prop-firm/accounts`, { headers: authHeaders() }),
+        fetch(`${API}/api/prop-firm/dashboard`, { headers: authHeaders() }),
+      ]);
+      if (accRes.ok) {
+        const data = await accRes.json();
+        setAccounts(Array.isArray(data) ? data : data.accounts || []);
+      }
+      if (dashRes.ok) {
+        setDashboard(await dashRes.json());
+      }
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const resetForm = () => {
+    setFirmName('');
+    setAccountNumber('');
+    setInitialBalance('');
+    setDailyLossPct('5');
+    setMaxDrawdownPct('10');
+    setFundedAmount('');
+    setFormError('');
+  };
+
+  const handleCreate = async () => {
+    if (!firmName || !accountNumber || !initialBalance) {
+      setFormError('Firm name, account number, and initial balance are required.');
+      return;
+    }
+    setSubmitting(true);
+    setFormError('');
+    try {
+      const res = await fetch(`${API}/api/prop-firm/accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          firm_name: firmName,
+          account_number: accountNumber,
+          initial_balance: parseFloat(initialBalance),
+          daily_loss_limit_pct: parseFloat(dailyLossPct),
+          max_drawdown_pct: parseFloat(maxDrawdownPct),
+          funded_amount: parseFloat(fundedAmount || initialBalance),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setFormError(err.detail || 'Failed to create account');
+        return;
+      }
+      resetForm();
+      setShowForm(false);
+      await loadData();
+    } catch { setFormError('Network error'); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`Delete prop firm account "${name}"? This cannot be undone.`)) return;
+    setDeleting(id);
+    try {
+      await fetch(`${API}/api/prop-firm/accounts/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await loadData();
+    } catch { /* ignore */ }
+    finally { setDeleting(null); }
+  };
+
+  const statusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'active': case 'funded': return 'text-green-400 bg-green-900/30';
+      case 'breached': case 'failed': return 'text-red-400 bg-red-900/30';
+      case 'warning': case 'at_risk': return 'text-yellow-400 bg-yellow-900/30';
+      default: return 'text-muted-foreground bg-input-bg';
+    }
+  };
+
+  if (loading) return <div className="text-muted-foreground text-sm py-8">Loading prop firm accounts...</div>;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-foreground">Prop Firm Accounts</h2>
+      <p className="text-sm text-muted-foreground">Track your prop firm challenges, funded accounts, and drawdown limits.</p>
+
+      {/* Dashboard Summary Cards */}
+      {dashboard && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Total Accounts', value: dashboard.total_accounts },
+            { label: 'Total Funded Capital', value: `$${dashboard.total_funded_capital?.toLocaleString() || '0'}` },
+            { label: 'Active Accounts', value: dashboard.active_accounts },
+            { label: 'Accounts at Risk', value: dashboard.accounts_at_risk, danger: dashboard.accounts_at_risk > 0 },
+          ].map(card => (
+            <div key={card.label} className="bg-input-bg border border-card-border rounded-lg p-3">
+              <div className="text-xs text-muted-foreground">{card.label}</div>
+              <div className={`text-lg font-semibold mt-1 ${'danger' in card && card.danger ? 'text-red-400' : 'text-foreground'}`}>
+                {card.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Account List */}
+      {accounts.length === 0 ? (
+        <div className="bg-input-bg border border-card-border rounded-lg p-6 text-center text-muted-foreground text-sm">
+          No prop firm accounts yet. Add one to start tracking.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {accounts.map(acc => (
+            <div key={acc.id} className="bg-input-bg border border-card-border rounded-lg p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-foreground">{acc.firm_name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor(acc.status)}`}>
+                      {acc.status}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">Account: {acc.account_number}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Balance: </span>
+                      <span className="text-foreground">${acc.current_balance?.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Funded: </span>
+                      <span className="text-foreground">${acc.funded_amount?.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Daily Limit: </span>
+                      <span className="text-foreground">{acc.daily_loss_limit_pct}%</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Max DD: </span>
+                      <span className="text-foreground">{acc.max_drawdown_pct}%</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(acc.id, acc.firm_name)}
+                  disabled={deleting === acc.id}
+                  className={`${btnDanger} text-xs px-3 py-1 shrink-0`}
+                >
+                  {deleting === acc.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Account Toggle */}
+      {!showForm ? (
+        <button onClick={() => setShowForm(true)} className={btnPrimary}>
+          + Add Prop Firm Account
+        </button>
+      ) : (
+        <div className="bg-input-bg border border-card-border rounded-lg p-4 space-y-4">
+          <h3 className="text-md font-semibold text-foreground">New Prop Firm Account</h3>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Firm Name">
+              <input type="text" value={firmName} onChange={e => setFirmName(e.target.value)}
+                placeholder="e.g. FTMO, MyForexFunds" className={inputCls} />
+            </Field>
+            <Field label="Account Number">
+              <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
+                placeholder="e.g. 12345678" className={inputCls} />
+            </Field>
+            <Field label="Initial Balance ($)">
+              <input type="number" min="0" step="0.01" value={initialBalance}
+                onChange={e => setInitialBalance(e.target.value)} placeholder="e.g. 100000" className={inputCls} />
+            </Field>
+            <Field label="Funded Amount ($)">
+              <input type="number" min="0" step="0.01" value={fundedAmount}
+                onChange={e => setFundedAmount(e.target.value)} placeholder="Same as balance if blank" className={inputCls} />
+            </Field>
+            <Field label="Daily Loss Limit (%)">
+              <input type="number" min="0" max="100" step="0.1" value={dailyLossPct}
+                onChange={e => setDailyLossPct(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Max Drawdown (%)">
+              <input type="number" min="0" max="100" step="0.1" value={maxDrawdownPct}
+                onChange={e => setMaxDrawdownPct(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+
+          {formError && <div className="text-sm text-red-400">{formError}</div>}
+
+          <div className="flex gap-2">
+            <button onClick={handleCreate} disabled={submitting} className={btnPrimary}>
+              {submitting ? 'Creating...' : 'Create Account'}
+            </button>
+            <button onClick={() => { setShowForm(false); resetForm(); }} className={btnSecondary}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'profile',       label: 'Profile',           icon: User },
   { id: 'appearance',    label: 'Appearance',         icon: Palette },
@@ -532,6 +779,7 @@ const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'data',          label: 'Data Management',    icon: HardDrive },
   { id: 'notifications', label: 'Notifications',      icon: Bell },
   { id: 'platform',      label: 'Platform',           icon: Cog },
+  { id: 'prop-firm',     label: 'Prop Firms',          icon: Shield },
 ];
 type TabId = typeof TABS[number]['id'];
 
@@ -823,8 +1071,8 @@ export default function SettingsPage() {
           setBrokerMsg(p => ({ ...p, ctrader: 'OAuth complete! Fetching accounts...' }));
           await loadBrokerCreds();
 
-          // Fetch trading accounts using the access token from the callback
-          const acctR = await fetch(`${API}/api/broker/ctrader/accounts?access_token=${encodeURIComponent(d.access_token)}`, {
+          // Fetch trading accounts (backend uses stored token from the callback exchange)
+          const acctR = await fetch(`${API}/api/broker/ctrader/accounts`, {
             headers: authHeaders(),
           });
           if (acctR.ok) {
@@ -2521,6 +2769,8 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {tab === 'prop-firm' && <PropFirmTab />}
 
           {/* Status bar */}
           {(saved || error) && (

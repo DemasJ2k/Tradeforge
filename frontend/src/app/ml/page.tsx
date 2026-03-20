@@ -588,17 +588,17 @@ export default function MLPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold">ML Lab</h2>
+          <h2 className="text-lg sm:text-xl font-semibold">ML Lab</h2>
           {view !== "list" && (
             <Button variant="ghost" size="sm" onClick={() => { setView("list"); setPredictions(null); }} className="gap-1 text-muted-foreground">
               <ArrowLeft className="h-3 w-3" /> Back to Models
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-1.5" onClick={() => {
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
             const input = document.createElement("input");
             input.type = "file";
             input.accept = ".onnx,.joblib";
@@ -629,16 +629,16 @@ export default function MLPage() {
           }}>
             <Upload className="h-4 w-4" /> Upload Model
           </Button>
-          <Button variant="outline" onClick={() => setView("regime")} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setView("regime")} className="gap-1.5">
             <Activity className="h-4 w-4" /> Regime
           </Button>
-          <Button variant="outline" onClick={() => setView("forecast")} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setView("forecast")} className="gap-1.5">
             <TrendingUp className="h-4 w-4" /> Forecast
           </Button>
-          <Button variant="outline" onClick={() => setView("rl")} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setView("rl")} className="gap-1.5">
             <Bot className="h-4 w-4" /> RL Agent
           </Button>
-          <Button onClick={() => setView("train")} className="gap-1.5">
+          <Button size="sm" onClick={() => setView("train")} className="gap-1.5">
             <Brain className="h-4 w-4" /> Train New Model
           </Button>
         </div>
@@ -861,9 +861,9 @@ export default function MLPage() {
             <div className="space-y-2">
               {models.map(m => (
                 <div key={m.id}
-                  className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3 hover:bg-background/80 cursor-pointer transition-colors"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-card-border bg-background/50 p-3 hover:bg-background/80 cursor-pointer transition-colors"
                   onClick={() => openDetail(m.id)}>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <input
                       type="checkbox"
                       checked={compareIds.includes(m.id)}
@@ -872,9 +872,9 @@ export default function MLPage() {
                       className="accent-accent h-3.5 w-3.5"
                     />
                     <Badge variant="secondary" className={`text-xs font-medium ${statusColor(m.status)}`}>{m.status}</Badge>
-                    <div>
-                      <div className="text-sm font-medium">{m.name}</div>
-                      <div className="text-xs text-muted-foreground">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{m.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
                         {levelLabel(m.level)} · {m.model_type} · {m.symbol || "—"} · {m.timeframe}
                         {m.level === 3 && (m as { architecture?: string }).architecture && (
                           <span className="ml-1 text-accent/70">· {(m as { architecture?: string }).architecture}</span>
@@ -885,8 +885,8 @@ export default function MLPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
+                  <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+                    <div className="text-right hidden sm:block">
                       <div className="text-xs text-muted-foreground">Train / Val Accuracy</div>
                       <div className="text-sm font-medium">
                         <span className="text-fa-accent">{pct(m.train_accuracy)}</span>
@@ -894,7 +894,7 @@ export default function MLPage() {
                         <span className="text-green-400">{pct(m.val_accuracy)}</span>
                       </div>
                     </div>
-                    <div className="text-right text-xs text-muted-foreground">
+                    <div className="text-right text-xs text-muted-foreground hidden sm:block">
                       {m.n_features} features
                     </div>
                     <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }}

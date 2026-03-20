@@ -158,6 +158,57 @@ async def broker_status(user: User = Depends(get_current_user)):
     )
 
 
+@router.get("/debug/{broker_name}")
+async def broker_debug(
+    broker_name: str,
+    symbol: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+):
+    """Debug endpoint: internal state of a broker adapter."""
+    adapter = _get_adapter(broker_name)
+    info: dict = {"broker": broker_name, "connected": False}
+    if not adapter:
+        return info
+    try:
+        info["connected"] = await adapter.is_connected()
+    except Exception:
+        pass
+    # cTrader-specific debug info
+    if hasattr(adapter, "_symbol_cache"):
+        info["symbol_cache_size"] = len(adapter._symbol_cache)
+        info["symbol_name_to_id_size"] = len(adapter._symbol_name_to_id)
+        info["symbol_names_sample"] = sorted(adapter._symbol_name_to_id.keys())[:20]
+        # Lookup a specific symbol
+        if symbol and hasattr(adapter, "_resolve_symbol_id"):
+            try:
+                sid = await adapter._resolve_symbol_id(symbol)
+                sym_data = adapter._symbol_cache.get(sid, {})
+                info["symbol_lookup"] = {
+                    "query": symbol,
+                    "resolved_id": sid,
+                    "digits": sym_data.get("digits", "NOT_FOUND"),
+                    "pipPosition": sym_data.get("pipPosition", "NOT_FOUND"),
+                    "symbolName": sym_data.get("symbolName", "NOT_FOUND"),
+                    "keys": list(sym_data.keys())[:15],
+                }
+            except Exception as e:
+                info["symbol_lookup"] = {"query": symbol, "error": str(e)}
+        # Sample a few cache entries to see their structure
+        cache_sample = []
+        for sid, sym_data in list(adapter._symbol_cache.items())[:3]:
+            cache_sample.append({"symbolId": sid, "keys": list(sym_data.keys()), "data": {k: sym_data[k] for k in list(sym_data.keys())[:8]}})
+        info["cache_sample"] = cache_sample
+    if hasattr(adapter, "_last_error"):
+        info["last_error"] = adapter._last_error
+    if hasattr(adapter, "_account_id"):
+        info["account_id"] = adapter._account_id
+    if hasattr(adapter, "_server"):
+        info["server"] = adapter._server
+    if hasattr(adapter, "_host"):
+        info["host"] = adapter._host
+    return info
+
+
 # ── Account ────────────────────────────────────────────
 
 @router.get("/account")
@@ -188,12 +239,49 @@ async def get_account(
 async def get_positions(
     broker: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Get all open positions."""
+    """Get all open positions with agent attribution."""
+    from app.models.agent import AgentTrade, TradingAgent
+
     adapter = _get_adapter(broker)
     positions = await adapter.get_positions()
-    return [
-        PositionResponse(
+
+    # Build agent lookup: broker_ticket -> (agent_name, agent_id, strategy)
+    agent_map: dict[str, dict] = {}
+    try:
+        from app.models.strategy import Strategy
+
+        executed_trades = (
+            db.query(
+                AgentTrade.broker_ticket,
+                AgentTrade.agent_id,
+                TradingAgent.name.label("agent_name"),
+                Strategy.name.label("strategy_name"),
+            )
+            .join(TradingAgent, AgentTrade.agent_id == TradingAgent.id)
+            .outerjoin(Strategy, TradingAgent.strategy_id == Strategy.id)
+            .filter(
+                TradingAgent.created_by == user.id,
+                AgentTrade.status.in_(["executed", "confirmed"]),
+                AgentTrade.broker_ticket.isnot(None),
+            )
+            .all()
+        )
+        for ticket, agent_id, agent_name, strategy_name in executed_trades:
+            if ticket:
+                agent_map[ticket] = {
+                    "agent_name": agent_name,
+                    "agent_id": agent_id,
+                    "strategy_name": strategy_name,
+                }
+    except Exception:
+        pass  # Agent lookup is best-effort
+
+    result = []
+    for p in positions:
+        agent_info = agent_map.get(p.position_id, {})
+        result.append(PositionResponse(
             position_id=p.position_id,
             symbol=p.symbol,
             side=p.side.value,
@@ -205,9 +293,11 @@ async def get_positions(
             open_time=p.open_time.isoformat(),
             stop_loss=p.stop_loss,
             take_profit=p.take_profit,
-        )
-        for p in positions
-    ]
+            agent_name=agent_info.get("agent_name"),
+            agent_id=agent_info.get("agent_id"),
+            strategy_name=agent_info.get("strategy_name"),
+        ))
+    return result
 
 
 @router.post("/positions/close")
@@ -420,7 +510,18 @@ async def get_symbols(
 ):
     """Get tradeable instruments from broker."""
     adapter = _get_adapter(broker)
-    symbols = await adapter.get_symbols()
+    try:
+        symbols = await adapter.get_symbols()
+    except (ConnectionError, TimeoutError):
+        # Connection dropped — try reconnecting
+        try:
+            ok = await adapter.connect()
+            symbols = await adapter.get_symbols() if ok else []
+        except Exception:
+            symbols = []
+    except Exception as e:
+        logger.warning("get_symbols failed for broker=%s: %s", broker, e)
+        symbols = []
 
     if search:
         search_lower = search.lower()
@@ -479,8 +580,21 @@ async def get_candles(
     adapter = _get_adapter(broker)
     try:
         candles = await adapter.get_candles(symbol, timeframe, count)
+    except (ConnectionError, TimeoutError) as e:
+        # Connection dropped — try reconnecting once
+        logger.info("get_candles connection lost for %s, attempting reconnect...", broker)
+        try:
+            ok = await adapter.connect()
+            if ok:
+                candles = await adapter.get_candles(symbol, timeframe, count)
+            else:
+                logger.warning("get_candles reconnect failed for %s", broker)
+                return []
+        except Exception as e2:
+            logger.warning("get_candles retry failed for %s/%s: %s", symbol, timeframe, e2)
+            return []
     except Exception as e:
-        logger.warning("get_candles failed for %s/%s: %s", symbol, timeframe, e)
+        logger.warning("get_candles failed for %s/%s (broker=%s): %s", symbol, timeframe, broker, e, exc_info=True)
         return []
 
     # Return time as Unix float to match CandleInput format expected by the chart
@@ -501,23 +615,31 @@ async def get_candles(
 
 @router.get("/trades")
 async def get_trade_history(
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=500),
     status: Optional[str] = Query(None),
+    include_agents: bool = Query(True),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get trade history from DB."""
+    """Get unified trade history — broker trades + agent trades merged."""
     from sqlalchemy import or_
+    from app.models.agent import AgentTrade, TradingAgent
+
+    results: list[dict] = []
+
+    # 1. Broker trades from Trade table
     q = db.query(Trade).filter(
         or_(Trade.user_id == user.id, Trade.user_id == None)  # noqa: E711
     )
     if status:
         q = q.filter(Trade.status == status)
-    trades = q.order_by(Trade.created_at.desc()).limit(limit).all()
+    broker_trades = q.order_by(Trade.created_at.desc()).limit(limit).all()
 
-    return [
-        {
+    for t in broker_trades:
+        meta = t.metadata_ or {}
+        results.append({
             "id": t.id,
+            "source": "broker",
             "broker": t.broker,
             "symbol": t.symbol,
             "direction": t.direction,
@@ -529,6 +651,73 @@ async def get_trade_history(
             "pnl": t.pnl,
             "commission": t.commission,
             "status": t.status,
-        }
-        for t in trades
-    ]
+            "stop_loss": t.stop_loss,
+            "take_profit": t.take_profit,
+            "exit_reason": meta.get("exit_reason"),
+            "agent_name": meta.get("agent_name"),
+            "agent_id": meta.get("agent_id"),
+            "strategy_id": t.strategy_id,
+            "duration_seconds": (
+                (t.exit_time - t.entry_time).total_seconds()
+                if t.exit_time and t.entry_time else None
+            ),
+            "sort_time": t.exit_time or t.entry_time or t.created_at,
+        })
+
+    # 2. Agent trades (if requested)
+    if include_agents:
+        agent_statuses = ["closed", "executed", "paper"]
+        if status:
+            agent_statuses = [s.strip() for s in status.split(",")]
+
+        agent_rows = (
+            db.query(AgentTrade, TradingAgent.name.label("agent_name"))
+            .join(TradingAgent, AgentTrade.agent_id == TradingAgent.id)
+            .filter(
+                TradingAgent.created_by == user.id,
+                TradingAgent.deleted_at.is_(None),
+                AgentTrade.status.in_(agent_statuses),
+            )
+            .order_by(AgentTrade.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        for at, agent_name in agent_rows:
+            entry_t = at.opened_at or at.created_at
+            exit_t = at.closed_at
+            results.append({
+                "id": at.id,
+                "source": "agent",
+                "broker": at.broker_name or "paper",
+                "symbol": at.symbol,
+                "direction": at.direction,
+                "entry_price": at.filled_price or at.entry_price,
+                "exit_price": at.exit_price,
+                "entry_time": entry_t.isoformat() if entry_t else None,
+                "exit_time": exit_t.isoformat() if exit_t else None,
+                "lot_size": at.lot_size or 0.01,
+                "pnl": at.broker_pnl if at.broker_pnl is not None else at.pnl,
+                "commission": 0.0,
+                "status": at.status,
+                "stop_loss": at.stop_loss,
+                "take_profit": at.take_profit_1,
+                "exit_reason": at.exit_reason,
+                "agent_name": agent_name,
+                "agent_id": at.agent_id,
+                "strategy_id": None,
+                "signal_type": at.signal_type,
+                "signal_confidence": at.signal_confidence,
+                "duration_seconds": (
+                    (exit_t - entry_t).total_seconds()
+                    if exit_t and entry_t else None
+                ),
+                "sort_time": exit_t or entry_t or at.created_at,
+            })
+
+    # Sort all results by time descending, then trim to limit
+    results.sort(key=lambda x: x.get("sort_time") or "", reverse=True)
+    for r in results:
+        r.pop("sort_time", None)
+
+    return results[:limit]

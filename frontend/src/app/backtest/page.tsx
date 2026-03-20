@@ -20,7 +20,7 @@ import type {
   BacktestListItem,
 } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket } from 'lucide-react';
+import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket, Database, FlaskConical } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/Skeletons';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -29,6 +29,8 @@ import BacktestDashboard from './components/BacktestDashboard';
 import RunHistorySidebar from './components/RunHistorySidebar';
 import StrategySettingsModal from '@/components/StrategySettingsModal';
 import DeployAgentDialog from './components/DeployAgentDialog';
+import DataSourcesPanel from './components/DataSourcesPanel';
+import WalkForwardPanel from './components/WalkForwardPanel';
 
 export default function BacktestPage() {
   const isMobile = useIsMobile();
@@ -45,6 +47,7 @@ export default function BacktestPage() {
   const [deployOpen, setDeployOpen] = useState(false);
   // Track last run config so we can re-run after settings change
   const [lastRunConfig, setLastRunConfig] = useState<Record<string, unknown> | null>(null);
+  const [activeTab, setActiveTab] = useState<'backtest' | 'datasources' | 'walkforward'>('backtest');
 
   // Load initial data
   useEffect(() => {
@@ -73,6 +76,13 @@ export default function BacktestPage() {
     try {
       const strats = await api.get<{ items: Strategy[] }>('/api/strategies');
       setStrategies(Array.isArray(strats) ? strats : (strats as { items: Strategy[] }).items || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const refreshDatasources = useCallback(async () => {
+    try {
+      const ds = await api.get<{ items: DataSource[] }>('/api/data/sources');
+      setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
     } catch { /* ignore */ }
   }, []);
 
@@ -236,109 +246,187 @@ export default function BacktestPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-card-border bg-card-bg/50">
         <div className="flex items-center gap-3">
-          <BarChart3 className="w-5 h-5 text-accent" />
-          <h1 className="text-lg font-semibold">Backtesting</h1>
-          {result && (
+          {/* Tab toggle */}
+          <div className="flex items-center rounded-lg border border-card-border bg-card-bg/80 p-0.5">
+            <button
+              onClick={() => setActiveTab('backtest')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'backtest'
+                  ? 'bg-accent text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              {!isMobile && 'Backtest'}
+            </button>
+            <button
+              onClick={() => setActiveTab('datasources')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'datasources'
+                  ? 'bg-accent text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Database className="w-4 h-4" />
+              {!isMobile && 'Data Sources'}
+              {datasources.length > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  activeTab === 'datasources'
+                    ? 'bg-white/20'
+                    : 'bg-muted-foreground/20'
+                }`}>
+                  {datasources.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('walkforward')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'walkforward'
+                  ? 'bg-accent text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FlaskConical className="w-4 h-4" />
+              {!isMobile && 'Walk-Forward'}
+            </button>
+          </div>
+          {activeTab === 'backtest' && result && (
             <span className="text-xs text-muted-foreground font-mono">
               {result.engine_version?.toUpperCase()} • {result.stats?.total_trades ?? 0} trades
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* Edit Strategy Settings */}
-          {hasSettings && (
+        {activeTab === 'backtest' && (
+          <div className="flex items-center gap-2">
+            {/* Edit Strategy Settings */}
+            {hasSettings && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="gap-1.5"
+                title="Edit strategy settings and re-run"
+              >
+                <Settings className="w-4 h-4" />
+                {!isMobile && 'Edit Strategy'}
+              </Button>
+            )}
+            {/* Deploy as Agent */}
+            {isProfitable && activeStrategy && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeployOpen(true)}
+                className="gap-1.5 border-green-500/40 text-green-400 hover:bg-green-500/10"
+                title="Deploy this strategy as a trading agent"
+              >
+                <Rocket className="w-4 h-4" />
+                {!isMobile && 'Deploy Agent'}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => setHistoryOpen(!historyOpen)}
               className="gap-1.5"
-              title="Edit strategy settings and re-run"
             >
-              <Settings className="w-4 h-4" />
-              {!isMobile && 'Edit Strategy'}
+              <History className="w-4 h-4" />
+              {!isMobile && 'History'}
             </Button>
-          )}
-          {/* Deploy as Agent */}
-          {isProfitable && activeStrategy && (
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => setDeployOpen(true)}
-              className="gap-1.5 border-green-500/40 text-green-400 hover:bg-green-500/10"
-              title="Deploy this strategy as a trading agent"
+              onClick={() => setConfigOpen(true)}
+              disabled={loading}
+              className="gap-1.5"
             >
-              <Rocket className="w-4 h-4" />
-              {!isMobile && 'Deploy Agent'}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              {!isMobile && (loading ? 'Running...' : 'New Backtest')}
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setHistoryOpen(!historyOpen)}
-            className="gap-1.5"
-          >
-            <History className="w-4 h-4" />
-            {!isMobile && 'History'}
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setConfigOpen(true)}
-            disabled={loading}
-            className="gap-1.5"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {!isMobile && (loading ? 'Running...' : 'New Backtest')}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          {loading && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-4">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
-                <p className="text-muted-foreground">Running backtest...</p>
-              </div>
-            </div>
-          )}
-
-          {!loading && !result && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-4 max-w-md">
-                <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground/30" />
-                <h2 className="text-xl font-semibold text-muted-foreground">No Results Yet</h2>
-                <p className="text-sm text-muted-foreground/60">
-                  Configure and run a backtest to see results, or select a previous run from history.
-                </p>
-                <Button onClick={() => setConfigOpen(true)} className="gap-2">
-                  <Plus className="w-4 h-4" /> New Backtest
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {!loading && result && (
-            <BacktestDashboard
-              result={result}
-              compareResult={compareResult}
-              onClearCompare={() => setCompareResult(null)}
+        {activeTab === 'datasources' ? (
+          <div className="flex-1 overflow-auto">
+            <DataSourcesPanel
+              datasources={datasources}
+              onRefresh={refreshDatasources}
             />
-          )}
-        </div>
+          </div>
+        ) : activeTab === 'walkforward' ? (
+          <div className="flex-1 overflow-auto p-4">
+            {result ? (
+              <WalkForwardPanel
+                strategyId={result.strategy_id}
+                datasourceId={result.datasource_id || 0}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-4 max-w-md">
+                  <FlaskConical className="w-12 h-12 mx-auto text-muted-foreground/30" />
+                  <h2 className="text-xl font-semibold text-muted-foreground">Run a Backtest First</h2>
+                  <p className="text-sm text-muted-foreground/60">
+                    Run a backtest on the Backtest tab, then come here to validate it with walk-forward analysis.
+                  </p>
+                  <Button onClick={() => setActiveTab('backtest')} className="gap-2">
+                    <BarChart3 className="w-4 h-4" /> Go to Backtest
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Main Content */}
+            <div className="flex-1 overflow-auto">
+              {loading && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-4">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent" />
+                    <p className="text-muted-foreground">Running backtest...</p>
+                  </div>
+                </div>
+              )}
 
-        {/* History Sidebar */}
-        {historyOpen && (
-          <RunHistorySidebar
-            history={history}
-            activeId={result?.id}
-            onSelect={handleLoadRun}
-            onCompare={handleCompare}
-            onDelete={handleDeleteRun}
-            onClose={() => setHistoryOpen(false)}
-          />
+              {!loading && !result && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-4 max-w-md">
+                    <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground/30" />
+                    <h2 className="text-xl font-semibold text-muted-foreground">No Results Yet</h2>
+                    <p className="text-sm text-muted-foreground/60">
+                      Configure and run a backtest to see results, or select a previous run from history.
+                    </p>
+                    <Button onClick={() => setConfigOpen(true)} className="gap-2">
+                      <Plus className="w-4 h-4" /> New Backtest
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!loading && result && (
+                <BacktestDashboard
+                  result={result}
+                  compareResult={compareResult}
+                  onClearCompare={() => setCompareResult(null)}
+                />
+              )}
+            </div>
+
+            {/* History Sidebar */}
+            {historyOpen && (
+              <RunHistorySidebar
+                history={history}
+                activeId={result?.id}
+                onSelect={handleLoadRun}
+                onCompare={handleCompare}
+                onDelete={handleDeleteRun}
+                onClose={() => setHistoryOpen(false)}
+              />
+            )}
+          </>
         )}
       </div>
 

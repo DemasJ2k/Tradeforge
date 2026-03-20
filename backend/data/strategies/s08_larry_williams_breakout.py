@@ -119,9 +119,11 @@ class LarryWilliamsBreakout:
             sl = close - atr_val * s["atr_sl_mult"]
             tp = close + atr_val * s["atr_tp_mult"]
             open_trade(i, "long", close, sl, tp, s["risk_per_trade"])
+            self.last_trade_bar = i
 
         # Short breakout
         elif bar["low"] <= sell_level and close < sell_level:
             sl = close + atr_val * s["atr_sl_mult"]
             tp = close - atr_val * s["atr_tp_mult"]
             open_trade(i, "short", close, sl, tp, s["risk_per_trade"])
+            self.last_trade_bar = i

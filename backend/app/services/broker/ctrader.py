@@ -119,7 +119,9 @@ class CTraderAdapter(BrokerAdapter):
         self._client_id = client_id
         self._client_secret = client_secret
         self._access_token = access_token
-        self._account_id = int(account_id) if account_id else 0
+        if not account_id:
+            raise ValueError("cTrader account_id is required")
+        self._account_id = int(account_id)
         self._server = server.lower()
         self._host = self._DEMO_HOST if self._server == "demo" else self._LIVE_HOST
 
@@ -152,7 +154,8 @@ class CTraderAdapter(BrokerAdapter):
 
     async def _send(self, payload_type: int, payload: dict, msg_id: str | None = None) -> dict:
         """Send a JSON message and wait for the response."""
-        if not self._ws:
+        if not self._ws or (hasattr(self._ws, 'closed') and self._ws.closed):
+            self._connected = False
             raise ConnectionError("Not connected to cTrader")
 
         msg_id = msg_id or self._next_msg_id()
@@ -213,8 +216,7 @@ class CTraderAdapter(BrokerAdapter):
 
                 # Handle execution events (order fills, etc.)
                 if payload_type == PROTO_OA_EXECUTION_EVENT:
-                    # Could dispatch to callbacks in the future
-                    pass
+                    logger.debug("cTrader execution event: %s", msg.get("payload", {}).get("executionType", "?"))
 
                 # Resolve pending request
                 if msg_id and msg_id in self._pending_requests:
@@ -250,10 +252,9 @@ class CTraderAdapter(BrokerAdapter):
 
         symbol_name = sym_info.get("symbolName", str(symbol_id))
         digits = sym_info.get("digits", 5)
-        divisor = 10 ** digits
 
-        bid = payload.get("bid", 0) / divisor if "bid" in payload else None
-        ask = payload.get("ask", 0) / divisor if "ask" in payload else None
+        bid = round(payload.get("bid", 0) / 100000.0, digits) if "bid" in payload else None
+        ask = round(payload.get("ask", 0) / 100000.0, digits) if "ask" in payload else None
 
         # Update from last known values if partial update
         last = self._price_cache.get(symbol_name)
@@ -272,13 +273,21 @@ class CTraderAdapter(BrokerAdapter):
             )
             self._price_cache[symbol_name] = tick
 
-    def _convert_price(self, price_int: int, digits: int) -> float:
-        """Convert cTrader integer price to float."""
-        return price_int / (10 ** digits)
+    @staticmethod
+    def _convert_price(price_int: int, digits: int) -> float:
+        """Convert cTrader integer price to float.
 
-    def _to_price_int(self, price: float, digits: int) -> int:
-        """Convert float price to cTrader integer format."""
-        return int(round(price * (10 ** digits)))
+        All cTrader Open API prices (spot, trendbar, position, order)
+        are encoded with a fixed factor of 100000. Divide by 100000
+        then round to the symbol's digit precision.
+        See: https://help.ctrader.com/open-api/symbol-data/
+        """
+        return round(price_int / 100000.0, digits)
+
+    @staticmethod
+    def _to_price_int(price: float, digits: int) -> int:
+        """Convert float price to cTrader integer format (× 100000)."""
+        return int(round(price * 100000))
 
     def _to_volume(self, lots: float) -> int:
         """Convert lot size to cTrader volume (lots * 100 for most instruments)."""
@@ -287,6 +296,25 @@ class CTraderAdapter(BrokerAdapter):
     def _from_volume(self, volume: int) -> float:
         """Convert cTrader volume to lot size."""
         return volume / 100.0
+
+    # Common symbol aliases for broker-specific naming conventions
+    _SYMBOL_ALIASES: dict[str, list[str]] = {
+        "US30": ["DJ30", "WS30", "DJI", "USTEC30", "US Wall Street 30"],
+        "NAS100": ["USTEC", "NQ100", "NDX100", "US Tech 100"],
+        "XAUUSD": ["XAU/USD", "GOLD", "Gold"],
+        "XAGUSD": ["XAG/USD", "SILVER", "Silver"],
+        "BTCUSD": ["BTC/USD", "BITCOIN", "Bitcoin"],
+        "ETHUSD": ["ETH/USD", "ETHEREUM", "Ethereum"],
+        "EURUSD": ["EUR/USD"],
+        "GBPUSD": ["GBP/USD"],
+        "USDJPY": ["USD/JPY"],
+        "AUDUSD": ["AUD/USD"],
+        "USDCAD": ["USD/CAD"],
+        "USDCHF": ["USD/CHF"],
+        "NZDUSD": ["NZD/USD"],
+        "EURJPY": ["EUR/JPY"],
+        "GBPJPY": ["GBP/JPY"],
+    }
 
     @staticmethod
     def _normalize_symbol(name: str) -> str:
@@ -307,31 +335,29 @@ class CTraderAdapter(BrokerAdapter):
         return s
 
     async def _resolve_symbol_id(self, symbol: str) -> int:
-        """Resolve symbol name to cTrader symbolId.
+        """Resolve symbol name to cTrader symbolId with fuzzy matching.
 
-        First tries exact match, then falls back to normalized fuzzy
-        matching so common user inputs work across different brokers.
+        Tries in order: exact match, case-insensitive, normalized (strip
+        suffixes/separators), slash variants, aliases, and substring match.
         """
-        if symbol in self._symbol_name_to_id:
-            return self._symbol_name_to_id[symbol]
-
-        # Try loading symbols if cache is empty
+        # Ensure symbols are loaded
         if not self._symbol_cache:
             await self._load_symbols()
 
-        # Exact match
+        # 1. Exact match
         if symbol in self._symbol_name_to_id:
             return self._symbol_name_to_id[symbol]
 
-        # Case-insensitive match
-        symbol_upper = symbol.upper()
-        for name, sid in self._symbol_name_to_id.items():
-            if name.upper() == symbol_upper:
-                # Cache the alias for next time
-                self._symbol_name_to_id[symbol] = sid
-                return sid
+        # Build uppercase lookup for case-insensitive matching
+        upper_map = {k.upper(): k for k in self._symbol_name_to_id}
+        sym_upper = symbol.upper()
 
-        # Fuzzy / normalized match
+        # 2. Case-insensitive match
+        if sym_upper in upper_map:
+            self._symbol_name_to_id[symbol] = self._symbol_name_to_id[upper_map[sym_upper]]
+            return self._symbol_name_to_id[symbol]
+
+        # 3. Normalized match (strips broker suffixes like .m, .pro, .ecn)
         normalized_input = self._normalize_symbol(symbol)
         for name, sid in self._symbol_name_to_id.items():
             if self._normalize_symbol(name) == normalized_input:
@@ -339,19 +365,60 @@ class CTraderAdapter(BrokerAdapter):
                 self._symbol_name_to_id[symbol] = sid
                 return sid
 
-        raise ValueError(f"Symbol {symbol} not found in cTrader")
+        # 4. Strip slashes: "XAU/USD" -> "XAUUSD"
+        stripped = sym_upper.replace("/", "").replace(" ", "")
+        if stripped in upper_map:
+            return self._symbol_name_to_id[upper_map[stripped]]
+
+        # 5. Insert slash for common forex/metals/crypto patterns
+        for split_pos in (3, 4):
+            if len(sym_upper) >= split_pos + 3:
+                slashed = f"{sym_upper[:split_pos]}/{sym_upper[split_pos:]}"
+                if slashed in upper_map:
+                    return self._symbol_name_to_id[upper_map[slashed]]
+
+        # 6. Check known aliases
+        for canonical, aliases in self._SYMBOL_ALIASES.items():
+            if sym_upper == canonical.upper() or sym_upper in [a.upper() for a in aliases]:
+                for candidate in [canonical] + aliases:
+                    cand_upper = candidate.upper()
+                    if cand_upper in upper_map:
+                        return self._symbol_name_to_id[upper_map[cand_upper]]
+
+        # 7. Substring match (find symbols containing the query)
+        matches = [k for k in self._symbol_name_to_id
+                   if sym_upper in k.upper() or k.upper() in sym_upper]
+        if len(matches) == 1:
+            logger.info("cTrader fuzzy match: '%s' -> '%s'", symbol, matches[0])
+            return self._symbol_name_to_id[matches[0]]
+
+        # Log available symbols for debugging
+        available = sorted(self._symbol_name_to_id.keys())[:50]
+        logger.warning(
+            "Symbol '%s' not found in cTrader. Available symbols (first 50): %s",
+            symbol, ", ".join(available)
+        )
+        raise ValueError(
+            f"Symbol {symbol} not found in cTrader. "
+            f"Try one of: {', '.join(available[:20])}"
+        )
 
     async def _load_symbols(self):
         """Load symbol list from cTrader and populate caches."""
+        logger.info("cTrader _load_symbols: requesting symbol list for account %d", self._account_id)
         resp = await self._send(PROTO_OA_SYMBOLS_LIST_REQ, {
             "ctidTraderAccountId": self._account_id,
         })
+        logger.info("cTrader _load_symbols: response payloadType=%s, payload keys=%s",
+                     resp.get("payloadType"), list(resp.get("payload", {}).keys()))
         symbols = resp.get("payload", {}).get("symbol", [])
+        logger.info("cTrader _load_symbols: got %d light symbols", len(symbols))
 
         # Get detailed info for all symbols
         symbol_ids = [s.get("symbolId") for s in symbols if s.get("symbolId")]
 
         if symbol_ids:
+            logger.info("cTrader _load_symbols: fetching details for %d symbols in batches of 50", len(symbol_ids))
             # Request details in batches of 50
             for i in range(0, len(symbol_ids), 50):
                 batch = symbol_ids[i:i + 50]
@@ -359,18 +426,37 @@ class CTraderAdapter(BrokerAdapter):
                     "ctidTraderAccountId": self._account_id,
                     "symbolId": batch,
                 })
-                for sym in detail_resp.get("payload", {}).get("symbol", []):
+                detail_symbols = detail_resp.get("payload", {}).get("symbol", [])
+                logger.info("cTrader _load_symbols: batch %d got %d detailed symbols", i // 50, len(detail_symbols))
+                for sym in detail_symbols:
                     sid = sym.get("symbolId", 0)
                     name = sym.get("symbolName", "")
                     self._symbol_cache[sid] = sym
                     if name:
                         self._symbol_name_to_id[name] = sid
+        else:
+            logger.warning("cTrader _load_symbols: no symbol IDs found in response")
 
-        # Also map light symbol data
+        # Merge light symbol data into cache (detail response lacks symbolName/description)
         for s in symbols:
             sid = s.get("symbolId", 0)
-            if sid and sid not in self._symbol_cache:
+            if not sid:
+                continue
+            name = s.get("symbolName", "")
+            if sid not in self._symbol_cache:
+                # Detail fetch failed/timed out — use light symbol as fallback
                 self._symbol_cache[sid] = s
+            else:
+                # Detail exists but lacks symbolName — merge from light symbol
+                if name and "symbolName" not in self._symbol_cache[sid]:
+                    self._symbol_cache[sid]["symbolName"] = name
+                # Also merge description if available
+                desc = s.get("description", "")
+                if desc and "description" not in self._symbol_cache[sid]:
+                    self._symbol_cache[sid]["description"] = desc
+            # Map name → id
+            if name and name not in self._symbol_name_to_id:
+                self._symbol_name_to_id[name] = sid
 
         symbol_names = sorted(self._symbol_name_to_id.keys())
         logger.info("cTrader loaded %d symbols: %s", len(self._symbol_cache),
@@ -478,7 +564,16 @@ class CTraderAdapter(BrokerAdapter):
         logger.info("cTrader disconnected")
 
     async def is_connected(self) -> bool:
-        return self._connected and self._ws is not None
+        if not self._connected or not self._ws:
+            return False
+        # Check if WebSocket is actually open
+        try:
+            if hasattr(self._ws, 'closed') and self._ws.closed:
+                self._connected = False
+                return False
+        except Exception:
+            pass
+        return True
 
     # ── Account ────────────────────────────────────────
 
@@ -821,6 +916,7 @@ class CTraderAdapter(BrokerAdapter):
     # ── Market Data ────────────────────────────────────
 
     async def get_symbols(self) -> list[SymbolInfo]:
+        logger.info("cTrader get_symbols called, cache size=%d", len(self._symbol_cache))
         if not self._symbol_cache:
             await self._load_symbols()
 

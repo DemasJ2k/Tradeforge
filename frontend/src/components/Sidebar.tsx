@@ -7,20 +7,15 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { useEffect } from "react";
 import {
   LayoutDashboard,
-  Database,
   FileCode2,
   BarChart3,
-  SlidersHorizontal,
   Brain,
   TrendingUp,
-  Newspaper,
-  BookOpen,
   Settings,
   PanelLeftClose,
   PanelLeft,
   X,
-  Eye,
-  Building2,
+  PieChart,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -37,16 +32,20 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Data", href: "/data", icon: Database },
+  { name: "Portfolio", href: "/portfolio", icon: PieChart },
+  { name: "Trading", href: "/trading", icon: TrendingUp },
   { name: "Strategies", href: "/strategies", icon: FileCode2 },
   { name: "Backtest", href: "/backtest", icon: BarChart3 },
-  { name: "Optimize", href: "/optimize", icon: SlidersHorizontal },
   { name: "ML Lab", href: "/ml", icon: Brain },
+  { name: "Settings", href: "/settings", icon: Settings },
+];
+
+// Bottom nav shows on mobile — compact 5-item subset
+const MOBILE_NAV_ITEMS: NavItem[] = [
+  { name: "Home", href: "/", icon: LayoutDashboard },
+  { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
-  { name: "Prop Firms", href: "/prop-firms", icon: Building2 },
-  { name: "Watchlist", href: "/watchlist", icon: Eye },
-  { name: "News", href: "/news", icon: Newspaper },
-  { name: "Documents", href: "/knowledge", icon: BookOpen },
+  { name: "Strategies", href: "/strategies", icon: FileCode2 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -140,11 +139,45 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
         <div className="border-t border-fa-card-border p-3">
           <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
             <div className="h-2 w-2 rounded-full bg-fa-success" />
-            <span>FlowrexAlgo v1.0</span>
+            <span>FlowrexAlgo v2.0</span>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+/** Mobile bottom navigation bar */
+function BottomNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-fa-sidebar-bg border-t border-fa-card-border safe-area-bottom">
+      <div className="flex items-center justify-around h-14">
+        {MOBILE_NAV_ITEMS.map((item) => {
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center justify-center gap-0.5 w-16 py-1 rounded-lg transition-colors ${
+                isActive
+                  ? "text-accent"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <Icon className="h-5 w-5" strokeWidth={isActive ? 2 : 1.5} />
+              <span className="text-[10px] font-medium leading-none">{item.name}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
@@ -168,7 +201,7 @@ export default function Sidebar() {
         <SidebarContent />
       </aside>
 
-      {/* Mobile sidebar overlay */}
+      {/* Mobile sidebar overlay (hamburger menu) */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           {/* Backdrop */}
@@ -182,6 +215,9 @@ export default function Sidebar() {
           </aside>
         </div>
       )}
+
+      {/* Mobile bottom nav — always visible on mobile */}
+      <BottomNav />
     </>
   );
 }

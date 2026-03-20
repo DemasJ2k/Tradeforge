@@ -757,7 +757,7 @@ export default function TradingPage() {
         api.get<AccountInfo>(`/api/broker/account${bp}`),
         api.get<LivePosition[]>(`/api/broker/positions${bp}`),
         api.get<LiveOrder[]>(`/api/broker/orders${bp}`),
-        api.get<TradeHistory[]>(`/api/broker/trades${bp ? bp + "&" : "?"}limit=20`),
+        api.get<TradeHistory[]>(`/api/broker/trades${bp ? bp + "&" : "?"}limit=100`),
       ]);
       setAccount(acc);
       setPositions(pos);
@@ -1080,7 +1080,7 @@ export default function TradingPage() {
         </div>
 
         {/* Chart — dominant height */}
-        <div ref={chartContainerRef} className="relative h-[55vh] min-h-[350px]">
+        <div ref={chartContainerRef} className="relative h-[45vh] sm:h-[55vh] min-h-[250px] sm:min-h-[350px]">
         {chartLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading chart data...
@@ -1227,41 +1227,66 @@ export default function TradingPage() {
               No open positions
             </div>
           ) : (
-            <div className="space-y-2">
-              {positions.map((p) => (
-                <div
-                  key={p.position_id}
-                  className="flex items-center justify-between rounded-lg border border-card-border bg-card-bg p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary"
-                      className={`${p.side === "LONG" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
-                    >
-                      {p.side}
-                    </Badge>
-                    <div>
-                      <div className="text-sm font-medium">{p.symbol}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.size} units @ {fmt(p.entry_price, 5)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className={`text-sm font-medium ${pnlColor(p.unrealized_pnl)}`}>
+            <div className="overflow-x-auto rounded-lg border border-card-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-card-border text-xs text-muted-foreground bg-card-bg">
+                    <th className="px-3 py-2 text-left font-medium">Symbol</th>
+                    <th className="px-3 py-2 text-left font-medium">Side</th>
+                    <th className="px-3 py-2 text-right font-medium">Size</th>
+                    <th className="px-3 py-2 text-right font-medium">Entry</th>
+                    <th className="px-3 py-2 text-right font-medium">Current</th>
+                    <th className="px-3 py-2 text-right font-medium">SL</th>
+                    <th className="px-3 py-2 text-right font-medium">TP</th>
+                    <th className="px-3 py-2 text-right font-medium">P&L</th>
+                    <th className="px-3 py-2 text-left font-medium">Agent</th>
+                    <th className="px-3 py-2 text-left font-medium">Opened</th>
+                    <th className="px-3 py-2 text-center font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((p) => (
+                    <tr key={p.position_id} className="border-b border-card-border/50 last:border-0">
+                      <td className="px-3 py-2 font-medium">{p.symbol}</td>
+                      <td className="px-3 py-2">
+                        <Badge variant="secondary"
+                          className={`${p.side === "LONG" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
+                        >
+                          {p.side}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right">{p.size}</td>
+                      <td className="px-3 py-2 text-right">{fmt(p.entry_price, 5)}</td>
+                      <td className="px-3 py-2 text-right">{fmt(p.current_price, 5)}</td>
+                      <td className="px-3 py-2 text-right text-xs">{p.stop_loss ? fmt(p.stop_loss, 5) : "—"}</td>
+                      <td className="px-3 py-2 text-right text-xs">{p.take_profit ? fmt(p.take_profit, 5) : "—"}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${pnlColor(p.unrealized_pnl)}`}>
                         {p.unrealized_pnl >= 0 ? "+" : ""}{fmt(p.unrealized_pnl)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{fmt(p.current_price, 5)}</div>
-                    </div>
-                    <Button variant="outline" size="sm"
-                      onClick={() => closePosition(p.position_id)}
-                      className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
-                    >
-                      Close
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                      <td className="px-3 py-2">
+                        {p.agent_name ? (
+                          <Badge variant="secondary" className="bg-purple-500/15 text-purple-400 text-[10px]">
+                            {p.agent_name}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Manual</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {p.open_time ? new Date(p.open_time).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <Button variant="outline" size="sm"
+                          onClick={() => closePosition(p.position_id)}
+                          className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-auto py-1 px-2"
+                        >
+                          Close
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </TabsContent>
@@ -1323,65 +1348,96 @@ export default function TradingPage() {
               No trades recorded yet
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-card-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-card-border text-xs text-muted-foreground bg-card-bg">
-                    <th className="px-3 py-2 text-left font-medium">Symbol</th>
-                    <th className="px-3 py-2 text-left font-medium">Broker</th>
-                    <th className="px-3 py-2 text-left font-medium">Side</th>
-                    <th className="px-3 py-2 text-right font-medium">Size</th>
-                    <th className="px-3 py-2 text-right font-medium">Entry</th>
-                    <th className="px-3 py-2 text-right font-medium">Exit</th>
-                    <th className="px-3 py-2 text-right font-medium">P&L</th>
-                    <th className="px-3 py-2 text-left font-medium">Exit Reason</th>
-                    <th className="px-3 py-2 text-left font-medium">Status</th>
-                    <th className="px-3 py-2 text-left font-medium">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trades.map((t) => (
-                    <tr key={t.id} className="border-b border-card-border/50 last:border-0">
-                      <td className="px-3 py-2">{t.symbol}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{t.broker ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className={t.direction === "BUY" ? "text-green-400" : "text-red-400"}>
-                          {t.direction}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right">{t.lot_size}</td>
-                      <td className="px-3 py-2 text-right">{t.entry_price ? fmt(t.entry_price, 5) : "—"}</td>
-                      <td className="px-3 py-2 text-right">{t.exit_price ? fmt(t.exit_price, 5) : "—"}</td>
-                      <td className={`px-3 py-2 text-right ${pnlColor(t.pnl ?? 0)}`}>
-                        {t.pnl != null ? `$${fmt(t.pnl)}` : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {t.exit_reason ? (
-                          <Badge variant="secondary" className={`text-[10px] uppercase ${
-                            t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
-                            : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
-                            : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
-                            : "bg-cyan-500/15 text-cyan-400"
-                          }`}>{t.exit_reason}</Badge>
-                        ) : <span className="text-xs text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge variant="secondary"
-                          className={`${
-                            t.status === "open" ? "bg-blue-500/20 text-fa-accent" : "bg-zinc-500/20 text-zinc-400"
-                          }`}
-                        >
-                          {t.status}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {t.entry_time ? new Date(t.entry_time).toLocaleString() : "—"}
-                      </td>
+            <>
+              <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
+                <span>{trades.length} trades</span>
+                <span>
+                  Total P&L:{" "}
+                  <span className={pnlColor(trades.reduce((s, t) => s + (t.pnl ?? 0), 0))}>
+                    ${fmt(trades.reduce((s, t) => s + (t.pnl ?? 0), 0))}
+                  </span>
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-card-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-card-border text-xs text-muted-foreground bg-card-bg">
+                      <th className="px-3 py-2 text-left font-medium">Symbol</th>
+                      <th className="px-3 py-2 text-left font-medium">Side</th>
+                      <th className="px-3 py-2 text-right font-medium">Size</th>
+                      <th className="px-3 py-2 text-right font-medium">Entry</th>
+                      <th className="px-3 py-2 text-right font-medium">Exit</th>
+                      <th className="px-3 py-2 text-right font-medium">SL</th>
+                      <th className="px-3 py-2 text-right font-medium">TP</th>
+                      <th className="px-3 py-2 text-right font-medium">P&L</th>
+                      <th className="px-3 py-2 text-left font-medium">Exit Reason</th>
+                      <th className="px-3 py-2 text-left font-medium">Agent</th>
+                      <th className="px-3 py-2 text-left font-medium">Source</th>
+                      <th className="px-3 py-2 text-right font-medium">Duration</th>
+                      <th className="px-3 py-2 text-left font-medium">Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {trades.map((t) => {
+                      const dur = t.duration_seconds;
+                      const durStr = dur != null
+                        ? dur < 60 ? `${Math.round(dur)}s`
+                        : dur < 3600 ? `${Math.round(dur / 60)}m`
+                        : dur < 86400 ? `${(dur / 3600).toFixed(1)}h`
+                        : `${(dur / 86400).toFixed(1)}d`
+                        : "—";
+                      return (
+                        <tr key={`${t.source}-${t.id}`} className="border-b border-card-border/50 last:border-0">
+                          <td className="px-3 py-2 font-medium">{t.symbol}</td>
+                          <td className="px-3 py-2">
+                            <span className={t.direction === "BUY" ? "text-green-400" : "text-red-400"}>
+                              {t.direction}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right">{t.lot_size}</td>
+                          <td className="px-3 py-2 text-right">{t.entry_price ? fmt(t.entry_price, 5) : "—"}</td>
+                          <td className="px-3 py-2 text-right">{t.exit_price ? fmt(t.exit_price, 5) : "—"}</td>
+                          <td className="px-3 py-2 text-right text-xs">{t.stop_loss ? fmt(t.stop_loss, 5) : "—"}</td>
+                          <td className="px-3 py-2 text-right text-xs">{t.take_profit ? fmt(t.take_profit, 5) : "—"}</td>
+                          <td className={`px-3 py-2 text-right font-medium ${pnlColor(t.pnl ?? 0)}`}>
+                            {t.pnl != null ? `$${fmt(t.pnl)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {t.exit_reason ? (
+                              <Badge variant="secondary" className={`text-[10px] uppercase ${
+                                t.exit_reason === "SL" ? "bg-red-500/15 text-red-400"
+                                : t.exit_reason.startsWith("TP") ? "bg-green-500/15 text-green-400"
+                                : t.exit_reason === "Reversal" ? "bg-purple-500/15 text-purple-400"
+                                : "bg-cyan-500/15 text-cyan-400"
+                              }`}>{t.exit_reason}</Badge>
+                            ) : <span className="text-xs text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            {t.agent_name ? (
+                              <Badge variant="secondary" className="bg-purple-500/15 text-purple-400 text-[10px]">
+                                {t.agent_name}
+                              </Badge>
+                            ) : <span className="text-xs text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge variant="secondary" className={`text-[10px] ${
+                              t.source === "agent" ? "bg-blue-500/15 text-blue-400"
+                              : "bg-zinc-500/15 text-zinc-400"
+                            }`}>
+                              {t.source === "agent" ? "Agent" : "Broker"}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs text-muted-foreground">{durStr}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                            {t.entry_time ? new Date(t.entry_time).toLocaleString() : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>

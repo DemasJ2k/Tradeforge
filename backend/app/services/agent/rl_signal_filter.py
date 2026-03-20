@@ -9,6 +9,8 @@ Loads an ONNX PPO policy and decides:
 Supports multiple feature spaces:
   - lw_25: Larry Williams breakout (prev_range breakout levels)
   - mb_25: Momentum-Breakout (ATR envelope + ROC momentum + RSI guard)
+  - mom_25: Momentum crypto (ROC crossover + SMA trend + ATR slope)
+  - ttm_25: TTM Squeeze crypto (BB/KC squeeze detection + momentum direction)
 
 Feature space: 25 technical features + 7 position context = 32 dims.
 Requires only onnxruntime + numpy (no SB3/gymnasium).
@@ -106,6 +108,50 @@ def _compute_roc(closes: np.ndarray, period: int = 10) -> np.ndarray:
         if closes[i - period] != 0:
             roc[i] = (closes[i] - closes[i - period]) / closes[i - period] * 100
     return roc
+
+
+def _compute_sma(values: np.ndarray, period: int) -> np.ndarray:
+    """Simple moving average."""
+    n = len(values)
+    sma = np.zeros(n)
+    if n < period:
+        return sma
+    cumsum = np.cumsum(values)
+    sma[period - 1] = cumsum[period - 1] / period
+    for i in range(period, n):
+        sma[i] = (cumsum[i] - cumsum[i - period]) / period
+    return sma
+
+
+def _compute_bb(closes: np.ndarray, period: int = 20, mult: float = 2.0):
+    """Bollinger Bands — returns (upper, middle, lower, width)."""
+    n = len(closes)
+    upper = np.zeros(n)
+    middle = np.zeros(n)
+    lower = np.zeros(n)
+    width = np.zeros(n)
+    for i in range(period - 1, n):
+        seg = closes[i - period + 1:i + 1]
+        m = np.mean(seg)
+        s = np.std(seg)
+        middle[i] = m
+        upper[i] = m + mult * s
+        lower[i] = m - mult * s
+        width[i] = (upper[i] - lower[i]) / m if m > 0 else 0
+    return upper, middle, lower, width
+
+
+def _compute_kc(bars: list[dict], ema: np.ndarray, atr: np.ndarray, mult: float = 1.5):
+    """Keltner Channels — returns (upper, lower, width)."""
+    n = len(bars)
+    upper = np.zeros(n)
+    lower = np.zeros(n)
+    width = np.zeros(n)
+    for i in range(n):
+        upper[i] = ema[i] + mult * atr[i]
+        lower[i] = ema[i] - mult * atr[i]
+        width[i] = (upper[i] - lower[i]) / ema[i] if ema[i] > 0 else 0
+    return upper, lower, width
 
 
 # ── Feature builder (exact replica of build_feature_matrix) ──
@@ -362,6 +408,212 @@ def _build_mb_features_for_bar(
     return feat
 
 
+# ── MOM Feature builder (Momentum crypto, for s45_momentum_crypto) ──
+
+
+def _build_shared_features_0_13(
+    bars: list[dict], i: int, c: float,
+    atr: np.ndarray, rsi: np.ndarray, wr: np.ndarray,
+    feat: np.ndarray,
+) -> np.ndarray:
+    """Fill shared features 0-13 (identical across all feature spaces)."""
+    # Returns
+    for j, lb in enumerate([1, 3, 5, 10]):
+        if i >= lb:
+            pc = bars[i - lb]["close"]
+            feat[j] = (c - pc) / pc if pc != 0 else 0
+    # Volatility
+    for j, w in enumerate([5, 10, 20]):
+        if i >= w:
+            seg = [b["close"] for b in bars[i - w:i + 1]]
+            seg_arr = np.array(seg)
+            rets = np.diff(seg_arr) / seg_arr[:-1]
+            feat[4 + j] = np.std(rets) * 100
+    # ATR, RSI, WR
+    feat[7] = atr[i] / c if c != 0 else 0
+    feat[8] = (rsi[i] - 50) / 50
+    feat[9] = (wr[i] + 50) / 50
+    # Candle shape
+    o = bars[i]["open"]
+    h = bars[i]["high"]
+    low = bars[i]["low"]
+    full = h - low
+    if full > 0:
+        feat[10] = (c - o) / full
+        feat[11] = (h - max(c, o)) / full
+        feat[12] = (min(c, o) - low) / full
+    # Volume ratio
+    if i >= 20:
+        vols = [bars[k]["volume"] for k in range(i - 19, i + 1)]
+        avg_vol = np.mean(vols)
+        feat[13] = bars[i]["volume"] / avg_vol if avg_vol > 0 else 1.0
+    return feat
+
+
+def _build_shared_features_17_23(
+    bars: list[dict], i: int, c: float,
+    atr: np.ndarray, feat: np.ndarray,
+) -> np.ndarray:
+    """Fill shared features 17-23 (identical across all feature spaces)."""
+    # Hour encoding
+    try:
+        time_str = bars[i].get("time", "")
+        if isinstance(time_str, str):
+            if "T" in time_str:
+                hour = int(time_str.split("T")[1].split(":")[0])
+            else:
+                parts = time_str.split(" ")
+                hour = int(parts[1].split(":")[0]) if len(parts) >= 2 else 12
+        else:
+            hour = 12
+    except (ValueError, IndexError):
+        hour = 12
+    feat[17] = np.sin(2 * np.pi * hour / 24)
+    feat[18] = np.cos(2 * np.pi * hour / 24)
+    # ATR slope
+    if i >= 5:
+        feat[19] = (atr[i] - atr[i - 5]) / atr[i] if atr[i] > 0 else 0
+    # Momentum
+    if i >= 10:
+        feat[20] = (c - bars[i - 10]["close"]) / bars[i - 10]["close"] * 100
+    if i >= 20:
+        feat[21] = (c - bars[i - 20]["close"]) / bars[i - 20]["close"] * 100
+    # Distance from recent high/low
+    if i >= 20:
+        h20 = max(b["high"] for b in bars[i - 20:i + 1])
+        l20 = min(b["low"] for b in bars[i - 20:i + 1])
+        rng = h20 - l20
+        if rng > 0:
+            feat[22] = (h20 - c) / rng
+            feat[23] = (c - l20) / rng
+    return feat
+
+
+def _build_mom_features_for_bar(
+    bars: list[dict],
+    bar_idx: int,
+    atr: np.ndarray,
+    wr: np.ndarray,
+    rsi: np.ndarray,
+    sma20: np.ndarray,
+    roc10: np.ndarray,
+) -> np.ndarray:
+    """Build 25-dim feature vector for Momentum crypto space (mom_25).
+
+    Feature layout — shared 0-13, 17-23, differs in 14-16, 24:
+      14: roc_10           - 10-bar rate of change, normalized by 100
+      15: sma_distance     - (close - SMA20) / ATR — trend position
+      16: atr_slope_5      - ATR slope over 5 bars (acceleration)
+      24: signal_type      - momentum signal (-1=short, 0=none, 1=long)
+    """
+    feat = np.zeros(25, dtype=np.float32)
+    i = bar_idx
+    c = bars[i]["close"]
+    if c == 0 or i < 30:
+        return feat
+
+    # Shared features 0-13
+    _build_shared_features_0_13(bars, i, c, atr, rsi, wr, feat)
+
+    # ── MOM-specific features 14-16 ──
+    # ROC(10) normalized
+    feat[14] = roc10[i] / 100.0
+
+    # Distance from SMA20 (normalized by ATR)
+    if atr[i] > 0 and sma20[i] > 0:
+        feat[15] = (c - sma20[i]) / atr[i]
+
+    # ATR slope (acceleration) — already computed as feature 19, but
+    # we also put it here as a primary feature for momentum detection
+    if i >= 5 and atr[i] > 0:
+        feat[16] = (atr[i] - atr[i - 5]) / atr[i]
+
+    # Shared features 17-23
+    _build_shared_features_17_23(bars, i, c, atr, feat)
+
+    # ── MOM-specific feature 24 (momentum signal) ──
+    # Long: ROC > 0, close above SMA20, ATR rising
+    roc_positive = roc10[i] > 0
+    above_sma = c > sma20[i] if sma20[i] > 0 else False
+    atr_rising = atr[i] > atr[i - 5] if i >= 5 else False
+
+    if roc_positive and above_sma and atr_rising:
+        feat[24] = 1.0
+    elif not roc_positive and not above_sma and atr_rising:
+        feat[24] = -1.0
+
+    feat = np.nan_to_num(feat, nan=0.0, posinf=0.0, neginf=0.0)
+    return feat
+
+
+# ── TTM Feature builder (TTM Squeeze crypto, for s46_ttm_squeeze_crypto) ──
+
+
+def _build_ttm_features_for_bar(
+    bars: list[dict],
+    bar_idx: int,
+    atr: np.ndarray,
+    wr: np.ndarray,
+    rsi: np.ndarray,
+    bb_width: np.ndarray,
+    kc_width: np.ndarray,
+    bb_upper: np.ndarray,
+    bb_lower: np.ndarray,
+    kc_upper: np.ndarray,
+    kc_lower: np.ndarray,
+    ema20: np.ndarray,
+) -> np.ndarray:
+    """Build 25-dim feature vector for TTM Squeeze space (ttm_25).
+
+    Feature layout — shared 0-13, 17-23, differs in 14-16, 24:
+      14: bb_kc_ratio      - BB width / KC width — squeeze tightness
+      15: squeeze_momentum - linear regression momentum of midline
+      16: squeeze_state    - 1.0 if BB inside KC (squeeze ON), 0.0 if not
+      24: signal_type      - TTM signal (-1=short squeeze fire, 0=none, 1=long squeeze fire)
+    """
+    feat = np.zeros(25, dtype=np.float32)
+    i = bar_idx
+    c = bars[i]["close"]
+    if c == 0 or i < 30:
+        return feat
+
+    # Shared features 0-13
+    _build_shared_features_0_13(bars, i, c, atr, rsi, wr, feat)
+
+    # ── TTM-specific features 14-16 ──
+    # BB/KC width ratio — < 1.0 means squeeze is on
+    if kc_width[i] > 0:
+        feat[14] = bb_width[i] / kc_width[i]
+
+    # Squeeze momentum — simple: (close - midline) normalized by ATR
+    midline = ema20[i]
+    if atr[i] > 0 and midline > 0:
+        feat[15] = (c - midline) / atr[i]
+
+    # Squeeze state — BB inside KC = squeeze ON
+    squeeze_on = (bb_upper[i] < kc_upper[i]) and (bb_lower[i] > kc_lower[i])
+    feat[16] = 1.0 if squeeze_on else 0.0
+
+    # Shared features 17-23
+    _build_shared_features_17_23(bars, i, c, atr, feat)
+
+    # ── TTM-specific feature 24 (squeeze fire signal) ──
+    # Squeeze fire: squeeze was ON, now OFF, momentum direction determines long/short
+    if i >= 1:
+        prev_squeeze = (bb_upper[i - 1] < kc_upper[i - 1]) and (bb_lower[i - 1] > kc_lower[i - 1])
+        squeeze_fire = prev_squeeze and not squeeze_on
+
+        if squeeze_fire:
+            # Momentum direction: close vs midline
+            if c > midline:
+                feat[24] = 1.0   # Long squeeze fire
+            else:
+                feat[24] = -1.0  # Short squeeze fire
+
+    feat = np.nan_to_num(feat, nan=0.0, posinf=0.0, neginf=0.0)
+    return feat
+
+
 # ── RL Signal Filter ─────────────────────────────────────────────────
 
 
@@ -375,12 +627,14 @@ class RLSignalFilter:
     Supports feature spaces:
       - "lw_25": Larry Williams breakout (prev_range breakout levels)
       - "mb_25": Momentum-Breakout (ATR envelope + ROC + RSI guard)
+      - "mom_25": Momentum crypto (ROC crossover + SMA trend + ATR slope)
+      - "ttm_25": TTM Squeeze crypto (BB/KC squeeze + momentum direction)
 
     Action space: 0=SKIP, 1=TAKE, 2=CLOSE
     Observation: 25 features + 7 context = 32 dims
     """
 
-    SUPPORTED_FEATURE_SPACES = {"lw_25", "mb_25"}
+    SUPPORTED_FEATURE_SPACES = {"lw_25", "mb_25", "mom_25", "ttm_25"}
 
     def __init__(self, onnx_path: str, stats_path: Optional[str] = None,
                  feature_space: str = "lw_25"):
@@ -398,8 +652,16 @@ class RLSignalFilter:
         self._atr = None
         self._wr = None
         self._rsi = None
-        self._ema20 = None   # Only for mb_25
-        self._roc10 = None   # Only for mb_25
+        self._ema20 = None   # For mb_25, mom_25, ttm_25
+        self._roc10 = None   # For mb_25, mom_25
+        self._sma20 = None   # For mom_25
+        # TTM Squeeze indicators (ttm_25)
+        self._bb_upper = None
+        self._bb_lower = None
+        self._bb_width = None
+        self._kc_upper = None
+        self._kc_lower = None
+        self._kc_width = None
 
     def load(self) -> bool:
         """Load ONNX model and normalization stats."""
@@ -441,11 +703,25 @@ class RLSignalFilter:
             self._atr = _compute_atr(bars, 20)
             self._wr = _compute_williams_r(bars, 14)
             self._rsi = _compute_rsi(bars, 14)
-            # MB feature space also needs EMA20 and ROC10
-            if self.feature_space == "mb_25":
-                closes = np.array([b["close"] for b in bars])
+            closes = np.array([b["close"] for b in bars])
+
+            # mb_25 needs EMA20 and ROC10
+            if self.feature_space in ("mb_25", "mom_25", "ttm_25"):
                 self._ema20 = _compute_ema(closes, 20)
+            if self.feature_space in ("mb_25", "mom_25"):
                 self._roc10 = _compute_roc(closes, 10)
+
+            # mom_25 needs SMA20
+            if self.feature_space == "mom_25":
+                self._sma20 = _compute_sma(closes, 20)
+
+            # ttm_25 needs BB and KC
+            if self.feature_space == "ttm_25":
+                self._bb_upper, _, self._bb_lower, self._bb_width = _compute_bb(closes, 20, 2.0)
+                self._kc_upper, self._kc_lower, self._kc_width = _compute_kc(
+                    bars, self._ema20, self._atr, 1.5
+                )
+
             self._cached_n_bars = n
 
     def evaluate_signal(
@@ -511,6 +787,19 @@ class RLSignalFilter:
                     bars, bar_idx, self._atr, self._wr, self._rsi,
                     self._ema20, self._roc10,
                     atr_breakout_mult=2.0,
+                )
+            elif self.feature_space == "mom_25":
+                features = _build_mom_features_for_bar(
+                    bars, bar_idx, self._atr, self._wr, self._rsi,
+                    self._sma20, self._roc10,
+                )
+            elif self.feature_space == "ttm_25":
+                features = _build_ttm_features_for_bar(
+                    bars, bar_idx, self._atr, self._wr, self._rsi,
+                    self._bb_width, self._kc_width,
+                    self._bb_upper, self._bb_lower,
+                    self._kc_upper, self._kc_lower,
+                    self._ema20,
                 )
             else:
                 features = _build_features_for_bar(

@@ -412,9 +412,9 @@ export default function StrategiesPage() {
           {/* Verified performance badges */}
           {s.verified_performance && s.verified_performance.profit_factor != null && (
             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[10px] flex items-center gap-1">
+              <Badge className={`${s.verified_performance.robustness === "STRONG" ? "bg-yellow-500/20 text-yellow-400" : "bg-emerald-500/15 text-emerald-400"} border-0 text-[10px] flex items-center gap-1`}>
                 <ShieldCheck className="h-3 w-3" />
-                {s.verified_performance.robustness === "GOOD" ? "Verified" : (s.verified_performance.robustness || "Tested")}
+                {s.verified_performance.robustness === "STRONG" ? "Strong" : s.verified_performance.robustness === "GOOD" ? "Verified" : (s.verified_performance.robustness || "Tested")}
               </Badge>
               <Badge className="bg-blue-500/10 text-blue-400 border-0 text-[10px]">
                 PF {Number(s.verified_performance.profit_factor).toFixed(2)}

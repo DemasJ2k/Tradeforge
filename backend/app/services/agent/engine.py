@@ -56,6 +56,8 @@ class AgentRunner:
         self._active_direction: int = 0  # 0=flat, 1=long, -1=short
         # Prop firm account link (for pre-trade rule validation)
         self._prop_firm_account_id: int | None = None
+        # Portfolio manager for cross-agent coordination
+        self._portfolio_manager = None
 
     async def start(self):
         """Load agent config from DB and start the evaluation loop."""
@@ -93,6 +95,17 @@ class AgentRunner:
             self._broker_name = raw_broker
             self._created_by = agent.created_by  # for notifications
             self._prop_firm_account_id = getattr(agent, "prop_firm_account_id", None)
+
+            # Initialize portfolio manager (cross-agent coordination)
+            try:
+                from app.services.agent.portfolio_manager import get_portfolio_manager
+                self._portfolio_manager = get_portfolio_manager(agent.created_by)
+                if self._portfolio_manager:
+                    self._portfolio_manager.register_agent(self.agent_id, self._symbol)
+                    logger.info("[Agent %d] Portfolio manager linked (PM %s)",
+                                self.agent_id, self._portfolio_manager.portfolio_id)
+            except Exception as e:
+                logger.warning("[Agent %d] Failed to link portfolio manager: %s", self.agent_id, e)
 
             # Initialize evaluator based on strategy type
             strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
@@ -693,6 +706,23 @@ class AgentRunner:
             return
 
         lot_size = risk_decision.adjusted_lot_size or 0.01
+
+        # ── Portfolio manager validation ──
+        if self._portfolio_manager:
+            pm_decision = self._portfolio_manager.validate_trade(
+                agent_id=self.agent_id,
+                symbol=self._symbol,
+                direction=direction.lower(),
+                entry_price=signal.entry_price,
+                stop_loss=signal.stop_loss or 0.0,
+                lot_size=lot_size,
+            )
+            if not pm_decision.approved:
+                self._log("warn", f"Trade blocked by portfolio manager: {pm_decision.reason}")
+                return
+            if pm_decision.adjusted_lot_size:
+                lot_size = pm_decision.adjusted_lot_size
+                self._log("info", f"PM adjusted lot size to {lot_size:.4f}")
 
         # ── Prop firm pre-trade validation ──
         if self._prop_firm_account_id:
