@@ -443,10 +443,18 @@ async def _global_exception_handler(request: Request, exc: Exception):
         type(exc).__name__, request.method, request.url.path,
         traceback.format_exc(),
     )
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"detail": f"Internal server error: {type(exc).__name__}: {str(exc)[:300]}"},
     )
+    # Ensure CORS headers are present on error responses so browsers don't
+    # mask the real error message behind an opaque CORS failure.
+    origin = request.headers.get("origin")
+    if origin and origin in _cors_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Routes
 app.include_router(health.router)

@@ -37,6 +37,7 @@ class AgentRunner:
         self.agent_id = agent_id
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        self._paused = False  # Guard: checked before every signal evaluation
         self._unsubscribe = None
 
         # Loaded from DB on start
@@ -222,6 +223,7 @@ class AgentRunner:
             db.close()
 
         self._running = True
+        self._paused = False
         self._task = asyncio.create_task(self._run_loop())
         self._log("info", f"Agent started in {self._mode} mode for {self._symbol} {self._timeframe}")
 
@@ -254,8 +256,18 @@ class AgentRunner:
         self._log("info", "Agent stopped")
 
     async def pause(self):
-        """Pause the agent (stop evaluating but keep subscriptions)."""
+        """Pause the agent — immediately prevent any new signal evaluations."""
+        self._paused = True  # Guard checked before _evaluate_signal()
         self._running = False
+
+        # Cancel the running task to interrupt any in-progress sleep
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
 
         db = SessionLocal()
         try:
@@ -324,7 +336,10 @@ class AgentRunner:
                     f"L={bar_data.get('low', 0):.2f} C={bar_data.get('close', 0):.2f}",
                     {"bar_time": bar_ts, "close": bar_data.get("close", 0), "source": "ws"})
 
-                # Evaluate
+                # Evaluate (guard: skip if paused between bar receipt and here)
+                if self._paused:
+                    self._log("info", "Skipping evaluation — agent is paused")
+                    continue
                 await self._evaluate_signal()
 
             except asyncio.CancelledError:
@@ -407,7 +422,11 @@ class AgentRunner:
                             f"O={nb.get('open', 0):.5f} H={nb.get('high', 0):.5f} "
                             f"L={nb.get('low', 0):.5f} C={nb.get('close', 0):.5f}",
                             {"bar_time": nb_ts, "close": nb.get("close", 0), "source": "poll"})
-                    await self._evaluate_signal()
+                    # Guard: skip if paused between poll and evaluation
+                    if not self._paused:
+                        await self._evaluate_signal()
+                    else:
+                        self._log("info", "Skipping evaluation — agent is paused")
 
             except asyncio.CancelledError:
                 break

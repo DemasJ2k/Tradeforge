@@ -604,12 +604,12 @@ function PropFirmTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
+          account_name: accountNumber,
           firm_name: firmName,
-          account_number: accountNumber,
-          initial_balance: parseFloat(initialBalance),
-          daily_loss_limit_pct: parseFloat(dailyLossPct),
-          max_drawdown_pct: parseFloat(maxDrawdownPct),
-          funded_amount: parseFloat(fundedAmount || initialBalance),
+          account_size: parseFloat(initialBalance),
+          max_daily_loss_pct: parseFloat(dailyLossPct),
+          max_total_loss_pct: parseFloat(maxDrawdownPct),
+          profit_target_pct: 8.0,
         }),
       });
       if (!res.ok) {

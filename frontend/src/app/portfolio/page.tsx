@@ -6,8 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
   PieChart, TrendingUp, TrendingDown, Shield, AlertTriangle,
-  Pause, Play, Bot, Activity, DollarSign, BarChart3,
+  Pause, Play, Square, Bot, Activity, DollarSign, BarChart3,
   ChevronDown, ChevronUp,
 } from "lucide-react";
 
@@ -54,26 +59,70 @@ interface EquityPoint {
   drawdown_pct: number;
 }
 
+interface BrokerAgent {
+  id: number;
+  name: string;
+  symbol: string;
+  timeframe: string;
+  status: string;
+  mode: string;
+  total_pnl: number;
+  win_rate: number;
+  total_trades: number;
+  daily_pnl: number;
+}
+
+interface BrokerPortfolio {
+  broker: string;
+  currency: string;
+  balance: number;
+  equity: number;
+  balance_usd: number;
+  equity_usd: number;
+  daily_pnl: number;
+  drawdown_pct: number;
+  agents: BrokerAgent[];
+}
+
+interface BrokerPortfoliosResponse {
+  brokers: BrokerPortfolio[];
+  combined: {
+    total_balance_usd: number;
+    total_equity_usd: number;
+    total_daily_pnl: number;
+  };
+}
+
 /* ─── Component ─────────────────────────────────────────── */
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+  const [brokerData, setBrokerData] = useState<BrokerPortfoliosResponse | null>(null);
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
+  const [expandedBrokers, setExpandedBrokers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [sumData, eqData] = await Promise.all([
+      const [sumData, brokerRes, eqData] = await Promise.all([
         api.get<PortfolioSummary>("/api/portfolio/summary"),
+        api.get<BrokerPortfoliosResponse>("/api/portfolio/broker-portfolios"),
         api.get<{ snapshots: EquityPoint[] }>("/api/portfolio/equity-curve?days=30"),
       ]);
       setSummary(sumData);
+      setBrokerData(brokerRes);
       setEquityCurve(eqData.snapshots || []);
+      // Auto-expand all brokers on first load
+      if (brokerRes.brokers.length > 0) {
+        setExpandedBrokers((prev) =>
+          prev.size === 0
+            ? new Set(brokerRes.brokers.map((b) => b.broker))
+            : prev
+        );
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load portfolio";
-      // Auth errors handled by API client redirect — only show real errors
       if (!msg.includes("401") && !msg.includes("Unauthorized")) {
         setError(msg);
       }
@@ -90,6 +139,7 @@ export default function PortfolioPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  /* ─── Global Actions ─── */
   const handlePauseAll = async () => {
     try {
       await api.post("/api/portfolio/pause-all", {});
@@ -106,6 +156,30 @@ export default function PortfolioPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume portfolio");
     }
+  };
+
+  /* ─── Per-Agent Actions ─── */
+  const handleAgentAction = async (agentId: number, action: "start" | "pause" | "stop") => {
+    try {
+      const endpoint =
+        action === "start" ? `/api/agents/${agentId}/start` :
+        action === "pause" ? `/api/agents/${agentId}/pause` :
+        `/api/agents/${agentId}/stop`;
+      await api.post(endpoint, {});
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} agent`);
+    }
+  };
+
+  /* ─── Broker section toggle ─── */
+  const toggleBroker = (broker: string) => {
+    setExpandedBrokers((prev) => {
+      const next = new Set(prev);
+      if (next.has(broker)) next.delete(broker);
+      else next.add(broker);
+      return next;
+    });
   };
 
   if (loading) {
@@ -125,7 +199,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 pb-20 md:pb-6">
-      {/* ── Portfolio Health Bar ── */}
+      {/* ── Portfolio Header ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Portfolio</h1>
@@ -143,7 +217,7 @@ export default function PortfolioPage() {
           </Badge>
           {isPaused ? (
             <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
-              <Play className="h-3.5 w-3.5" /> Resume
+              <Play className="h-3.5 w-3.5" /> Play All
             </Button>
           ) : (
             <Button size="sm" variant="destructive" onClick={handlePauseAll} className="gap-1.5">
@@ -250,139 +324,108 @@ export default function PortfolioPage() {
               <div className="text-sm font-medium text-red-400">Circuit Breaker Active</div>
               <div className="text-xs text-red-400/70">
                 All agents paused. {s?.status === "breached" ? "Drawdown limit breached." : "Manually paused."}
-                Click Resume when ready.
+                {" "}Click Play All when ready.
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Agent Performance Cards ── */}
-      <div>
-        <h2 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
-          <Bot className="h-4 w-4 text-accent" /> Active Agents
-          <Badge className="bg-fa-card border-fa-card-border text-muted-foreground text-[10px]">
-            {s?.open_positions ?? 0}/{s?.max_concurrent_positions ?? 6} positions
-          </Badge>
+      {/* ── Broker-Separated Sections ── */}
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <Bot className="h-4 w-4 text-accent" /> Broker Portfolios
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(s?.agents_detail || []).map((agent) => {
-            const liveData = s?.agents?.[String(agent.id)];
-            const isExpanded = expandedAgent === agent.id;
-            const stats = agent.performance_stats || {};
-            const totalPnl = liveData?.total_pnl ?? stats.total_pnl ?? 0;
-            const dailyPnl = liveData?.daily_pnl ?? 0;
-            const winRate = stats.win_rate ?? 0;
-            const totalTrades = stats.total_trades ?? 0;
-
+        {brokerData && brokerData.brokers.length > 0 ? (
+          brokerData.brokers.map((broker) => {
+            const isOpen = expandedBrokers.has(broker.broker);
             return (
-              <Card key={agent.id} className="bg-fa-card border-fa-card-border overflow-hidden">
-                <CardContent className="p-0">
-                  <button
-                    onClick={() => setExpandedAgent(isExpanded ? null : agent.id)}
-                    className="w-full p-3 sm:p-4 text-left hover:bg-fa-sidebar-hover/50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${
-                          agent.status === "running" ? "bg-emerald-500 animate-pulse" :
-                          agent.status === "paused" ? "bg-yellow-500" : "bg-zinc-600"
-                        }`} />
-                        <span className="text-sm font-medium text-foreground">{agent.name}</span>
+              <Collapsible
+                key={broker.broker}
+                open={isOpen}
+                onOpenChange={() => toggleBroker(broker.broker)}
+              >
+                <Card className="bg-fa-card border-fa-card-border overflow-hidden">
+                  <CollapsibleTrigger className="w-full">
+                    <div className="flex items-center justify-between p-4 hover:bg-fa-sidebar-hover/50 transition-colors cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center">
+                          <DollarSign className="h-4.5 w-4.5 text-accent" />
+                        </div>
+                        <div className="text-left">
+                          <div className="text-sm font-semibold text-foreground">
+                            {broker.broker.charAt(0).toUpperCase() + broker.broker.slice(1)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {broker.agents.length} agent{broker.agents.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-accent/10 text-accent border-0 text-[10px]">
-                          {agent.symbol} {agent.timeframe}
-                        </Badge>
-                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> :
-                                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right hidden sm:block">
+                          <div className="text-sm font-semibold text-foreground">
+                            {broker.currency} {broker.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            USD ${broker.balance_usd.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                          </div>
+                        </div>
+                        <div className="text-right sm:hidden">
+                          <div className="text-sm font-semibold text-foreground">
+                            ${broker.balance_usd.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                          </div>
+                        </div>
+                        <div className={`text-right ${broker.daily_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          <div className="text-xs font-medium">
+                            {broker.daily_pnl >= 0 ? "+" : ""}${broker.daily_pnl.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">daily</div>
+                        </div>
+                        {isOpen
+                          ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        }
                       </div>
                     </div>
+                  </CollapsibleTrigger>
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <div className="text-muted-foreground">Daily</div>
-                        <div className={`font-medium ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {dailyPnl >= 0 ? "+" : ""}${dailyPnl.toFixed(2)}
+                  <CollapsibleContent>
+                    <div className="border-t border-fa-card-border p-3 sm:p-4">
+                      {broker.agents.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {broker.agents.map((agent) => (
+                            <AgentCard
+                              key={agent.id}
+                              agent={agent}
+                              onAction={handleAgentAction}
+                            />
+                          ))}
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Total</div>
-                        <div className={`font-medium ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Win Rate</div>
-                        <div className="font-medium text-foreground">
-                          {winRate > 0 ? `${winRate.toFixed(1)}%` : "—"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {liveData?.direction && (
-                      <div className="mt-2 flex items-center gap-1.5">
-                        {liveData.direction === "long" ? (
-                          <TrendingUp className="h-3 w-3 text-emerald-400" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 text-red-400" />
-                        )}
-                        <span className={`text-xs font-medium ${
-                          liveData.direction === "long" ? "text-emerald-400" : "text-red-400"
-                        }`}>
-                          {liveData.direction.toUpperCase()} open
-                        </span>
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <div className="border-t border-fa-card-border p-3 sm:p-4 bg-fa-bg/50 space-y-2">
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-muted-foreground">Mode:</span>{" "}
-                          <span className="text-foreground capitalize">{agent.mode}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Status:</span>{" "}
-                          <span className="text-foreground capitalize">{agent.status}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Trades Today:</span>{" "}
-                          <span className="text-foreground">{liveData?.trades_today ?? 0}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Total Trades:</span>{" "}
-                          <span className="text-foreground">{totalTrades}</span>
-                        </div>
-                      </div>
-                      {stats.max_drawdown !== undefined && (
-                        <div className="text-xs">
-                          <span className="text-muted-foreground">Max Drawdown:</span>{" "}
-                          <span className="text-foreground">{(stats.max_drawdown ?? 0).toFixed(2)}%</span>
+                      ) : (
+                        <div className="text-center py-6">
+                          <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                          <div className="text-sm text-muted-foreground">No agents on this broker</div>
                         </div>
                       )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             );
-          })}
-
-          {(!s?.agents_detail || s.agents_detail.length === 0) && (
-            <Card className="bg-fa-card border-fa-card-border col-span-full">
-              <CardContent className="p-8 text-center">
-                <Bot className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-                <div className="text-sm text-muted-foreground">No agents deployed yet</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Go to Strategies to deploy agents with validated strategies
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+          })
+        ) : (
+          <Card className="bg-fa-card border-fa-card-border">
+            <CardContent className="p-8 text-center">
+              <Bot className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+              <div className="text-sm text-muted-foreground">No agents deployed yet</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Go to Strategies to deploy agents with validated strategies
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* ── Equity Curve ── */}
@@ -481,7 +524,8 @@ export default function PortfolioPage() {
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Agents</span>
                   <span className="text-foreground font-medium">
-                    {s?.agents_detail?.filter(a => a.status === "running").length ?? 0} running
+                    {brokerData?.brokers.reduce((sum, b) =>
+                      sum + b.agents.filter(a => a.status === "running").length, 0) ?? 0} running
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
@@ -496,5 +540,104 @@ export default function PortfolioPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/* ─── Agent Card Sub-Component ─────────────────────────── */
+function AgentCard({
+  agent,
+  onAction,
+}: {
+  agent: BrokerAgent;
+  onAction: (id: number, action: "start" | "pause" | "stop") => void;
+}) {
+  const statusColor =
+    agent.status === "running" ? "bg-emerald-500" :
+    agent.status === "paused"  ? "bg-yellow-500"  : "bg-zinc-600";
+  const statusPulse = agent.status === "running" ? "animate-pulse" : "";
+
+  return (
+    <Card className="bg-fa-bg/60 border-fa-card-border">
+      <CardContent className="p-3 sm:p-4">
+        {/* Top row: status dot, name, badge */}
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`h-2 w-2 rounded-full shrink-0 ${statusColor} ${statusPulse}`} />
+            <span className="text-sm font-medium text-foreground truncate">{agent.name}</span>
+          </div>
+          <Badge className="bg-accent/10 text-accent border-0 text-[10px] shrink-0 ml-2">
+            {agent.symbol} {agent.timeframe}
+          </Badge>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-4 gap-2 text-xs mb-3">
+          <div>
+            <div className="text-muted-foreground">Daily</div>
+            <div className={`font-medium ${agent.daily_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {agent.daily_pnl >= 0 ? "+" : ""}${agent.daily_pnl.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Total</div>
+            <div className={`font-medium ${agent.total_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {agent.total_pnl >= 0 ? "+" : ""}${agent.total_pnl.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Win Rate</div>
+            <div className="font-medium text-foreground">
+              {agent.win_rate > 0 ? `${agent.win_rate.toFixed(1)}%` : "\u2014"}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Trades</div>
+            <div className="font-medium text-foreground">{agent.total_trades}</div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center justify-between">
+          <Badge className={`border-0 text-[10px] capitalize ${
+            agent.status === "running" ? "bg-emerald-500/15 text-emerald-400" :
+            agent.status === "paused"  ? "bg-yellow-500/15 text-yellow-400"  :
+            "bg-zinc-500/15 text-zinc-400"
+          }`}>
+            {agent.status}
+          </Badge>
+          <div className="flex items-center gap-1">
+            {agent.status === "running" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs gap-1 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10"
+                onClick={() => onAction(agent.id, "pause")}
+              >
+                <Pause className="h-3 w-3" /> Pause
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                onClick={() => onAction(agent.id, "start")}
+              >
+                <Play className="h-3 w-3" /> Play
+              </Button>
+            )}
+            {agent.status !== "stopped" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs gap-1 text-red-400 border-red-500/30 hover:bg-red-500/10"
+                onClick={() => onAction(agent.id, "stop")}
+              >
+                <Square className="h-3 w-3" /> Stop
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

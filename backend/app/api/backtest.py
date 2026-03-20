@@ -662,6 +662,16 @@ def run_backtest_v3(
         "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
     }
 
+    # Validate: builder strategies must have entry rules
+    st_type = strategy_config.get("strategy_type", "builder")
+    if st_type == "builder" and not strategy_config.get("entry_rules"):
+        # Check if it has mss_config or gold_bt_config (these don't need entry_rules)
+        if not filters.get("mss_config") and not filters.get("gold_bt_config"):
+            raise HTTPException(
+                status_code=400,
+                detail="Strategy has no entry rules defined. Open the strategy editor and add at least one entry condition before backtesting.",
+            )
+
     # Merge user settings_values overrides into mss_config for V3 path
     mss_wf = filters.get("mss_config")
     sv_wf = strategy_config.get("settings_values") or {}

@@ -100,49 +100,155 @@ def create_portfolio(
 
 
 @router.get("/summary")
-def get_portfolio_summary(
+async def get_portfolio_summary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Get portfolio summary including P&L, drawdown, agent states."""
+    """Get portfolio summary with REAL broker data + agent P&L from DB."""
+    from sqlalchemy import func, case
+    from app.models.agent import AgentTrade
+    from app.services.broker.manager import broker_manager
+    from app.services.fx_rates import convert_to_usd
+
     pm_db = db.query(PortfolioManager).filter(
         PortfolioManager.user_id == user.id
     ).first()
 
     if not pm_db:
-        # Auto-create a default portfolio for the user
         pm_db = PortfolioManager(user_id=user.id, name="Default Portfolio")
         db.add(pm_db)
         db.commit()
         db.refresh(pm_db)
 
-    # Get in-memory PM or create one
-    pm = get_portfolio_manager(user.id)
-    if pm:
-        summary = pm.get_summary()
-    else:
-        summary = {
-            "portfolio_id": pm_db.id,
-            "mode": pm_db.mode,
-            "status": pm_db.status,
-            "current_equity": pm_db.current_equity,
-            "peak_equity": pm_db.peak_equity,
-            "daily_pnl": pm_db.daily_pnl,
-            "total_pnl": pm_db.total_pnl,
-            "drawdown_pct": pm_db.current_drawdown_pct,
-            "daily_loss_pct": 0.0,
-            "max_daily_loss_pct": pm_db.max_daily_loss_pct,
-            "max_total_drawdown_pct": pm_db.max_total_drawdown_pct,
-            "open_positions": 0,
-            "max_concurrent_positions": pm_db.max_concurrent_positions,
-            "agents": {},
-        }
+    # ── Real broker equity ──
+    total_equity_usd = 0.0
+    total_balance_usd = 0.0
+    for bname in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(bname)
+        if not adapter:
+            continue
+        try:
+            info = await adapter.get_account_info()
+            if info:
+                currency = getattr(info, "currency", "USD") if not isinstance(info, dict) else info.get("currency", "USD")
+                equity = getattr(info, "equity", 0) if not isinstance(info, dict) else info.get("equity", 0)
+                balance = getattr(info, "balance", 0) if not isinstance(info, dict) else info.get("balance", 0)
+                total_equity_usd += await convert_to_usd(equity, currency)
+                total_balance_usd += await convert_to_usd(balance, currency)
+        except Exception:
+            pass
 
-    # Enrich with agent details from DB
+    # ── Agent P&L from DB (reliable, survives restarts) ──
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
     agents = db.query(TradingAgent).filter(
         TradingAgent.created_by == user.id,
         TradingAgent.deleted_at.is_(None),
     ).all()
+    agent_ids = [a.id for a in agents]
+
+    total_pnl = 0.0
+    daily_pnl = 0.0
+    if agent_ids:
+        total_pnl = db.query(func.coalesce(func.sum(AgentTrade.pnl), 0)).filter(
+            AgentTrade.agent_id.in_(agent_ids),
+            AgentTrade.status.in_(["executed", "paper", "closed"]),
+        ).scalar() or 0.0
+
+        daily_pnl = db.query(func.coalesce(func.sum(AgentTrade.pnl), 0)).filter(
+            AgentTrade.agent_id.in_(agent_ids),
+            AgentTrade.status.in_(["executed", "paper", "closed"]),
+            AgentTrade.created_at >= today_start,
+        ).scalar() or 0.0
+
+    # Drawdown: use peak equity from PM DB or current equity as peak
+    peak_equity = max(pm_db.peak_equity or total_equity_usd, total_equity_usd) if total_equity_usd > 0 else pm_db.peak_equity or 0
+    drawdown_pct = ((peak_equity - total_equity_usd) / peak_equity * 100) if peak_equity > 0 and total_equity_usd < peak_equity else 0.0
+    daily_loss_pct = (abs(min(daily_pnl, 0)) / total_balance_usd * 100) if total_balance_usd > 0 and daily_pnl < 0 else 0.0
+
+    # Update PM DB with real values
+    pm_db.current_equity = total_equity_usd
+    if total_equity_usd > (pm_db.peak_equity or 0):
+        pm_db.peak_equity = total_equity_usd
+    pm_db.daily_pnl = float(daily_pnl)
+    pm_db.total_pnl = float(total_pnl)
+    pm_db.current_drawdown_pct = drawdown_pct
+    db.commit()
+
+    # Count open positions across brokers
+    open_positions = 0
+    for bname in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(bname)
+        if adapter:
+            try:
+                pos = await adapter.get_positions()
+                open_positions += len(pos or [])
+            except Exception:
+                pass
+
+    summary = {
+        "portfolio_id": pm_db.id,
+        "mode": pm_db.mode,
+        "status": pm_db.status,
+        "current_equity": round(total_equity_usd, 2),
+        "peak_equity": round(peak_equity, 2),
+        "daily_pnl": round(float(daily_pnl), 2),
+        "total_pnl": round(float(total_pnl), 2),
+        "drawdown_pct": round(drawdown_pct, 2),
+        "daily_loss_pct": round(daily_loss_pct, 2),
+        "max_daily_loss_pct": pm_db.max_daily_loss_pct,
+        "max_total_drawdown_pct": pm_db.max_total_drawdown_pct,
+        "open_positions": open_positions,
+        "max_concurrent_positions": pm_db.max_concurrent_positions,
+        "agents": {},
+    }
+
+    # Enrich with agent details + real P&L from AgentTrade table
+    agent_pnl_map = {}
+    if agent_ids:
+        pnl_rows = (
+            db.query(
+                AgentTrade.agent_id,
+                func.coalesce(func.sum(AgentTrade.pnl), 0).label("total_pnl"),
+                func.count(AgentTrade.id).label("total_trades"),
+                func.sum(case((AgentTrade.pnl > 0, 1), else_=0)).label("wins"),
+            )
+            .filter(
+                AgentTrade.agent_id.in_(agent_ids),
+                AgentTrade.status.in_(["executed", "paper", "closed"]),
+            )
+            .group_by(AgentTrade.agent_id)
+            .all()
+        )
+        for row in pnl_rows:
+            total_trades = row.total_trades or 0
+            wins = row.wins or 0
+            agent_pnl_map[row.agent_id] = {
+                "total_pnl": round(float(row.total_pnl), 2),
+                "total_trades": total_trades,
+                "wins": wins,
+                "win_rate": round(wins / total_trades * 100, 1) if total_trades > 0 else 0,
+            }
+
+    # Daily P&L per agent
+    agent_daily_map = {}
+    if agent_ids:
+        daily_rows = (
+            db.query(
+                AgentTrade.agent_id,
+                func.coalesce(func.sum(AgentTrade.pnl), 0).label("daily_pnl"),
+            )
+            .filter(
+                AgentTrade.agent_id.in_(agent_ids),
+                AgentTrade.status.in_(["executed", "paper", "closed"]),
+                AgentTrade.created_at >= today_start,
+            )
+            .group_by(AgentTrade.agent_id)
+            .all()
+        )
+        for row in daily_rows:
+            agent_daily_map[row.agent_id] = round(float(row.daily_pnl), 2)
 
     summary["agents_detail"] = [
         {
@@ -153,13 +259,174 @@ def get_portfolio_summary(
             "status": a.status,
             "mode": a.mode,
             "strategy_id": a.strategy_id,
-            "performance_stats": a.performance_stats or {},
-            "portfolio_id": a.portfolio_id,
+            "broker_name": a.broker_name or "",
+            "total_pnl": agent_pnl_map.get(a.id, {}).get("total_pnl", 0),
+            "total_trades": agent_pnl_map.get(a.id, {}).get("total_trades", 0),
+            "wins": agent_pnl_map.get(a.id, {}).get("wins", 0),
+            "win_rate": agent_pnl_map.get(a.id, {}).get("win_rate", 0),
+            "daily_pnl": agent_daily_map.get(a.id, 0),
         }
         for a in agents
     ]
 
     return summary
+
+
+@router.get("/broker-portfolios")
+async def get_broker_portfolios(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get portfolio data split by broker — each broker is a separate portfolio section."""
+    from sqlalchemy import func, case
+    from app.models.agent import AgentTrade
+    from app.services.broker.manager import broker_manager
+    from app.services.fx_rates import convert_to_usd
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    agents = db.query(TradingAgent).filter(
+        TradingAgent.created_by == user.id,
+        TradingAgent.deleted_at.is_(None),
+    ).all()
+    agent_ids = [a.id for a in agents]
+
+    # Agent P&L from DB
+    agent_pnl_map = {}
+    agent_daily_map = {}
+    if agent_ids:
+        pnl_rows = (
+            db.query(
+                AgentTrade.agent_id,
+                func.coalesce(func.sum(AgentTrade.pnl), 0).label("total_pnl"),
+                func.count(AgentTrade.id).label("total_trades"),
+                func.sum(case((AgentTrade.pnl > 0, 1), else_=0)).label("wins"),
+            )
+            .filter(
+                AgentTrade.agent_id.in_(agent_ids),
+                AgentTrade.status.in_(["executed", "paper", "closed"]),
+            )
+            .group_by(AgentTrade.agent_id)
+            .all()
+        )
+        for row in pnl_rows:
+            total_trades = row.total_trades or 0
+            wins = row.wins or 0
+            agent_pnl_map[row.agent_id] = {
+                "total_pnl": round(float(row.total_pnl), 2),
+                "total_trades": total_trades,
+                "wins": wins,
+                "win_rate": round(wins / total_trades * 100, 1) if total_trades > 0 else 0,
+            }
+
+        daily_rows = (
+            db.query(
+                AgentTrade.agent_id,
+                func.coalesce(func.sum(AgentTrade.pnl), 0).label("daily_pnl"),
+            )
+            .filter(
+                AgentTrade.agent_id.in_(agent_ids),
+                AgentTrade.status.in_(["executed", "paper", "closed"]),
+                AgentTrade.created_at >= today_start,
+            )
+            .group_by(AgentTrade.agent_id)
+            .all()
+        )
+        for row in daily_rows:
+            agent_daily_map[row.agent_id] = round(float(row.daily_pnl), 2)
+
+    # Group agents by broker
+    broker_agent_map: dict[str, list] = {}
+    for a in agents:
+        bname = a.broker_name or "unassigned"
+        if bname not in broker_agent_map:
+            broker_agent_map[bname] = []
+        broker_agent_map[bname].append({
+            "id": a.id,
+            "name": a.name,
+            "symbol": a.symbol,
+            "timeframe": a.timeframe,
+            "status": a.status,
+            "mode": a.mode,
+            "strategy_id": a.strategy_id,
+            "total_pnl": agent_pnl_map.get(a.id, {}).get("total_pnl", 0),
+            "total_trades": agent_pnl_map.get(a.id, {}).get("total_trades", 0),
+            "wins": agent_pnl_map.get(a.id, {}).get("wins", 0),
+            "win_rate": agent_pnl_map.get(a.id, {}).get("win_rate", 0),
+            "daily_pnl": agent_daily_map.get(a.id, 0),
+        })
+
+    # Build broker sections with real account data
+    brokers = []
+    combined_balance_usd = 0.0
+    combined_equity_usd = 0.0
+    combined_daily_pnl = 0.0
+
+    for bname in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(bname)
+        broker_data = {
+            "broker": bname,
+            "currency": "USD",
+            "balance": 0.0,
+            "equity": 0.0,
+            "balance_usd": 0.0,
+            "equity_usd": 0.0,
+            "daily_pnl": 0.0,
+            "drawdown_pct": 0.0,
+            "agents": broker_agent_map.get(bname, []),
+        }
+
+        if adapter:
+            try:
+                info = await adapter.get_account_info()
+                if info:
+                    currency = getattr(info, "currency", "USD") if not isinstance(info, dict) else info.get("currency", "USD")
+                    balance = getattr(info, "balance", 0) if not isinstance(info, dict) else info.get("balance", 0)
+                    equity = getattr(info, "equity", 0) if not isinstance(info, dict) else info.get("equity", 0)
+                    balance_usd = await convert_to_usd(balance, currency)
+                    equity_usd = await convert_to_usd(equity, currency)
+
+                    # Broker-level daily PnL from its agents
+                    broker_daily = sum(a["daily_pnl"] for a in broker_data["agents"])
+
+                    broker_data.update({
+                        "currency": currency,
+                        "balance": balance,
+                        "equity": equity,
+                        "balance_usd": balance_usd,
+                        "equity_usd": equity_usd,
+                        "daily_pnl": broker_daily,
+                        "drawdown_pct": round(((balance - equity) / balance * 100) if balance > 0 and equity < balance else 0, 2),
+                    })
+
+                    combined_balance_usd += balance_usd
+                    combined_equity_usd += equity_usd
+                    combined_daily_pnl += broker_daily
+            except Exception:
+                pass
+
+        brokers.append(broker_data)
+
+    # Add unassigned agents if any
+    if "unassigned" in broker_agent_map:
+        brokers.append({
+            "broker": "unassigned",
+            "currency": "USD",
+            "balance": 0.0, "equity": 0.0,
+            "balance_usd": 0.0, "equity_usd": 0.0,
+            "daily_pnl": 0.0, "drawdown_pct": 0.0,
+            "agents": broker_agent_map["unassigned"],
+        })
+
+    return {
+        "brokers": brokers,
+        "combined": {
+            "total_balance_usd": round(combined_balance_usd, 2),
+            "total_equity_usd": round(combined_equity_usd, 2),
+            "total_daily_pnl": round(combined_daily_pnl, 2),
+        },
+    }
 
 
 @router.get("/equity-curve")
@@ -268,7 +535,7 @@ def rebalance_portfolio(
 
 
 @router.post("/pause-all")
-def pause_all_agents(
+async def pause_all_agents(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -284,13 +551,10 @@ def pause_all_agents(
     paused = 0
     for a in agents:
         try:
-            algo_engine.stop_agent(a.id)
-            a.status = "paused"
+            await algo_engine.pause_agent(a.id)
             paused += 1
         except Exception as e:
             logger.error("Failed to pause agent %s: %s", a.id, e)
-
-    db.commit()
 
     # Pause PM
     pm = get_portfolio_manager(user.id)
@@ -301,11 +565,13 @@ def pause_all_agents(
 
 
 @router.post("/unpause")
-def unpause_portfolio(
+async def unpause_portfolio(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Resume portfolio after circuit breaker or manual pause."""
+    """Resume portfolio after circuit breaker or manual pause — restarts paused agents."""
+    from app.services.agent.engine import algo_engine
+
     pm = get_portfolio_manager(user.id)
     if pm:
         pm.unpause()
@@ -317,7 +583,22 @@ def unpause_portfolio(
         pm_db.status = "active"
         db.commit()
 
-    return {"status": "unpaused"}
+    # Restart all paused agents
+    paused_agents = db.query(TradingAgent).filter(
+        TradingAgent.created_by == user.id,
+        TradingAgent.status == "paused",
+        TradingAgent.deleted_at.is_(None),
+    ).all()
+
+    resumed = 0
+    for a in paused_agents:
+        try:
+            await algo_engine.start_agent(a.id)
+            resumed += 1
+        except Exception as e:
+            logger.error("Failed to resume agent %s: %s", a.id, e)
+
+    return {"status": "unpaused", "agents_resumed": resumed}
 
 
 @router.get("/correlation")

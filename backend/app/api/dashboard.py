@@ -33,55 +33,111 @@ async def dashboard_summary(
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # ── Broker / account ──────────────────────────────────
-    broker_connected = False
-    broker_name = None
-    account = {
-        "balance": 0.0,
-        "equity": 0.0,
-        "unrealized_pnl": 0.0,
-        "currency": "USD",
-        "open_positions": 0,
-        "open_orders": 0,
-        "margin_used": 0.0,
-    }
+    # ── Broker / account — aggregate ALL connected brokers ──
+    from app.services.fx_rates import convert_to_usd
+
+    def _attr(obj, key, default=0):
+        """Safely extract attribute from object or dict."""
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    broker_accounts = []
     positions = []
+    combined_balance_usd = 0.0
+    combined_equity_usd = 0.0
+    combined_unrealized_pnl_usd = 0.0
+    combined_open_positions = 0
+    combined_open_orders = 0
+    combined_margin_used = 0.0
 
-    default_adapter = broker_manager.get_adapter()
-    if default_adapter:
-        broker_connected = True
-        broker_name = broker_manager.default_broker
+    for bname in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(bname)
+        if not adapter:
+            continue
+
+        broker_info = {
+            "broker": bname,
+            "connected": True,
+            "is_default": bname == broker_manager.default_broker,
+            "currency": "USD",
+            "balance": 0.0,
+            "equity": 0.0,
+            "unrealized_pnl": 0.0,
+            "balance_usd": 0.0,
+            "equity_usd": 0.0,
+            "open_positions": 0,
+            "open_orders": 0,
+            "margin_used": 0.0,
+        }
+
         try:
-            info = await default_adapter.get_account_info()
+            info = await adapter.get_account_info()
             if info:
-                account = {
-                    "balance": getattr(info, "balance", 0) if not isinstance(info, dict) else info.get("balance", 0),
-                    "equity": getattr(info, "equity", 0) if not isinstance(info, dict) else info.get("equity", 0),
-                    "unrealized_pnl": getattr(info, "unrealized_pnl", 0) if not isinstance(info, dict) else info.get("unrealized_pnl", 0),
-                    "currency": getattr(info, "currency", "USD") if not isinstance(info, dict) else info.get("currency", "USD"),
-                    "open_positions": getattr(info, "open_positions", 0) if not isinstance(info, dict) else info.get("open_positions", 0),
-                    "open_orders": getattr(info, "open_orders", 0) if not isinstance(info, dict) else info.get("open_orders", 0),
-                    "margin_used": getattr(info, "margin_used", 0) if not isinstance(info, dict) else info.get("margin_used", 0),
-                }
+                currency = _attr(info, "currency", "USD")
+                balance = _attr(info, "balance", 0)
+                equity = _attr(info, "equity", 0)
+                unrealized = _attr(info, "unrealized_pnl", 0)
+                positions_count = _attr(info, "open_positions", 0)
+                orders_count = _attr(info, "open_orders", 0)
+                margin = _attr(info, "margin_used", 0)
+
+                balance_usd = await convert_to_usd(balance, currency)
+                equity_usd = await convert_to_usd(equity, currency)
+                unrealized_usd = await convert_to_usd(unrealized, currency)
+
+                broker_info.update({
+                    "currency": currency,
+                    "balance": balance,
+                    "equity": equity,
+                    "unrealized_pnl": unrealized,
+                    "balance_usd": balance_usd,
+                    "equity_usd": equity_usd,
+                    "open_positions": positions_count,
+                    "open_orders": orders_count,
+                    "margin_used": margin,
+                })
+
+                combined_balance_usd += balance_usd
+                combined_equity_usd += equity_usd
+                combined_unrealized_pnl_usd += unrealized_usd
+                combined_open_positions += positions_count
+                combined_open_orders += orders_count
+                combined_margin_used += await convert_to_usd(margin, currency)
         except Exception:
             pass
 
+        # Positions from this broker
         try:
-            raw_positions = await default_adapter.get_positions()
-            positions = [
-                {
-                    "position_id": str(getattr(p, "position_id", "") if not isinstance(p, dict) else p.get("position_id", "")),
-                    "symbol": getattr(p, "symbol", "") if not isinstance(p, dict) else p.get("symbol", ""),
-                    "side": str(getattr(p, "side", "")) if not isinstance(p, dict) else p.get("side", ""),
-                    "size": getattr(p, "size", 0) if not isinstance(p, dict) else p.get("size", 0),
-                    "entry_price": getattr(p, "entry_price", 0) if not isinstance(p, dict) else p.get("entry_price", 0),
-                    "current_price": getattr(p, "current_price", 0) if not isinstance(p, dict) else p.get("current_price", 0),
-                    "unrealized_pnl": getattr(p, "unrealized_pnl", 0) if not isinstance(p, dict) else p.get("unrealized_pnl", 0),
-                }
-                for p in (raw_positions or [])
-            ]
+            raw_positions = await adapter.get_positions()
+            for p in (raw_positions or []):
+                positions.append({
+                    "position_id": str(_attr(p, "position_id", "")),
+                    "symbol": _attr(p, "symbol", ""),
+                    "side": str(_attr(p, "side", "")),
+                    "size": _attr(p, "size", 0),
+                    "entry_price": _attr(p, "entry_price", 0),
+                    "current_price": _attr(p, "current_price", 0),
+                    "unrealized_pnl": _attr(p, "unrealized_pnl", 0),
+                    "broker": bname,
+                })
         except Exception:
             pass
+
+        broker_accounts.append(broker_info)
+
+    broker_connected = len(broker_accounts) > 0
+    broker_name = broker_manager.default_broker
+
+    account = {
+        "balance": round(combined_balance_usd, 2),
+        "equity": round(combined_equity_usd, 2),
+        "unrealized_pnl": round(combined_unrealized_pnl_usd, 2),
+        "currency": "USD",
+        "open_positions": combined_open_positions,
+        "open_orders": combined_open_orders,
+        "margin_used": round(combined_margin_used, 2),
+    }
 
     # ── Strategies ────────────────────────────────────────
     from sqlalchemy import or_
@@ -119,11 +175,14 @@ async def dashboard_summary(
 
     # ── Today's trades — PRIMARY: broker closed trades, FALLBACK: agent DB ──
     broker_closed_trades = []
-    if default_adapter:
+    for bname in broker_manager.active_brokers:
+        adapter = broker_manager.get_adapter(bname)
+        if not adapter:
+            continue
         try:
-            broker_closed_trades = await default_adapter.get_closed_trades(
-                since=today_start, limit=200
-            )
+            trades = await adapter.get_closed_trades(since=today_start, limit=200)
+            if trades:
+                broker_closed_trades.extend(trades)
         except Exception:
             pass
 
@@ -319,6 +378,7 @@ async def dashboard_summary(
             "broker_connected": broker_connected,
             "broker_name": broker_name,
         },
+        "broker_accounts": broker_accounts,
         "positions": positions,
         "strategies": {
             "total": total_strategies,

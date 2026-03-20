@@ -74,8 +74,8 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
               balance: info.balance ?? 0,
               equity: info.equity ?? 0,
               unrealizedPnl: info.unrealized_pnl ?? 0,
-              todayPnl: connectedBrokers.length === 1 ? todayPnl : todayPnl / connectedBrokers.length,
-              todayTrades: connectedBrokers.length === 1 ? todayTrades : Math.round(todayTrades / connectedBrokers.length),
+              todayPnl: todayPnl,
+              todayTrades: todayTrades,
             }))
         )
       );
