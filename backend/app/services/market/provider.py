@@ -300,6 +300,7 @@ class DabentoProvider(DataProvider):
         "BTCUSD":  ("GLBX.MDP3", "BTC.FUT"),
         "BTC":     ("GLBX.MDP3", "BTC.FUT"),
         "EURUSD":  ("GLBX.MDP3", "6E.FUT"),
+        "SPX500":  ("GLBX.MDP3", "ES.FUT"),
         "ES":      ("GLBX.MDP3", "ES.FUT"),
         "NQ":      ("GLBX.MDP3", "NQ.FUT"),
         "YM":      ("GLBX.MDP3", "YM.FUT"),
