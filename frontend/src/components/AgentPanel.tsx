@@ -115,7 +115,7 @@ export default function AgentPanel() {
           .map((s) => s.symbol);
         setBrokerSymbols(names);
       })
-      .catch(() => setBrokerSymbols([]))
+      .catch((err) => { console.error("[AgentPanel] broker symbols fetch:", err); setBrokerSymbols([]); })
       .finally(() => setBrokerSymbolsLoading(false));
   }, [cBroker]);
 
@@ -167,19 +167,19 @@ export default function AgentPanel() {
     api
       .get<StrategyList>("/api/strategies")
       .then((res) => setStrategies(res.items))
-      .catch(() => {});
+      .catch(console.error);
     api
       .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>("/api/ml/models?status=ready")
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
-      .catch(() => {});
+      .catch(console.error);
     api
       .get<{ id: number; name: string; symbol: string; train_metrics?: Record<string, number> }[]>("/api/ml/models?status=ready&model_type=rl_ppo")
       .then((models) => setRlModels(Array.isArray(models) ? models : []))
-      .catch(() => {});
+      .catch(console.error);
     api
       .get<{ id: number; account_name: string; firm_name: string; status: string }[]>("/api/prop-firms/")
       .then((accts) => setPropFirmAccounts(Array.isArray(accts) ? accts : []))
-      .catch(() => {});
+      .catch(console.error);
   }, []);
 
   // ── Default cBroker to activeBroker when it first becomes available ──

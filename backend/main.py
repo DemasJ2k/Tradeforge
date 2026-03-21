@@ -6,6 +6,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limit import limiter
 
 # Configure root logger to show INFO for our application modules
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -105,6 +108,8 @@ def _run_schema_migrations():
         ("datasources", "default_spread",     "REAL DEFAULT 0.3"),
         ("datasources", "commission_model",   "VARCHAR(20) DEFAULT 'per_lot'"),
         ("datasources", "default_commission", "REAL DEFAULT 7.0"),
+        # Backtest datasource tracking
+        ("backtests", "datasource_id", "INTEGER"),
         # Optimization datasource tracking
         ("optimizations", "datasource_id", "INTEGER"),
         # ML model ownership
@@ -253,6 +258,10 @@ def _create_indexes():
         ("idx_datasources_creator", "datasources", "creator_id"),
         ("idx_trades_user", "trades", "user_id"),
         ("idx_agent_logs_agent_created", "agent_logs", "agent_id, created_at DESC"),
+        ("idx_backtests_datasource", "backtests", "datasource_id"),
+        ("idx_trades_strategy", "trades", "strategy_id"),
+        ("idx_agent_trades_agent", "agent_trades", "agent_id"),
+        ("idx_optimizations_datasource", "optimizations", "datasource_id"),
     ]
 
     with engine.connect() as conn:
@@ -329,29 +338,32 @@ def _remove_incompatible_strategies():
             _log.info("No incompatible strategies to remove")
             return
 
-        id_list = ",".join(str(i) for i in ids_to_remove)
-        _log.info("Removing %d incompatible strategies: %s", len(ids_to_remove), id_list)
+        _log.info("Removing %d incompatible strategies: %s", len(ids_to_remove), ids_to_remove)
+
+        # Use parameterized queries to avoid SQL injection risk
+        placeholders = ",".join(f":id_{i}" for i in range(len(ids_to_remove)))
+        params = {f"id_{i}": sid for i, sid in enumerate(ids_to_remove)}
 
         # Delete orphaned agents first (FK to strategies)
         conn.execute(text(
             f"DELETE FROM agent_logs WHERE agent_id IN "
-            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
-        ))
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({placeholders}))"
+        ), params)
         conn.execute(text(
             f"DELETE FROM agent_trades WHERE agent_id IN "
-            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
-        ))
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({placeholders}))"
+        ), params)
         conn.execute(text(
-            f"DELETE FROM trading_agents WHERE strategy_id IN ({id_list})"
-        ))
+            f"DELETE FROM trading_agents WHERE strategy_id IN ({placeholders})"
+        ), params)
         # Delete orphaned backtests
         conn.execute(text(
-            f"DELETE FROM backtests WHERE strategy_id IN ({id_list})"
-        ))
+            f"DELETE FROM backtests WHERE strategy_id IN ({placeholders})"
+        ), params)
         # Delete the strategies
         result = conn.execute(text(
-            f"DELETE FROM strategies WHERE id IN ({id_list})"
-        ))
+            f"DELETE FROM strategies WHERE id IN ({placeholders})"
+        ), params)
         conn.commit()
         _log.info("Removed %d incompatible strategies and orphaned records", result.rowcount)
 
@@ -394,6 +406,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — explicit origins to avoid browser issues with wildcard + credentials.
 _cors_origins = [
@@ -431,6 +445,18 @@ async def request_timing_middleware(request: Request, call_next):
             "SLOW %s %s took %.2fs", request.method, request.url.path, duration,
         )
     return response
+
+
+# Request body size limit — reject oversized payloads before reading into memory
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)"},
+        )
+    return await call_next(request)
 
 
 # Global exception handler — ensures unhandled errors return JSON (visible

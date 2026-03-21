@@ -8,12 +8,13 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
 from app.core.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.models.user import User
 from app.models.strategy import Strategy
@@ -181,7 +182,9 @@ def _run_optimization_thread(
 
 
 @router.post("/run", response_model=dict)
+@limiter.limit("5/minute")
 def start_optimization(
+    request: Request,
     payload: OptimizationRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -460,6 +463,8 @@ def delete_optimization(
 
 @router.get("", response_model=list[OptimizationListItem])
 def list_optimizations(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -479,7 +484,8 @@ def list_optimizations(
         db.query(Optimization)
         .filter(Optimization.strategy_id.in_(strategy_ids))
         .order_by(Optimization.created_at.desc())
-        .limit(50)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
@@ -717,7 +723,7 @@ def get_trade_log(
     if not tp.exists():
         tp = Path(settings.UPLOAD_DIR) / trade_ds.filename
     if not tp.exists():
-        raise HTTPException(status_code=400, detail="CSV file not found on disk")
+        raise HTTPException(status_code=404, detail="CSV file not found on disk")
 
     bars_all = _load_bars_from_csv(str(tp))
     trade_symbol = trade_ds.symbol or "UNKNOWN"

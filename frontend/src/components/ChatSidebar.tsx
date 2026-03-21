@@ -313,7 +313,7 @@ export default function ChatSidebar() {
         } else {
           setConversations([]);
         }
-      }).catch(() => setConversations([]));
+      }).catch((err) => { console.error("[ChatSidebar] conversations:", err); setConversations([]); });
     }
   }, [showHistory]);
 
@@ -324,7 +324,7 @@ export default function ChatSidebar() {
       setMemoriesLoading(true);
       api.get<{ items: MemoryItem[]; total: number }>("/api/llm/memories")
         .then((res) => setMemories(res.items))
-        .catch(() => setMemories([]))
+        .catch((err) => { console.error("[ChatSidebar] memories:", err); setMemories([]); })
         .finally(() => setMemoriesLoading(false));
     }
   }, [showMemories]);

@@ -14,12 +14,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
 from app.api.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.models.datasource import DataSource
 from app.models.ml import MLModel, MLPrediction
@@ -237,7 +238,9 @@ async def register_rl_model(
 # ── Training ──────────────────────────────────────────
 
 @router.post("/train")
+@limiter.limit("5/minute")
 async def train_model(
+    request: Request,
     payload: MLTrainRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

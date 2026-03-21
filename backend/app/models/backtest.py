@@ -12,11 +12,12 @@ class Backtest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
-    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     symbol = Column(String(20), nullable=False)
     timeframe = Column(String(10), nullable=False)
     date_from = Column(String(20), nullable=False)
     date_to = Column(String(20), nullable=False)
+    datasource_id = Column(Integer, ForeignKey("datasources.id"), nullable=True)
     initial_balance = Column(Float, default=10000.0)
     status = Column(String(20), default="pending")  # pending, running, completed, failed
     results = Column(JSON, default=dict)  # Full results blob (stats, elapsed_seconds)
@@ -24,3 +25,4 @@ class Backtest(Base):
     deleted_at = Column(DateTime, nullable=True, default=None)
 
     strategy = relationship("Strategy", back_populates="backtests")
+    creator = relationship("User")

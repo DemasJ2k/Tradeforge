@@ -73,6 +73,11 @@ class BacktestResult:
 
 
 class BacktestEngine:
+    """.. deprecated:: Phase 1C
+    V1 engine is fully deprecated. All backtests route through V2/V3.
+    This class will be removed in a future release.
+    """
+
     def __init__(
         self,
         bars: list[Bar],
@@ -82,6 +87,13 @@ class BacktestEngine:
         commission_per_lot: float = 0.0,
         point_value: float = 1.0,
     ):
+        import warnings
+        warnings.warn(
+            "BacktestEngine (V1) is deprecated and will be removed. "
+            "Use V2 (v2_adapter.run_unified_backtest) or V3 engine instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.bars = bars
         self.config = strategy_config
         self.initial_balance = initial_balance
@@ -652,16 +664,16 @@ class BacktestEngine:
         result.win_rate = len(wins) / result.total_trades * 100
 
         result.gross_profit = sum(t.pnl for t in wins)
-        result.gross_loss = sum(t.pnl for t in losses)
-        result.net_profit = result.gross_profit + result.gross_loss
+        result.gross_loss = abs(sum(t.pnl for t in losses))
+        result.net_profit = result.gross_profit - result.gross_loss
 
-        result.profit_factor = abs(result.gross_profit / result.gross_loss) if result.gross_loss != 0 else float("inf")
+        result.profit_factor = result.gross_profit / result.gross_loss if result.gross_loss > 0 else float("inf")
 
         result.avg_win = result.gross_profit / len(wins) if wins else 0
-        result.avg_loss = result.gross_loss / len(losses) if losses else 0
+        result.avg_loss = -(result.gross_loss / len(losses)) if losses else 0
         result.largest_win = max((t.pnl for t in wins), default=0)
         result.largest_loss = min((t.pnl for t in losses), default=0)
-        result.avg_trade = result.net_profit / result.total_trades
+        result.avg_trade = result.net_profit / result.total_trades if result.total_trades > 0 else 0
 
         # Expectancy
         result.expectancy = (result.win_rate / 100 * result.avg_win) + ((1 - result.win_rate / 100) * result.avg_loss)

@@ -39,8 +39,8 @@ export default function TradeLogTable({ trades }: Props) {
       );
     }
     list.sort((a, b) => {
-      const av = (a as unknown as Record<string, unknown>)[sortKey] as number || 0;
-      const bv = (b as unknown as Record<string, unknown>)[sortKey] as number || 0;
+      const av = ((a as unknown as Record<string, unknown>)[sortKey] as number) ?? 0;
+      const bv = ((b as unknown as Record<string, unknown>)[sortKey] as number) ?? 0;
       return sortAsc ? av - bv : bv - av;
     });
     return list;

@@ -244,17 +244,20 @@ async def list_backtests(db: Session, user_id: int, **kwargs) -> dict:
 
     runs = (
         db.query(Backtest)
-        .filter(Backtest.user_id == user_id)
+        .filter(Backtest.creator_id == user_id)
         .order_by(Backtest.created_at.desc())
         .limit(20)
         .all()
     )
     items = []
     for r in runs:
-        stats = r.stats if isinstance(r.stats, dict) else {}
+        results_blob = r.results if isinstance(r.results, dict) else {}
+        stats = results_blob.get("stats", results_blob.get("v2_stats", {}))
+        if not isinstance(stats, dict):
+            stats = {}
         items.append({
             "id": r.id,
-            "strategy_name": r.strategy_name or "",
+            "strategy_name": r.strategy.name if r.strategy else "",
             "symbol": r.symbol or "",
             "timeframe": r.timeframe or "",
             "net_profit": stats.get("net_profit", 0),
@@ -285,18 +288,25 @@ async def get_backtest_results(db: Session, user_id: int, backtest_id: int = 0, 
 
     bt = db.query(Backtest).filter(
         Backtest.id == backtest_id,
-        Backtest.user_id == user_id,
+        Backtest.creator_id == user_id,
     ).first()
     if not bt:
         return {"error": f"Backtest {backtest_id} not found."}
 
-    stats = bt.stats if isinstance(bt.stats, dict) else {}
-    v2_stats = bt.v2_stats if isinstance(getattr(bt, 'v2_stats', None), dict) else {}
-    trades = bt.trades if isinstance(bt.trades, list) else []
+    results_blob = bt.results if isinstance(bt.results, dict) else {}
+    stats = results_blob.get("stats", results_blob.get("v2_stats", {}))
+    if not isinstance(stats, dict):
+        stats = {}
+    v2_stats = results_blob.get("v2_stats", {})
+    if not isinstance(v2_stats, dict):
+        v2_stats = {}
+    trades = results_blob.get("trades", [])
+    if not isinstance(trades, list):
+        trades = []
 
     return {
         "id": bt.id,
-        "strategy_name": bt.strategy_name or "",
+        "strategy_name": bt.strategy.name if bt.strategy else "",
         "symbol": bt.symbol or "",
         "timeframe": bt.timeframe or "",
         "stats": stats,
@@ -926,24 +936,27 @@ async def get_broker_status(db: Session, user_id: int, **kwargs) -> dict:
     category="backtests",
 )
 async def compare_backtests(db: Session, user_id: int, backtest_ids: list = None, **kwargs) -> dict:
-    from app.models.backtest import BacktestRun
+    from app.models.backtest import Backtest
     if not backtest_ids or len(backtest_ids) < 2:
         return {"error": "Provide at least 2 backtest IDs to compare."}
 
     results = []
     for bid in backtest_ids[:5]:  # max 5
-        run = db.query(BacktestRun).filter(
-            BacktestRun.id == bid, BacktestRun.user_id == user_id
+        run = db.query(Backtest).filter(
+            Backtest.id == bid, Backtest.creator_id == user_id
         ).first()
         if not run:
             results.append({"id": bid, "error": "Not found"})
             continue
-        stats = run.results or {}
+        results_blob = run.results if isinstance(run.results, dict) else {}
+        stats = results_blob.get("stats", results_blob.get("v2_stats", {}))
+        if not isinstance(stats, dict):
+            stats = {}
         results.append({
             "id": run.id,
-            "strategy": run.strategy_name or f"Strategy #{run.strategy_id}",
-            "symbol": stats.get("symbol", ""),
-            "timeframe": stats.get("timeframe", ""),
+            "strategy": (run.strategy.name if run.strategy else None) or f"Strategy #{run.strategy_id}",
+            "symbol": run.symbol or "",
+            "timeframe": run.timeframe or "",
             "net_profit": stats.get("net_profit", 0),
             "profit_factor": stats.get("profit_factor", 0),
             "win_rate": stats.get("win_rate", 0),

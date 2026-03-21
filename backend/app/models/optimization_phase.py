@@ -8,7 +8,7 @@ Phase chains allow users to:
 3. Continue adding phases as needed
 """
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, JSON, ForeignKey
 from app.core.database import Base
 
 
@@ -22,8 +22,8 @@ class OptimizationPhase(Base):
     phase_number = Column(Integer, nullable=False, default=1)
 
     # Reference to original optimization run (strategy + datasource source)
-    strategy_id = Column(Integer, nullable=True)
-    datasource_id = Column(Integer, nullable=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)
+    datasource_id = Column(Integer, ForeignKey("datasources.id"), nullable=True)
 
     # Phase-specific optimization config
     objective = Column(String(64), nullable=False, default="sharpe_ratio")

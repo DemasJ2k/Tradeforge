@@ -16,8 +16,7 @@ import { ListSkeleton } from "@/components/Skeletons";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import BacktestPageContent from "@/app/backtest/components/BacktestPageContent";
 import DataSourcesPanel from "@/app/backtest/components/DataSourcesPanel";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 /* Strategies to auto-delete on first load */
 const STALE_STRATEGY_NAMES = [
@@ -180,7 +179,7 @@ function StrategiesPage() {
     staleCleanedRef.current = true;
     const toDelete = strategies.filter((s) => STALE_STRATEGY_NAMES.includes(s.name) && !s.is_system);
     if (toDelete.length === 0) return;
-    Promise.all(toDelete.map((s) => api.delete(`/api/strategies/${s.id}`).catch(() => {}))).then(() => {
+    Promise.all(toDelete.map((s) => api.delete(`/api/strategies/${s.id}`).catch(console.error))).then(() => {
       setStrategies((prev) => prev.filter((s) => !STALE_STRATEGY_NAMES.includes(s.name) || s.is_system));
     });
   }, [strategies]);
@@ -276,7 +275,7 @@ function StrategiesPage() {
       form.append("file", aiFile);
       if (aiPrompt.trim()) form.append("prompt", aiPrompt.trim());
 
-      const res = await fetch(`${API}/api/strategies/ai-generate`, {
+      const res = await fetch(`${API_BASE}/api/strategies/ai-generate`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
@@ -339,7 +338,7 @@ function StrategiesPage() {
       form.append("file", uploadFile);
       if (uploadName.trim()) form.append("name", uploadName.trim());
 
-      const res = await fetch(`${API}/api/strategies/upload`, {
+      const res = await fetch(`${API_BASE}/api/strategies/upload`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,

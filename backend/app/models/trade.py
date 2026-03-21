@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, JSON
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -9,7 +10,7 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     broker = Column(String(20), nullable=False)
     symbol = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)  # BUY or SELL
@@ -26,3 +27,6 @@ class Trade(Base):
     status = Column(String(20), default="open")    # open, closed
     metadata_ = Column("metadata", JSON, default=dict)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")
+    strategy = relationship("Strategy")

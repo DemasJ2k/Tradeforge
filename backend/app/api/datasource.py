@@ -280,6 +280,9 @@ def get_candles(
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
 
+    if ds.creator_id != user.id and not ds.is_public:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     if not os.path.exists(ds.filepath):
         raise HTTPException(status_code=404, detail="Data file missing from disk")
 
@@ -334,6 +337,9 @@ def delete_source(
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
 
+    if ds.creator_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this datasource")
+
     # Delete the file from disk
     if ds.filepath and os.path.exists(ds.filepath):
         try:
@@ -367,6 +373,9 @@ def update_instrument_profile(
     ds = db.query(DataSource).filter(DataSource.id == source_id).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Data source not found")
+
+    if ds.creator_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this datasource")
 
     if payload.pip_value is not None:
         ds.pip_value = payload.pip_value

@@ -98,7 +98,7 @@ export default function BacktestConfigDialog({
           const items = Array.isArray(res) ? res : (res as { items: MLModel[] }).items || [];
           setMlModels(items.filter(m => m.status === 'ready'));
         })
-        .catch(() => setMlModels([]));
+        .catch((err) => { console.error("[BacktestConfigDialog] models:", err); setMlModels([]); });
     }
   }, [open]);
 

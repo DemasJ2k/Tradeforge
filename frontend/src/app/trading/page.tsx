@@ -170,7 +170,7 @@ export default function TradingPage() {
           .map((s) => s.symbol);
         setBrokerSymbols(names);
       })
-      .catch(() => setBrokerSymbols([]))
+      .catch((err) => { console.error("[Trading] broker symbols fetch:", err); setBrokerSymbols([]); })
       .finally(() => setBrokerSymbolsLoading(false));
   }, [chartBroker]);
 
@@ -188,7 +188,7 @@ export default function TradingPage() {
         setOverlayDatasources(arr);
         if (arr.length > 0) setOverlayDatasourceId(arr[0].id);
       })
-      .catch(() => {});
+      .catch(console.error);
   }, []);
 
   // ── Indicator state (2 slots: each can be any overlay or oscillator) ──
@@ -708,7 +708,7 @@ export default function TradingPage() {
       } else {
         oscChart.timeScale().fitContent();
       }
-    });
+    }).catch(console.error);
 
     return () => {
       cancelled = true;

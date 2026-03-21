@@ -4,11 +4,11 @@ import secrets
 import threading
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
-    hash_password, verify_password, create_access_token,
+    hash_password, verify_password, create_access_token, create_refresh_token,
     get_current_user, get_current_admin,
     store_otp, verify_otp, send_otp_email,
 )
@@ -24,6 +24,8 @@ from app.schemas.auth import (
     ProfileUpdate,
     PasswordResetRequest, PasswordResetConfirm, AdminManualReset, ResetRequestItem,
 )
+
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -74,11 +76,13 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
 # ─── Login ───
 @router.post("/login", response_model=Token)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = create_access_token({"sub": str(user.id)})
+    refresh = create_refresh_token({"sub": str(user.id)})
 
     # If 2FA is enabled, generate OTP and send via email
     if user.totp_enabled:
@@ -91,6 +95,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
     return Token(
         access_token=token,
+        refresh_token=refresh,
         must_change_password=bool(user.must_change_password),
         totp_required=bool(user.totp_enabled),
     )
@@ -99,10 +104,17 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 # ─── Refresh token ───
 @router.post("/refresh", response_model=Token)
 def refresh_token(current_user: User = Depends(get_current_user)):
-    """Issue a fresh JWT token (extends session without re-login)."""
+    """Issue a fresh access + refresh token pair (extends session without re-login).
+
+    Accepts either a valid access token *or* a refresh token in the
+    Authorization header.  The refresh token has a 7-day lifetime so
+    clients can silently renew the 1-hour access token.
+    """
     token = create_access_token({"sub": str(current_user.id)})
+    refresh = create_refresh_token({"sub": str(current_user.id)})
     return Token(
         access_token=token,
+        refresh_token=refresh,
         must_change_password=bool(current_user.must_change_password),
         totp_required=False,
     )
@@ -157,11 +169,12 @@ def confirm_totp(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    valid = verify_otp(current_user, payload.code)
+    valid = verify_otp(current_user, payload.code, db)
     if valid:
         current_user.totp_enabled = True
         current_user.otp_code = ""  # Clear used code
         current_user.otp_expires_at = None
+        current_user.otp_attempts = 0
         db.commit()
     return TOTPVerifyResponse(valid=valid)
 
@@ -176,10 +189,11 @@ def verify_totp(
     if not current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
-    valid = verify_otp(current_user, payload.code)
+    valid = verify_otp(current_user, payload.code, db)
     if valid:
         current_user.otp_code = ""  # Clear used code
         current_user.otp_expires_at = None
+        current_user.otp_attempts = 0
         db.commit()
     return TOTPVerifyResponse(valid=valid)
 
@@ -200,7 +214,7 @@ def disable_totp(
         send_otp_email(current_user, code)
         return {"status": "code_sent", "message": "Verification code sent to your email"}
 
-    if not verify_otp(current_user, payload.code):
+    if not verify_otp(current_user, payload.code, db):
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
     current_user.totp_enabled = False
@@ -219,6 +233,10 @@ def update_profile(
     current_user: User = Depends(get_current_user),
 ):
     if payload.email is not None:
+        if payload.email:
+            existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email already in use")
         current_user.email = payload.email
     if payload.phone is not None:
         current_user.phone = payload.phone
@@ -321,7 +339,8 @@ def revoke_or_delete_invitation(
 
 # ─── Password Reset: Request (public — no auth required) ───
 @router.post("/request-reset")
-def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def request_password_reset(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
     """
     Step 1 of password reset.
     Always returns success to avoid leaking whether an email exists.
@@ -396,7 +415,7 @@ def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db))
 
     user = db.query(User).filter(User.id == record.user_id).first()
     if not user:
-        raise HTTPException(status_code=400, detail="User not found")
+        raise HTTPException(status_code=404, detail="User not found")
 
     user.password_hash = hash_password(payload.new_password)
     user.must_change_password = False
@@ -424,18 +443,15 @@ def list_reset_requests(
     admin: User = Depends(get_current_admin),
 ):
     """Return all password reset tokens (pending and used) ordered newest first."""
-    now = datetime.now(timezone.utc)
     records = (
-        db.query(PasswordResetToken)
+        db.query(PasswordResetToken, User)
+        .join(User, PasswordResetToken.user_id == User.id)
         .order_by(PasswordResetToken.created_at.desc())
         .limit(100)
         .all()
     )
     result = []
-    for r in records:
-        user = db.query(User).filter(User.id == r.user_id).first()
-        if not user:
-            continue
+    for r, user in records:
         expires = r.expires_at
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
@@ -533,15 +549,15 @@ def delete_user(
         db.query(LLMMemory).filter(LLMMemory.user_id == user_id).delete(synchronize_session=False)
         db.query(LLMConversation).filter(LLMConversation.user_id == user_id).delete(synchronize_session=False)
         db.query(LLMUsage).filter(LLMUsage.user_id == user_id).delete(synchronize_session=False)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("LLM cleanup: %s", e)
 
     # Delete user settings
     try:
         from app.models.settings import UserSettings
         db.query(UserSettings).filter(UserSettings.user_id == user_id).delete(synchronize_session=False)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("Settings cleanup: %s", e)
 
     # Delete the user record
     db.delete(user)

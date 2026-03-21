@@ -7,12 +7,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
 from app.core.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.models.user import User
 from app.models.strategy import Strategy
@@ -42,8 +43,8 @@ def _fire_notification(user_id: int, subject: str, body: str, event_type: str = 
                 asyncio.run(notify(_db, user_id, subject, body, event_type=event_type))
             finally:
                 _db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).debug("Notification error: %s", e)
     threading.Thread(target=_run, daemon=True).start()
 # from app.services.backtest.engine import BacktestEngine
 # from app.services.backtest.strategy_backtester import backtest_mss, backtest_gold_bt
@@ -70,39 +71,7 @@ def _ensure_dict(value) -> dict:
     return {}
 
 
-@router.get("/debug-paths")
-def debug_paths(db: Session = Depends(get_db)):
-    """Temporary diagnostic endpoint — shows UPLOAD_DIR contents and datasource paths."""
-    upload_dir = Path(settings.UPLOAD_DIR)
-    files = []
-    if upload_dir.exists():
-        files = sorted([f.name for f in upload_dir.iterdir() if f.is_file()])[:30]
-    ds_list = db.query(DataSource).limit(5).all()
-    ds_info = []
-    for ds in ds_list:
-        ds_info.append({
-            "id": ds.id,
-            "filename": ds.filename,
-            "filepath": ds.filepath,
-            "filepath_exists": Path(ds.filepath).exists() if ds.filepath else False,
-            "upload_join_exists": (upload_dir / ds.filename).exists() if ds.filename else False,
-        })
-    repo_data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
-    repo_files = []
-    if repo_data_dir.exists():
-        repo_files = sorted([f.name for f in repo_data_dir.iterdir() if f.is_file()])[:30]
-    return {
-        "code_version": "v7-class-detect",
-        "upload_dir": str(upload_dir),
-        "upload_dir_exists": upload_dir.exists(),
-        "files_in_dir": files,
-        "file_count": len(files),
-        "repo_data_dir": str(repo_data_dir),
-        "repo_data_exists": repo_data_dir.exists(),
-        "repo_files": repo_files,
-        "repo_file_count": len(repo_files),
-        "datasources_sample": ds_info,
-    }
+# debug-paths endpoint removed — was a temporary diagnostic tool
 
 
 # Column alias sets for CSV parsing (same as datasource.py)
@@ -277,7 +246,9 @@ def _load_bars_from_csv(file_path: str, validate: bool = True) -> list[Bar]:
 
 
 @router.post("/run", response_model=BacktestResponse)
+@limiter.limit("10/minute")
 def run_backtest(
+    request: Request,
     payload: BacktestRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -416,6 +387,7 @@ def run_backtest(
 
             bt = Backtest(
                 strategy_id=strategy.id,
+                datasource_id=payload.datasource_id,
                 symbol=",".join(sym_names),
                 timeframe=datasources_multi[0].timeframe or "",
                 date_from=datasources_multi[0].date_from or "",
@@ -563,6 +535,7 @@ def run_backtest(
         # Save to DB
         bt = Backtest(
             strategy_id=strategy.id,
+            datasource_id=payload.datasource_id,
             symbol=datasource.symbol or "UNKNOWN",
             timeframe=datasource.timeframe or "",
             date_from=datasource.date_from or "",
@@ -620,7 +593,9 @@ def run_backtest(
 
 
 @router.post("/run-v3")
+@limiter.limit("10/minute")
 def run_backtest_v3(
+    request: Request,
     payload: BacktestRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -689,6 +664,7 @@ def run_backtest_v3(
     # Create DB record immediately with status "running"
     bt = Backtest(
         strategy_id=strategy.id,
+        datasource_id=payload.datasource_id,
         symbol=symbol,
         timeframe=datasource.timeframe or "",
         date_from=datasource.date_from or "",
@@ -1159,16 +1135,18 @@ def get_backtest(
     ).first()
     if not bt:
         raise HTTPException(404, "Backtest not found")
+    results = bt.results or {}
     return {
         "id": bt.id,
         "strategy_id": bt.strategy_id,
+        "datasource_id": bt.datasource_id or results.get("datasource_id", 0),
         "symbol": bt.symbol,
         "timeframe": bt.timeframe,
         "date_from": bt.date_from,
         "date_to": bt.date_to,
         "initial_balance": bt.initial_balance,
         "status": bt.status,
-        "results": bt.results or {},
+        "results": results,
         "created_at": bt.created_at.isoformat() if bt.created_at else "",
     }
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey
 
 from app.core.database import Base
 
@@ -29,7 +29,7 @@ class DataSource(Base):
     commission_model = Column(String(20), default="per_lot")  # per_lot, per_trade, pct
     default_commission = Column(Float, default=7.0)    # default $ commission per lot
     # Ownership / visibility
-    creator_id = Column(Integer, default=1)              # FK to users.id
+    creator_id = Column(Integer, ForeignKey("users.id"), default=1)
     is_public = Column(Boolean, default=True)             # visible to all users
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     deleted_at = Column(DateTime, nullable=True, default=None)

@@ -28,6 +28,20 @@ logger = logging.getLogger(__name__)
 _MODEL_DIR = Path(settings.UPLOAD_DIR).parent / "ml_models"
 _MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── DATA LEAKAGE FIX NOTICE ──────────────────────────────────────────
+# A data leakage bug was fixed where training metrics were computed using
+# validation-period close prices instead of training-period prices.
+# Any .joblib / .onnx models trained before this fix may have overly
+# optimistic training metrics. Re-train existing models to get accurate
+# performance numbers.
+# ─────────────────────────────────────────────────────────────────────
+if list(_MODEL_DIR.glob("*.joblib")) or list(_MODEL_DIR.glob("*.onnx")):
+    logger.warning(
+        "Existing ML models found in %s — these may have been trained "
+        "before the data-leakage fix. Consider re-training for accurate metrics.",
+        _MODEL_DIR,
+    )
+
 
 class MLTrainer:
     """Handles training, evaluation, and prediction for ML models."""
@@ -136,7 +150,7 @@ class MLTrainer:
         is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
         # Split closes for financial metrics
-        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_train = closes[:split_idx] if len(closes) > split_idx else None
         c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
 
         train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)
@@ -342,7 +356,7 @@ class MLTrainer:
         train_pred = final_model.predict(X_train)
         val_pred = final_model.predict(X_val)
 
-        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_train = closes[:split_idx] if len(closes) > split_idx else None
         c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
 
         train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)

@@ -33,5 +33,5 @@ class Strategy(Base):
     deleted_at = Column(DateTime, nullable=True, default=None)
 
     creator = relationship("User", back_populates="strategies")
-    backtests = relationship("Backtest", back_populates="strategy")
-    optimizations = relationship("Optimization", back_populates="strategy")
+    backtests = relationship("Backtest", back_populates="strategy", cascade="all, delete-orphan")
+    optimizations = relationship("Optimization", back_populates="strategy", cascade="all, delete-orphan")

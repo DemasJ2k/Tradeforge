@@ -58,13 +58,17 @@ class WebhookUpdate(BaseModel):
 
 @router.get("")
 async def list_webhooks(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all configured webhook endpoints."""
-    endpoints = db.query(WebhookEndpoint).filter(
+    q = db.query(WebhookEndpoint).filter(
         WebhookEndpoint.user_id == user.id
-    ).order_by(WebhookEndpoint.created_at.desc()).all()
+    ).order_by(WebhookEndpoint.created_at.desc())
+    total = q.count()
+    endpoints = q.offset(offset).limit(limit).all()
 
     return {
         "webhooks": [
@@ -81,7 +85,8 @@ async def list_webhooks(
                 "created_at": ep.created_at.isoformat() if ep.created_at else None,
             }
             for ep in endpoints
-        ]
+        ],
+        "total": total,
     }
 
 

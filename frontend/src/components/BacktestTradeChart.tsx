@@ -211,7 +211,7 @@ const BacktestTradeChart = forwardRef<BacktestChartHandle, Props>(function Backt
           chart.remove();
         };
       },
-    );
+    ).catch(console.error);
 
     return () => {
       destroyed = true;

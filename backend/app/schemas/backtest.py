@@ -1,24 +1,24 @@
 from typing import Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BacktestRequest(BaseModel):
     strategy_id: int
     datasource_id: int
-    initial_balance: float = 10000.0
-    spread_points: float = 0.3            # Realistic default (0.3 pts ~= $30/lot gold)
-    commission_per_lot: float = 7.0       # Realistic default ($7/lot round-trip)
-    point_value: float = 1.0
+    initial_balance: float = Field(10000.0, gt=0, le=100_000_000)
+    spread_points: float = Field(0.3, ge=0, le=1000)
+    commission_per_lot: float = Field(7.0, ge=0, le=10000)
+    point_value: float = Field(1.0, gt=0)
     # V2 engine selection
     engine_version: str = "v1"            # "v1" or "v2"
     # V2-specific options (ignored when engine_version="v1")
-    slippage_pct: float = 0.02            # Realistic default (0.02% slippage per fill)
-    commission_pct: float = 0.0           # Percentage commission (e.g. 0.001 = 0.1%)
-    margin_rate: float = 0.01             # Margin rate for position sizing
+    slippage_pct: float = Field(0.02, ge=0, le=1.0)
+    commission_pct: float = Field(0.0, ge=0, le=1.0)
+    margin_rate: float = Field(0.01, gt=0, le=1.0)
     use_fast_core: bool = False           # Use Rust/fallback fast runner
-    bars_per_day: float = 1.0             # For annualisation (e.g. 144 for M10)
+    bars_per_day: float = Field(1.0, gt=0)
     tick_mode: str = "ohlc_five"          # Tick synthesis mode
-    latency_ms: float = 0.0              # Simulated execution latency (ms)
+    latency_ms: float = Field(0.0, ge=0, le=10000)
     # Phase 4 — Multi-symbol portfolio mode
     datasource_ids: Optional[list[int]] = None  # Multiple datasources (overrides datasource_id)
     # Phase 5 — ML-enhanced backtesting
@@ -26,7 +26,7 @@ class BacktestRequest(BaseModel):
     regime_model_id: Optional[int] = None         # HMM regime model for regime-conditional testing
     rl_model_id: Optional[int] = None             # RL agent model (replaces strategy)
     strategy_type: str = "strategy"               # "strategy" or "rl"
-    ml_threshold: float = 0.5                     # ML filter confidence threshold
+    ml_threshold: float = Field(0.5, ge=0, le=1.0)
 
 
 class TradeResult(BaseModel):
@@ -96,13 +96,13 @@ class BacktestResponse(BaseModel):
 class WalkForwardRequest(BaseModel):
     strategy_id: int
     datasource_id: int
-    n_folds: int = 5
-    train_pct: float = 70.0
+    n_folds: int = Field(5, ge=2, le=50)
+    train_pct: float = Field(70.0, gt=10, lt=100)
     mode: str = "anchored"  # "anchored" or "rolling"
-    initial_balance: float = 10000.0
-    spread_points: float = 0.3            # Realistic default
-    commission_per_lot: float = 7.0       # Realistic default
-    point_value: float = 1.0
+    initial_balance: float = Field(10000.0, gt=0, le=100_000_000)
+    spread_points: float = Field(0.3, ge=0, le=1000)
+    commission_per_lot: float = Field(7.0, ge=0, le=10000)
+    point_value: float = Field(1.0, gt=0)
 
 
 class WFWindowStats(BaseModel):

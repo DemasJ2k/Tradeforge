@@ -24,7 +24,15 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "type": "access"})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    """Create a long-lived refresh token (7 days by default)."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -96,18 +104,53 @@ def store_otp(user, db: Session, expires_minutes: int = 10) -> str:
     code = generate_otp_code()
     user.otp_code = code
     user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    user.otp_attempts = 0  # reset attempt counter for new code
     db.commit()
     return code
 
 
-def verify_otp(user, code: str) -> bool:
-    """Verify OTP code against stored value. Returns True if valid and not expired."""
+_MAX_OTP_ATTEMPTS = 3
+
+
+def verify_otp(user, code: str, db=None) -> bool:
+    """Verify OTP code against stored value. Returns True if valid and not expired.
+
+    Rate-limited to 3 attempts per code. After 3 failures the code is
+    invalidated and the user must request a new one.
+    """
     if not user.otp_code or not user.otp_expires_at:
         return False
-    if datetime.now(timezone.utc) > user.otp_expires_at.replace(tzinfo=timezone.utc) if user.otp_expires_at.tzinfo is None else user.otp_expires_at:
+
+    # Check expiry
+    expires = (
+        user.otp_expires_at.replace(tzinfo=timezone.utc)
+        if user.otp_expires_at.tzinfo is None
+        else user.otp_expires_at
+    )
+    if datetime.now(timezone.utc) > expires:
         _otp_log.debug("OTP expired for user %s", user.id)
         return False
-    return secrets.compare_digest(user.otp_code, code.strip())
+
+    # Rate-limit: max 3 attempts per code
+    attempts = getattr(user, "otp_attempts", 0) or 0
+    if attempts >= _MAX_OTP_ATTEMPTS:
+        _otp_log.warning("OTP max attempts exceeded for user %s — code invalidated", user.id)
+        user.otp_code = ""
+        user.otp_expires_at = None
+        user.otp_attempts = 0
+        if db:
+            db.commit()
+        return False
+
+    valid = secrets.compare_digest(user.otp_code, code.strip())
+
+    if not valid:
+        user.otp_attempts = attempts + 1
+        if db:
+            db.commit()
+        _otp_log.debug("OTP attempt %d/%d failed for user %s", attempts + 1, _MAX_OTP_ATTEMPTS, user.id)
+
+    return valid
 
 
 def send_otp_email(user, code: str) -> bool:

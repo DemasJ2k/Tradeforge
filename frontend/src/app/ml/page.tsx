@@ -141,8 +141,8 @@ export default function MLPage() {
 
   useEffect(() => {
     loadModels();
-    api.get<FeatureList>("/api/ml/features").then(setFeatures).catch(() => {});
-    api.get<{ items: DataSource[] }>("/api/data/sources").then(r => setDataSources(r.items || [])).catch(() => {});
+    api.get<FeatureList>("/api/ml/features").then(setFeatures).catch(console.error);
+    api.get<{ items: DataSource[] }>("/api/data/sources").then(r => setDataSources(r.items || [])).catch(console.error);
   }, [loadModels]);
 
   const openDetail = async (id: number) => {

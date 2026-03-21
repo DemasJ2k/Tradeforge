@@ -25,10 +25,11 @@ class User(Base):
     # 2FA Email OTP
     otp_code = Column(String(10), default="")
     otp_expires_at = Column(DateTime, nullable=True)
+    otp_attempts = Column(Integer, default=0)
 
     # Admin & invitation
     is_admin = Column(Boolean, default=False)
     must_change_password = Column(Boolean, default=False)
     invited_by = Column(Integer, default=None, nullable=True)
 
-    strategies = relationship("Strategy", back_populates="creator")
+    strategies = relationship("Strategy", back_populates="creator", cascade="all, delete-orphan")
