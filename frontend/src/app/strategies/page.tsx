@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type, ArrowRight, Zap, Activity, BarChart2, Play, Database } from "lucide-react";
 import { ListSkeleton } from "@/components/Skeletons";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import BacktestPageContentContent from "@/app/backtest/components/BacktestPageContentContent";
+import BacktestPageContent from "@/app/backtest/components/BacktestPageContent";
 import DataSourcesPanel from "@/app/backtest/components/DataSourcesPanel";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -1188,6 +1188,7 @@ function StrategiesPage() {
           </div>
         </div>
       )}
+    </>}
     </div>
     </ErrorBoundary>
   );
