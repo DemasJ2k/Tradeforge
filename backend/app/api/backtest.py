@@ -43,8 +43,8 @@ def _fire_notification(user_id: int, subject: str, body: str, event_type: str = 
                 asyncio.run(notify(_db, user_id, subject, body, event_type=event_type))
             finally:
                 _db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).debug("Notification error: %s", e)
     threading.Thread(target=_run, daemon=True).start()
 # from app.services.backtest.engine import BacktestEngine
 # from app.services.backtest.strategy_backtester import backtest_mss, backtest_gold_bt

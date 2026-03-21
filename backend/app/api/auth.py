@@ -549,15 +549,15 @@ def delete_user(
         db.query(LLMMemory).filter(LLMMemory.user_id == user_id).delete(synchronize_session=False)
         db.query(LLMConversation).filter(LLMConversation.user_id == user_id).delete(synchronize_session=False)
         db.query(LLMUsage).filter(LLMUsage.user_id == user_id).delete(synchronize_session=False)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("LLM cleanup: %s", e)
 
     # Delete user settings
     try:
         from app.models.settings import UserSettings
         db.query(UserSettings).filter(UserSettings.user_id == user_id).delete(synchronize_session=False)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).debug("Settings cleanup: %s", e)
 
     # Delete the user record
     db.delete(user)
