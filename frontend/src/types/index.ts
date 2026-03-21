@@ -596,6 +596,7 @@ export interface LivePosition {
   agent_name: string | null;
   agent_id: number | null;
   strategy_name: string | null;
+  broker: string | null;
 }
 
 export interface LiveOrder {

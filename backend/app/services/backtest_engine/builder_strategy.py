@@ -63,7 +63,16 @@ class BuilderStrategy(StrategyBase):
 
         entry_rules = self.config.get("entry_rules", [])
 
-        # Log first bar only — helps diagnose empty rules / wrong format
+        # Warn once if strategy has no entry rules
+        if not entry_rules:
+            if self.ctx.bar_index == 1:
+                logger.warning(
+                    "BuilderStrategy: entry_rules is EMPTY — this strategy will never open trades. "
+                    "Check strategy config: %s", str(self.config.get("name", "unknown"))
+                )
+            return  # No rules = no signals, skip evaluation
+
+        # Log first bar only — helps diagnose wrong format
         if self.ctx.bar_index == 1:
             logger.info(
                 "BuilderStrategy first-bar check: entry_rules type=%s len=%s, "

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
-import ChatHelpers from "@/components/ChatHelpers";
+
 import AgentPanel from "@/components/AgentPanel";
 import CandlestickChart, { type ChartHandle, type CandleInput, type OverlayLine } from "@/components/CandlestickChart";
 import StrategyOverlayPanel from "@/components/StrategyOverlayPanel";
@@ -432,7 +432,7 @@ export default function TradingPage() {
 
   // ── Chart auto-refresh polling fallback ──
   // When WebSocket bar updates aren't arriving (e.g. on deployed server without MT5),
-  // poll the REST endpoint every 8 seconds to keep chart fresh.
+  // poll the REST endpoint every 15 seconds to keep chart fresh.
   const lastBarUpdateRef = useRef<number>(Date.now());
   useEffect(() => {
     // Track when we last got a WS bar update
@@ -463,7 +463,7 @@ export default function TradingPage() {
       } catch {
         // Silent fail — polling is best-effort
       }
-    }, 8_000);
+    }, 15_000);
 
     return () => clearInterval(pollInterval);
   }, [chartMode, chartSymbol, chartTimeframe, chartBars.length]);
@@ -1265,11 +1265,11 @@ export default function TradingPage() {
                       </td>
                       <td className="px-3 py-2">
                         {p.agent_name ? (
-                          <Badge variant="secondary" className="bg-purple-500/15 text-purple-400 text-[10px]">
+                          <Badge variant="default" className="bg-purple-500/15 text-purple-400 text-[10px]">
                             {p.agent_name}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Manual</span>
+                          <span className="text-xs text-muted-foreground">{p.broker || "Manual"}</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -1730,7 +1730,6 @@ export default function TradingPage() {
         </DialogContent>
       </Dialog>
 
-      <ChatHelpers />
     </div>
   );
 }

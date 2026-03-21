@@ -44,6 +44,7 @@ interface DashboardData {
     entry_price: number;
     current_price: number;
     unrealized_pnl: number;
+    broker?: string;
   }[];
   strategies: { total: number; system: number; user: number };
   agents: {
@@ -79,6 +80,20 @@ interface DashboardData {
     pnl: number;
     status: string;
     time: string;
+  }[];
+  broker_accounts: {
+    broker: string;
+    connected: boolean;
+    is_default: boolean;
+    currency: string;
+    balance: number;
+    equity: number;
+    unrealized_pnl: number;
+    balance_usd: number;
+    equity_usd: number;
+    open_positions: number;
+    open_orders: number;
+    margin_used: number;
   }[];
   equity_curve: { date: string; pnl: number }[];
   backtests: { total: number; last_run: string | null; last_status: string | null };
@@ -186,7 +201,8 @@ export default function Dashboard() {
   if (error) return <div className="p-6 text-danger">{error}</div>;
   if (!data) return null;
 
-  const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos } = data;
+  const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos, broker_accounts: ba } = data;
+  const connectedBrokerCount = (ba ?? []).filter((b) => b.connected).length;
 
   // Show onboarding for new users (no user strategies and no data sources)
   const isNewUser = s.user === 0 && data.data_sources === 0;
@@ -331,7 +347,7 @@ export default function Dashboard() {
           icon={<Wallet className="h-4 w-4" />}
           label="Account Balance"
           value={a.broker_connected ? `$${fmt(a.balance)}` : "—"}
-          sub={a.broker_connected ? `Equity: $${fmt(a.equity)}` : "Connect broker"}
+          sub={a.broker_connected ? `Equity: $${fmt(a.equity)}${connectedBrokerCount > 1 ? ` · Combined across ${connectedBrokerCount} brokers` : ""}` : "Connect broker"}
           color="text-accent"
         />
         <StatCard
@@ -395,6 +411,7 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow className="border-card-border">
                     <TableHead className="text-xs">Symbol</TableHead>
+                    <TableHead className="text-xs">Broker</TableHead>
                     <TableHead className="text-xs">Side</TableHead>
                     <TableHead className="text-xs text-right">Size</TableHead>
                     <TableHead className="text-xs text-right">Entry</TableHead>
@@ -406,6 +423,7 @@ export default function Dashboard() {
                   {pos.map((p) => (
                     <TableRow key={p.position_id} className="border-card-border/40">
                       <TableCell className="font-medium text-xs py-2">{p.symbol}</TableCell>
+                      <TableCell className="text-xs py-2 text-muted-foreground capitalize">{p.broker ?? "—"}</TableCell>
                       <TableCell className={`text-xs py-2 ${p.side === "BUY" ? "text-success" : "text-danger"}`}>
                         {p.side}
                       </TableCell>
@@ -446,7 +464,7 @@ export default function Dashboard() {
               <Link href="/portfolio"><ArrowRight className="h-3 w-3" /> Portfolio</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
-              <Link href="/backtest"><BarChart3 className="h-3 w-3" /> Run Backtest</Link>
+              <Link href="/strategies?tab=backtest"><BarChart3 className="h-3 w-3" /> Run Backtest</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
               <Link href="/trading"><ArrowRight className="h-3 w-3" /> Go to Trading</Link>

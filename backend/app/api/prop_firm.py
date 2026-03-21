@@ -28,7 +28,7 @@ from app.schemas.prop_firm import (
     FirmPreset,
 )
 
-router = APIRouter(prefix="/api/prop-firms", tags=["Prop Firm Accounts"])
+router = APIRouter(prefix="/api/prop-firm", tags=["Prop Firm Accounts"])
 _log = logging.getLogger(__name__)
 
 
@@ -189,7 +189,8 @@ def get_firm_presets():
 
 # ── CRUD ──
 
-@router.post("/", response_model=PropFirmAccountResponse)
+@router.post("/accounts", response_model=PropFirmAccountResponse)
+@router.post("/", response_model=PropFirmAccountResponse, include_in_schema=False)
 def create_account(
     payload: PropFirmAccountCreate,
     user: User = Depends(get_current_user),
@@ -231,7 +232,8 @@ def create_account(
     return _to_response(account)
 
 
-@router.get("/", response_model=list[PropFirmAccountSummary])
+@router.get("/accounts", response_model=list[PropFirmAccountSummary])
+@router.get("/", response_model=list[PropFirmAccountSummary], include_in_schema=False)
 def list_accounts(
     status: str | None = None,
     user: User = Depends(get_current_user),
@@ -315,7 +317,8 @@ def update_account(
     return _to_response(account)
 
 
-@router.delete("/{account_id}")
+@router.delete("/accounts/{account_id}")
+@router.delete("/{account_id}", include_in_schema=False)
 def delete_account(
     account_id: int,
     user: User = Depends(get_current_user),

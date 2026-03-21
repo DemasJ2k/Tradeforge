@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { Strategy, StrategyList } from "@/types";
+import type { Strategy, StrategyList, DataSource } from "@/types";
 import StrategyEditor from "@/components/StrategyEditor";
 import StrategySettingsModal from "@/components/StrategySettingsModal";
 import ChatHelpers from "@/components/ChatHelpers";
@@ -10,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type, ArrowRight, Zap, Activity, BarChart2 } from "lucide-react";
+import { Plus, Upload, Layers, Settings, Copy, Trash2, Pencil, Eye, Lock, Loader2, X, Sparkles, BarChart3, Search, FolderPlus, FolderOpen, ChevronDown, ChevronRight, FolderIcon, ShieldCheck, TrendingUp, Type, ArrowRight, Zap, Activity, BarChart2, Play, Database } from "lucide-react";
 import { ListSkeleton } from "@/components/Skeletons";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import BacktestPageContentContent from "@/app/backtest/components/BacktestPageContentContent";
+import DataSourcesPanel from "@/app/backtest/components/DataSourcesPanel";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -24,7 +27,51 @@ const STALE_STRATEGY_NAMES = [
   "VWAP + MACD Breakout Scalper",
 ];
 
-export default function StrategiesPage() {
+export default function StrategiesPageWrapper() {
+  return (
+    <Suspense fallback={<div className="space-y-5"><div className="h-7 w-32 rounded bg-card-border/30 animate-pulse" /><ListSkeleton count={6} /></div>}>
+      <StrategiesPage />
+    </Suspense>
+  );
+}
+
+function StrategiesPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab");
+  const strategyIdParam = searchParams.get("strategy_id");
+
+  type PageTab = "strategies" | "backtest" | "datasources";
+  const [activeTab, setActiveTab] = useState<PageTab>(
+    tabParam === "backtest" ? "backtest" : tabParam === "datasources" ? "datasources" : "strategies"
+  );
+  const [backtestStrategyId, setBacktestStrategyId] = useState<number | undefined>(
+    strategyIdParam ? Number(strategyIdParam) : undefined
+  );
+
+  // Datasources state for the Data Sources tab
+  const [datasources, setDatasources] = useState<DataSource[]>([]);
+  const [datasourcesLoaded, setDatasourcesLoaded] = useState(false);
+
+  const refreshDatasources = useCallback(async () => {
+    try {
+      const ds = await api.get<{ items: DataSource[] }>("/api/data/sources");
+      setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Load datasources when switching to that tab
+  useEffect(() => {
+    if (activeTab === "datasources" && !datasourcesLoaded) {
+      setDatasourcesLoaded(true);
+      refreshDatasources();
+    }
+  }, [activeTab, datasourcesLoaded, refreshDatasources]);
+
+  const switchToBacktest = (strategyId?: number) => {
+    setBacktestStrategyId(strategyId);
+    setActiveTab("backtest");
+  };
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [editing, setEditing] = useState<Strategy | null>(null);
@@ -483,6 +530,9 @@ export default function StrategiesPage() {
               <Eye className="h-3.5 w-3.5" />
             </Button>
           )}
+          <Button variant="ghost" size="icon" onClick={() => switchToBacktest(s.id)} title="Backtest" className="h-7 w-7 text-muted-foreground hover:text-accent">
+            <Play className="h-3.5 w-3.5" />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => handleDuplicate(s.id)} title="Duplicate" className="h-7 w-7 text-muted-foreground hover:text-foreground">
             <Copy className="h-3.5 w-3.5" />
           </Button>
@@ -535,6 +585,7 @@ export default function StrategiesPage() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg sm:text-xl font-semibold">Strategies</h2>
+        {activeTab === "strategies" && (
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => setShowNewFolder(true)} className="gap-1.5 text-xs">
             <FolderPlus className="h-3.5 w-3.5" />
@@ -561,8 +612,63 @@ export default function StrategiesPage() {
             New Strategy
           </Button>
         </div>
+        )}
       </div>
 
+      {/* Tab bar */}
+      <div className="flex items-center rounded-lg border border-card-border bg-card-bg/80 p-0.5 w-fit">
+        <button
+          onClick={() => setActiveTab("strategies")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "strategies"
+              ? "bg-accent text-white"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Strategies
+        </button>
+        <button
+          onClick={() => setActiveTab("backtest")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "backtest"
+              ? "bg-accent text-white"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Backtest
+        </button>
+        <button
+          onClick={() => setActiveTab("datasources")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            activeTab === "datasources"
+              ? "bg-accent text-white"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          Data Sources
+        </button>
+      </div>
+
+      {/* ── Backtest Tab ── */}
+      {activeTab === "backtest" && (
+        <div className="-mx-4 -mb-4 flex-1" style={{ minHeight: "calc(100vh - 200px)" }}>
+          <BacktestPageContent defaultStrategyId={backtestStrategyId} />
+        </div>
+      )}
+
+      {/* ── Data Sources Tab ── */}
+      {activeTab === "datasources" && (
+        <DataSourcesPanel
+          datasources={datasources}
+          onRefresh={refreshDatasources}
+        />
+      )}
+
+      {/* ── Strategies Tab ── */}
+      {activeTab === "strategies" && <>
       {/* Search / filter */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

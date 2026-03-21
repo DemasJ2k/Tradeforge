@@ -1275,7 +1275,13 @@ async def train_lstm_model(
         raise HTTPException(400, f"Need at least {min_bars} bars, got {len(ohlcv_data)}")
 
     def _train():
-        from app.services.ml.lstm_forecaster import LSTMForecaster
+        try:
+            from app.services.ml.lstm_forecaster import LSTMForecaster
+        except ImportError as e:
+            raise RuntimeError(
+                f"LSTM training requires PyTorch. "
+                f"Not installed on this server. Train locally and upload models. ({e})"
+            )
         forecaster = LSTMForecaster(model_id=model_id)
         return forecaster.train(
             ohlcv_data=ohlcv_data,
@@ -1287,9 +1293,12 @@ async def train_lstm_model(
             epochs=epochs,
         )
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(_train_pool, _train)
-    return result
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_train_pool, _train)
+        return result
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/lstm/predict/{symbol}")
@@ -1308,7 +1317,12 @@ async def lstm_predict(
     ohlcv_data = _load_csv_ohlcv(ds.filepath)
 
     def _predict():
-        from app.services.ml.lstm_forecaster import LSTMForecaster
+        try:
+            from app.services.ml.lstm_forecaster import LSTMForecaster
+        except ImportError as e:
+            raise RuntimeError(
+                f"LSTM prediction requires PyTorch/ONNX Runtime. Not installed on this server. ({e})"
+            )
         forecaster = LSTMForecaster(model_id=model_id)
         if not forecaster.load():
             return None
@@ -1347,7 +1361,13 @@ async def train_rl_agent(
         raise HTTPException(400, f"Need at least 500 bars, got {len(ohlcv_data)}")
 
     def _train():
-        from app.services.ml.rl_trainer import RLTrainer
+        try:
+            from app.services.ml.rl_trainer import RLTrainer
+        except ImportError as e:
+            raise RuntimeError(
+                f"RL training requires PyTorch, stable-baselines3, and gymnasium. "
+                f"These are not installed on this server. Train locally and upload models. ({e})"
+            )
         trainer = RLTrainer(model_id=model_id)
         return trainer.train(
             ohlcv_data=ohlcv_data,
@@ -1358,9 +1378,12 @@ async def train_rl_agent(
             spread=spread,
         )
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(_train_pool, _train)
-    return result
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_train_pool, _train)
+        return result
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/rl/evaluate")
@@ -1378,13 +1401,22 @@ async def evaluate_rl_agent(
     ohlcv_data = _load_csv_ohlcv(ds.filepath)
 
     def _eval():
-        from app.services.ml.rl_trainer import RLTrainer
+        try:
+            from app.services.ml.rl_trainer import RLTrainer
+        except ImportError as e:
+            raise RuntimeError(
+                f"RL evaluation requires PyTorch, stable-baselines3, and gymnasium. "
+                f"These are not installed on this server. ({e})"
+            )
         trainer = RLTrainer(model_id=model_id)
         feature_matrix = trainer._build_features(ohlcv_data)
         return trainer.evaluate(ohlcv_data, feature_matrix)
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(_train_pool, _eval)
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_train_pool, _eval)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
 
     if not result:
         raise HTTPException(400, "RL model not trained or evaluation failed")

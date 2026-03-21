@@ -35,6 +35,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   strategies: Strategy[];
   datasources: DataSource[];
+  defaultStrategyId?: number;
   onRun: (config: {
     strategy_id: number;
     datasource_id: number;
@@ -59,9 +60,10 @@ export default function BacktestConfigDialog({
   onOpenChange,
   strategies,
   datasources,
+  defaultStrategyId,
   onRun,
 }: Props) {
-  const [strategyId, setStrategyId] = useState<string>('');
+  const [strategyId, setStrategyId] = useState<string>(defaultStrategyId ? String(defaultStrategyId) : '');
   const [datasourceId, setDatasourceId] = useState<string>('');
   const [balance, setBalance] = useState(10000);
   const [spread, setSpread] = useState(0);
@@ -79,6 +81,13 @@ export default function BacktestConfigDialog({
   const [rlModelId, setRlModelId] = useState<string>('');
   const [mlThreshold, setMlThreshold] = useState(0.5);
   const [showMl, setShowMl] = useState(false);
+
+  // Sync defaultStrategyId when it changes externally
+  useEffect(() => {
+    if (defaultStrategyId) {
+      setStrategyId(String(defaultStrategyId));
+    }
+  }, [defaultStrategyId]);
   const isRlMode = !!rlModelId;
 
   // Load ML models

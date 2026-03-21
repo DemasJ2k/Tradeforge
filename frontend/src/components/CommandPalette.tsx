@@ -32,7 +32,7 @@ const PAGES = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, keywords: ["home", "overview"] },
   { name: "Data Sources", href: "/data", icon: Database, keywords: ["csv", "upload", "import"] },
   { name: "Strategies", href: "/strategies", icon: FileCode2, keywords: ["rules", "conditions", "algo"] },
-  { name: "Backtest", href: "/backtest", icon: BarChart3, keywords: ["simulate", "results", "equity"] },
+  { name: "Backtest", href: "/strategies?tab=backtest", icon: BarChart3, keywords: ["simulate", "results", "equity"] },
   { name: "Optimization", href: "/optimize", icon: SlidersHorizontal, keywords: ["grid", "walk-forward", "params"] },
   { name: "ML Lab", href: "/ml", icon: Brain, keywords: ["machine learning", "model", "train", "predict"] },
   { name: "Trading", href: "/trading", icon: TrendingUp, keywords: ["live", "positions", "broker", "orders"] },

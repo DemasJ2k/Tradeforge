@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
   { name: "Strategies", href: "/strategies", icon: FileCode2 },
-  { name: "Backtest", href: "/backtest", icon: BarChart3 },
+  { name: "Backtest", href: "/strategies?tab=backtest", icon: BarChart3 },
   { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -95,10 +95,12 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {NAV_ITEMS.map((item) => {
+          // Strip query params from href for pathname matching
+          const hrefPath = item.href.split("?")[0];
           const isActive =
-            item.href === "/"
+            hrefPath === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.href);
+              : pathname.startsWith(hrefPath);
 
           const Icon = item.icon;
 
