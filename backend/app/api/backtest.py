@@ -7,12 +7,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
 from app.core.auth import get_current_user
+from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.models.user import User
 from app.models.strategy import Strategy
@@ -245,7 +246,9 @@ def _load_bars_from_csv(file_path: str, validate: bool = True) -> list[Bar]:
 
 
 @router.post("/run", response_model=BacktestResponse)
+@limiter.limit("10/minute")
 def run_backtest(
+    request: Request,
     payload: BacktestRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -590,7 +593,9 @@ def run_backtest(
 
 
 @router.post("/run-v3")
+@limiter.limit("10/minute")
 def run_backtest_v3(
+    request: Request,
     payload: BacktestRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

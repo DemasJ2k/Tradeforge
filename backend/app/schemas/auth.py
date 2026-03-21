@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 # ─── Existing ───
@@ -38,7 +38,7 @@ class Token(BaseModel):
 # ─── Invitation ───
 
 class InvitationCreate(BaseModel):
-    email: str
+    email: EmailStr
     temp_password: str
     username: str
 
@@ -79,14 +79,14 @@ class TOTPVerifyResponse(BaseModel):
 # ─── Profile Update ───
 
 class ProfileUpdate(BaseModel):
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
 
 
 # ─── Password Reset ───
 
 class PasswordResetRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 class PasswordResetConfirm(BaseModel):

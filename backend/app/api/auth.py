@@ -4,7 +4,7 @@ import secrets
 import threading
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -24,6 +24,8 @@ from app.schemas.auth import (
     ProfileUpdate,
     PasswordResetRequest, PasswordResetConfirm, AdminManualReset, ResetRequestItem,
 )
+
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -74,7 +76,8 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
 # ─── Login ───
 @router.post("/login", response_model=Token)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -332,7 +335,8 @@ def revoke_or_delete_invitation(
 
 # ─── Password Reset: Request (public — no auth required) ───
 @router.post("/request-reset")
-def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def request_password_reset(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
     """
     Step 1 of password reset.
     Always returns success to avoid leaking whether an email exists.

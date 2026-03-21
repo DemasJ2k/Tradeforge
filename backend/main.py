@@ -6,6 +6,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limit import limiter
 
 # Configure root logger to show INFO for our application modules
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -396,6 +399,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — explicit origins to avoid browser issues with wildcard + credentials.
 _cors_origins = [
@@ -433,6 +438,18 @@ async def request_timing_middleware(request: Request, call_next):
             "SLOW %s %s took %.2fs", request.method, request.url.path, duration,
         )
     return response
+
+
+# Request body size limit — reject oversized payloads before reading into memory
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)"},
+        )
+    return await call_next(request)
 
 
 # Global exception handler — ensures unhandled errors return JSON (visible
