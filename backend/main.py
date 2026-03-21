@@ -140,6 +140,7 @@ def _run_schema_migrations():
         # 2FA Email OTP columns
         ("users", "otp_code",       "VARCHAR(10) DEFAULT ''"),
         ("users", "otp_expires_at", "TIMESTAMP"),
+        ("users", "otp_attempts",   "INTEGER DEFAULT 0"),
         # Prop firm account link on trading agents
         ("trading_agents", "prop_firm_account_id", "INTEGER"),
         # Broker fill data on agent trades
