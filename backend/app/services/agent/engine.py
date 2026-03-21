@@ -846,12 +846,19 @@ class AgentRunner:
                     if order_result.filled_time:
                         trade.filled_time = order_result.filled_time
                     fill_info = f" fill={order_result.filled_price:.5f}" if order_result.filled_price else ""
-                    self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f}{fill_info} | ticket={broker_ticket}", data={
+                    # Log server type for debugging live vs demo execution
+                    from app.services.broker.manager import broker_manager
+                    _adapter = broker_manager.get_adapter(self._broker_name)
+                    server_info = ""
+                    if _adapter and hasattr(_adapter, "_server"):
+                        server_info = f" server={_adapter._server}"
+                    self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f}{fill_info} | ticket={broker_ticket}{server_info}", data={
                         "trade_id": trade_id,
                         "lot_size": lot_size,
                         "status": "executed",
                         "broker_ticket": broker_ticket,
                         "filled_price": order_result.filled_price,
+                        "server": getattr(_adapter, "_server", "unknown"),
                     })
                 else:
                     trade.status = "rejected"
@@ -926,7 +933,39 @@ class AgentRunner:
         # Always use the agent's configured broker
         try:
             adapter = broker_manager.get_adapter(self._broker_name)
-            if adapter and await adapter.is_connected():
+            if not adapter:
+                self._log("error",
+                    f"Broker {self._broker_name} not registered — cannot execute order. "
+                    f"Make sure the broker is connected before starting the agent.")
+                return None
+
+            connected = await adapter.is_connected()
+
+            # Auto-reconnect: if the adapter exists but disconnected, try to reconnect once
+            if not connected:
+                self._log("warning",
+                    f"Broker {self._broker_name} disconnected — attempting reconnect...")
+                try:
+                    reconnected = await adapter.connect()
+                    if reconnected:
+                        connected = True
+                        self._log("trade",
+                            f"Broker {self._broker_name} reconnected successfully")
+                    else:
+                        last_err = getattr(adapter, "_last_error", "unknown")
+                        self._log("error",
+                            f"Broker {self._broker_name} reconnect failed: {last_err}")
+                except Exception as reconn_err:
+                    self._log("error",
+                        f"Broker {self._broker_name} reconnect error: {reconn_err}")
+
+            if not connected:
+                self._log("error",
+                    f"Broker {self._broker_name} not connected — cannot execute order. "
+                    f"Check broker connection in Settings.")
+                return None
+
+            if adapter:
                 request = OrderRequest(
                     symbol=self._symbol,
                     side=OrderSide(direction),
@@ -942,10 +981,6 @@ class AgentRunner:
                     return result  # Return full Order object
                 logger.warning("[Agent %d] %s order returned no order_id: %s",
                                self.agent_id, self._broker_name, result)
-                return None
-            else:
-                self._log("error",
-                    f"Broker {self._broker_name} not connected — cannot execute order")
                 return None
         except Exception as e:
             logger.warning("[Agent %d] %s order execution error: %s",
