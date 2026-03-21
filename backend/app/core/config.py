@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     # Auth
     SECRET_KEY: str = "flowrexalgo-dev-secret-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour (use /api/auth/refresh to extend)
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
 
     # CORS — overridden by FRONTEND_URL env var on Render
     FRONTEND_URL: str = "http://localhost:3000"

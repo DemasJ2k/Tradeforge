@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
-    hash_password, verify_password, create_access_token,
+    hash_password, verify_password, create_access_token, create_refresh_token,
     get_current_user, get_current_admin,
     store_otp, verify_otp, send_otp_email,
 )
@@ -79,6 +79,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = create_access_token({"sub": str(user.id)})
+    refresh = create_refresh_token({"sub": str(user.id)})
 
     # If 2FA is enabled, generate OTP and send via email
     if user.totp_enabled:
@@ -91,6 +92,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
     return Token(
         access_token=token,
+        refresh_token=refresh,
         must_change_password=bool(user.must_change_password),
         totp_required=bool(user.totp_enabled),
     )
@@ -99,10 +101,17 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 # ─── Refresh token ───
 @router.post("/refresh", response_model=Token)
 def refresh_token(current_user: User = Depends(get_current_user)):
-    """Issue a fresh JWT token (extends session without re-login)."""
+    """Issue a fresh access + refresh token pair (extends session without re-login).
+
+    Accepts either a valid access token *or* a refresh token in the
+    Authorization header.  The refresh token has a 7-day lifetime so
+    clients can silently renew the 1-hour access token.
+    """
     token = create_access_token({"sub": str(current_user.id)})
+    refresh = create_refresh_token({"sub": str(current_user.id)})
     return Token(
         access_token=token,
+        refresh_token=refresh,
         must_change_password=bool(current_user.must_change_password),
         totp_required=False,
     )
@@ -157,11 +166,12 @@ def confirm_totp(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    valid = verify_otp(current_user, payload.code)
+    valid = verify_otp(current_user, payload.code, db)
     if valid:
         current_user.totp_enabled = True
         current_user.otp_code = ""  # Clear used code
         current_user.otp_expires_at = None
+        current_user.otp_attempts = 0
         db.commit()
     return TOTPVerifyResponse(valid=valid)
 
@@ -176,10 +186,11 @@ def verify_totp(
     if not current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
-    valid = verify_otp(current_user, payload.code)
+    valid = verify_otp(current_user, payload.code, db)
     if valid:
         current_user.otp_code = ""  # Clear used code
         current_user.otp_expires_at = None
+        current_user.otp_attempts = 0
         db.commit()
     return TOTPVerifyResponse(valid=valid)
 
@@ -200,7 +211,7 @@ def disable_totp(
         send_otp_email(current_user, code)
         return {"status": "code_sent", "message": "Verification code sent to your email"}
 
-    if not verify_otp(current_user, payload.code):
+    if not verify_otp(current_user, payload.code, db):
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
     current_user.totp_enabled = False

@@ -73,6 +73,11 @@ class BacktestResult:
 
 
 class BacktestEngine:
+    """.. deprecated:: Phase 1C
+    V1 engine is fully deprecated. All backtests route through V2/V3.
+    This class will be removed in a future release.
+    """
+
     def __init__(
         self,
         bars: list[Bar],
@@ -82,6 +87,13 @@ class BacktestEngine:
         commission_per_lot: float = 0.0,
         point_value: float = 1.0,
     ):
+        import warnings
+        warnings.warn(
+            "BacktestEngine (V1) is deprecated and will be removed. "
+            "Use V2 (v2_adapter.run_unified_backtest) or V3 engine instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.bars = bars
         self.config = strategy_config
         self.initial_balance = initial_balance

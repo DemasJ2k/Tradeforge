@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 BRIDGE_URL = os.getenv("MT5_BRIDGE_URL", "").rstrip("/")
 BRIDGE_KEY = os.getenv("MT5_BRIDGE_KEY", "changeme-mt5-bridge-key")
 
+# SSL verification — set MT5_BRIDGE_VERIFY_SSL=false only for localhost/private networks
+_VERIFY_SSL = os.getenv("MT5_BRIDGE_VERIFY_SSL", "true").lower() not in ("false", "0", "no")
+
 # Timeout: 15s connect, 30s read (MT5 operations can be slow)
 _TIMEOUT = httpx.Timeout(connect=15.0, read=30.0, write=15.0, pool=15.0)
 
@@ -76,7 +79,7 @@ class MT5RemoteAdapter(BrokerAdapter):
             return False
 
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
                 resp = await client.post(
                     self._url("/connect"),
                     headers=self._headers,
@@ -107,7 +110,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     async def disconnect(self) -> None:
         if self._connected:
             try:
-                async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+                async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
                     await client.post(self._url("/disconnect"), headers=self._headers)
             except Exception:
                 pass
@@ -117,7 +120,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         if not self._connected or not self._bridge_url:
             return False
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
                 resp = await client.get(self._url("/is_connected"), headers=self._headers)
                 data = resp.json()
                 self._connected = data.get("connected", False)
@@ -129,7 +132,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Account ───────────────────────────────────────
 
     async def get_account_info(self) -> AccountInfo:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.get(self._url("/account"), headers=self._headers)
             resp.raise_for_status()
             d = resp.json()
@@ -150,7 +153,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Positions ─────────────────────────────────────
 
     async def get_positions(self) -> list[Position]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.get(self._url("/positions"), headers=self._headers)
             resp.raise_for_status()
             raw = resp.json()
@@ -177,7 +180,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         if size is not None:
             params["size"] = str(size)
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.post(
                 self._url("/positions/close"),
                 headers=self._headers,
@@ -204,7 +207,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Orders ────────────────────────────────────────
 
     async def place_order(self, request: OrderRequest) -> Order:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.post(
                 self._url("/orders"),
                 headers=self._headers,
@@ -241,7 +244,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         )
 
     async def modify_order(self, request: OrderModifyRequest) -> Order:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.put(
                 self._url("/orders"),
                 headers=self._headers,
@@ -271,7 +274,7 @@ class MT5RemoteAdapter(BrokerAdapter):
 
     async def cancel_order(self, order_id: str) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
                 resp = await client.delete(
                     self._url(f"/orders/{order_id}"),
                     headers=self._headers,
@@ -284,7 +287,7 @@ class MT5RemoteAdapter(BrokerAdapter):
             return False
 
     async def get_open_orders(self) -> list[Order]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.get(self._url("/orders"), headers=self._headers)
             resp.raise_for_status()
             raw = resp.json()
@@ -313,7 +316,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Market Data ───────────────────────────────────
 
     async def get_symbols(self) -> list[SymbolInfo]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.get(self._url("/symbols"), headers=self._headers)
             resp.raise_for_status()
             raw = resp.json()
@@ -351,7 +354,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         if from_time:
             body["from_time"] = int(from_time.timestamp())
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.post(self._url("/candles"), headers=self._headers, json=body)
             resp.raise_for_status()
             raw = resp.json()
@@ -369,7 +372,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         return candles
 
     async def get_price(self, symbol: str) -> PriceTick:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.get(self._url(f"/price/{symbol}"), headers=self._headers)
             resp.raise_for_status()
             d = resp.json()
@@ -387,7 +390,7 @@ class MT5RemoteAdapter(BrokerAdapter):
     async def get_initial_bars(self, symbol: str, timeframe: str, count: int = 500) -> list[dict]:
         body = {"symbol": symbol, "timeframe": timeframe, "count": count}
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
             resp = await client.post(self._url("/candles"), headers=self._headers, json=body)
             resp.raise_for_status()
             return resp.json()  # Already in {time, open, high, low, close, volume} format
