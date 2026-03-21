@@ -8,7 +8,6 @@ import { useEffect } from "react";
 import {
   LayoutDashboard,
   FileCode2,
-  BarChart3,
   Brain,
   TrendingUp,
   Settings,
@@ -35,7 +34,6 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
   { name: "Strategies", href: "/strategies", icon: FileCode2 },
-  { name: "Backtest", href: "/strategies?tab=backtest", icon: BarChart3 },
   { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

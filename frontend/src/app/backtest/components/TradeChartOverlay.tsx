@@ -349,19 +349,19 @@ function TradeStatsSummary({ trades }: { trades: TradeResult[] }) {
       <div className="bg-background/50 rounded-lg p-2 border border-card-border/30">
         <div className="text-muted-foreground mb-1">Best Trade</div>
         <div className="font-mono font-bold text-green-400">
-          ${stats.bestTrade.pnl.toFixed(2)}
+          ${stats.bestTrade?.pnl?.toFixed(2) ?? "—"}
         </div>
         <div className="text-muted-foreground/60 mt-0.5">
-          {stats.bestTrade.direction} #{stats.bestTrade.entry_bar}
+          {stats.bestTrade?.direction ?? "—"} #{stats.bestTrade?.entry_bar ?? "—"}
         </div>
       </div>
       <div className="bg-background/50 rounded-lg p-2 border border-card-border/30">
         <div className="text-muted-foreground mb-1">Worst Trade</div>
         <div className="font-mono font-bold text-red-400">
-          ${stats.worstTrade.pnl.toFixed(2)}
+          ${stats.worstTrade?.pnl?.toFixed(2) ?? "—"}
         </div>
         <div className="text-muted-foreground/60 mt-0.5">
-          {stats.worstTrade.direction} #{stats.worstTrade.entry_bar}
+          {stats.worstTrade?.direction ?? "—"} #{stats.worstTrade?.entry_bar ?? "—"}
         </div>
       </div>
       <div className="bg-background/50 rounded-lg p-2 border border-card-border/30">

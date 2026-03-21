@@ -176,12 +176,12 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
 
   const handleLoadRun = useCallback(async (id: number) => {
     try {
-      const full = await api.get<{ results: Record<string, unknown>; id: number; strategy_id: number }>(`/api/backtest/${id}`);
+      const full = await api.get<{ results: Record<string, unknown>; id: number; strategy_id: number; datasource_id?: number }>(`/api/backtest/${id}`);
       const r = full.results || {};
       setResult({
         id: full.id,
         strategy_id: full.strategy_id,
-        datasource_id: 0,
+        datasource_id: full.datasource_id ?? (r.datasource_id as number) ?? 0,
         status: 'completed',
         stats: (r.stats || r.v2_stats || {}) as BacktestResponse['stats'],
         trades: (r.trades || []) as BacktestResponse['trades'],
@@ -197,12 +197,12 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
 
   const handleCompare = useCallback(async (id: number) => {
     try {
-      const full = await api.get<{ results: Record<string, unknown>; id: number; strategy_id: number }>(`/api/backtest/${id}`);
+      const full = await api.get<{ results: Record<string, unknown>; id: number; strategy_id: number; datasource_id?: number }>(`/api/backtest/${id}`);
       const r = full.results || {};
       setCompareResult({
         id: full.id,
         strategy_id: full.strategy_id,
-        datasource_id: 0,
+        datasource_id: full.datasource_id ?? (r.datasource_id as number) ?? 0,
         status: 'completed',
         stats: (r.stats || {}) as BacktestResponse['stats'],
         trades: (r.trades || []) as BacktestResponse['trades'],

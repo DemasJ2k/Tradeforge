@@ -342,7 +342,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Stats Cards ────────────────────────────────── */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           icon={<Wallet className="h-4 w-4" />}
           label="Account Balance"
@@ -710,7 +710,7 @@ function DashSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="h-7 w-32 rounded bg-card-border/30" />
-      <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {[...Array(4)].map((_, i) => (
           <Card key={i} className="bg-card-bg border-card-border">
             <CardContent className="p-5 space-y-2">

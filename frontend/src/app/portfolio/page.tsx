@@ -11,7 +11,7 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import {
-  PieChart, TrendingUp, TrendingDown, Shield, AlertTriangle,
+  TrendingDown, Shield, AlertTriangle,
   Pause, Play, Square, Bot, Activity, DollarSign, BarChart3,
   ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -196,6 +196,11 @@ export default function PortfolioPage() {
   const dailyUsed = s?.daily_loss_pct ?? 0;
   const dailyMax = s?.max_daily_loss_pct ?? 5;
   const isPaused = s?.status === "paused" || s?.status === "breached";
+  const hasRunningAgents = brokerData?.brokers.some((b) =>
+    b.agents.some((a) => a.status === "running")
+  ) ?? false;
+  const hasAnyAgents = (s?.agents_detail?.length ?? 0) > 0 ||
+    (brokerData?.brokers.some((b) => b.agents.length > 0) ?? false);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 pb-20 md:pb-6">
@@ -215,14 +220,16 @@ export default function PortfolioPage() {
           } border-0 text-xs`}>
             {s?.mode || "balanced"}
           </Badge>
-          {isPaused ? (
-            <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
-              <Play className="h-3.5 w-3.5" /> Play All
-            </Button>
-          ) : (
-            <Button size="sm" variant="destructive" onClick={handlePauseAll} className="gap-1.5">
-              <Pause className="h-3.5 w-3.5" /> Pause All
-            </Button>
+          {hasAnyAgents && (
+            isPaused || !hasRunningAgents ? (
+              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5" disabled={!isPaused && !hasRunningAgents}>
+                <Play className="h-3.5 w-3.5" /> Resume All
+              </Button>
+            ) : (
+              <Button size="sm" variant="destructive" onClick={handlePauseAll} className="gap-1.5">
+                <Pause className="h-3.5 w-3.5" /> Pause All
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -324,7 +331,7 @@ export default function PortfolioPage() {
               <div className="text-sm font-medium text-red-400">Circuit Breaker Active</div>
               <div className="text-xs text-red-400/70">
                 All agents paused. {s?.status === "breached" ? "Drawdown limit breached." : "Manually paused."}
-                {" "}Click Play All when ready.
+                {" "}Click Resume All when ready.
               </div>
             </div>
           </CardContent>

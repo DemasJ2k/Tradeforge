@@ -1651,6 +1651,8 @@ export default function TradingPage() {
                 <Label className="text-xs text-muted-foreground mb-1">Size (units)</Label>
                 <input
                   type="number"
+                  min="0"
+                  step="any"
                   value={oSize}
                   onChange={(e) => setOSize(e.target.value)}
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
@@ -1717,7 +1719,7 @@ export default function TradingPage() {
               </Button>
               <Button
                 onClick={placeOrder}
-                disabled={placing || !oSymbol || !oSize}
+                disabled={placing || !oSymbol || !oSize || Number(oSize) <= 0 || !orderBroker}
                 className={`${
                   oSide === "BUY"
                     ? "bg-green-600 hover:bg-green-700"
