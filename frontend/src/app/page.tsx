@@ -381,10 +381,12 @@ export default function Dashboard() {
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                 30-Day Equity Curve
               </h3>
+              {data.equity_curve.length > 0 && (
               <span className={`text-sm font-semibold ${pnlColor(data.equity_curve[data.equity_curve.length - 1].pnl)}`}>
                 {data.equity_curve[data.equity_curve.length - 1].pnl >= 0 ? "+" : ""}
                 ${fmt(data.equity_curve[data.equity_curve.length - 1].pnl)}
               </span>
+              )}
             </div>
             <MiniEquityChart points={data.equity_curve} />
           </CardContent>

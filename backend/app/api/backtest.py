@@ -71,8 +71,10 @@ def _ensure_dict(value) -> dict:
 
 
 @router.get("/debug-paths")
-def debug_paths(db: Session = Depends(get_db)):
+def debug_paths(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Temporary diagnostic endpoint — shows UPLOAD_DIR contents and datasource paths."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
     upload_dir = Path(settings.UPLOAD_DIR)
     files = []
     if upload_dir.exists():

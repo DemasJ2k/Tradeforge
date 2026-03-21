@@ -12,7 +12,7 @@ class Backtest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
-    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     symbol = Column(String(20), nullable=False)
     timeframe = Column(String(10), nullable=False)
     date_from = Column(String(20), nullable=False)
@@ -25,3 +25,4 @@ class Backtest(Base):
     deleted_at = Column(DateTime, nullable=True, default=None)
 
     strategy = relationship("Strategy", back_populates="backtests")
+    creator = relationship("User")

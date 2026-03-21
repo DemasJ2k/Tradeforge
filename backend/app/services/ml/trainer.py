@@ -136,7 +136,7 @@ class MLTrainer:
         is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
 
         # Split closes for financial metrics
-        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_train = closes[:split_idx] if len(closes) > split_idx else None
         c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
 
         train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)
@@ -342,7 +342,7 @@ class MLTrainer:
         train_pred = final_model.predict(X_train)
         val_pred = final_model.predict(X_val)
 
-        c_train = closes[split_idx:split_idx + len(y_train)] if len(closes) > split_idx else None
+        c_train = closes[:split_idx] if len(closes) > split_idx else None
         c_val = closes[split_idx:split_idx + len(y_val)] if len(closes) > split_idx else None
 
         train_metrics = _compute_metrics(y_train, train_pred, is_classification, c_train)

@@ -193,8 +193,8 @@ def recalculate_pnl(
     user: User = Depends(get_current_user),
 ):
     """Recalculate P&L for all existing trades using correct instrument specs."""
-    if user.username not in ("FlowrexAdmin", "admin"):
-        raise HTTPException(403, "Admin only")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
 
     from app.services.agent.instrument_specs import calc_pnl_dollars
 

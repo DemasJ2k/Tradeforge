@@ -48,3 +48,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+import warnings
+if settings.SECRET_KEY == "flowrexalgo-dev-secret-change-in-production":
+    warnings.warn(
+        "Using default SECRET_KEY - this is insecure for production! "
+        "Set SECRET_KEY environment variable to a random value.",
+        stacklevel=1,
+    )
