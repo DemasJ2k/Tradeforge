@@ -18,6 +18,8 @@ interface WSState {
   disconnect: () => void;
 }
 
+const _DEV = process.env.NODE_ENV === "development";
+
 const WS_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/^http/, "ws");
 
 // Internal state not stored in Zustand (avoids reactivity overhead for high-frequency data)
@@ -85,7 +87,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
 
     // If stuck in CONNECTING state, force-close and retry
     if (_ws && _ws.readyState === WebSocket.CONNECTING) {
-      console.log("[WS] Force-closing stuck CONNECTING socket");
+      if (_DEV) console.log("[WS] Force-closing stuck CONNECTING socket");
       try { _ws.close(); } catch { /* ignore */ }
       _ws = null;
     }
@@ -103,7 +105,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
     // Connection timeout — if onopen doesn't fire within 10s, force close and retry
     _connectTimeout = setTimeout(() => {
       if (ws.readyState === WebSocket.CONNECTING) {
-        console.warn("[WS] Connection timeout — force closing");
+        if (_DEV) console.warn("[WS] Connection timeout — force closing");
         try { ws.close(); } catch { /* ignore */ }
         // onclose will handle reconnect logic
       }
@@ -111,7 +113,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
 
     ws.onopen = () => {
       _cleanupConnection();
-      console.log("[WS] Connected");
+      if (_DEV) console.log("[WS] Connected");
       _reconnectDelay = 1000;
       set({ status: "connected", ws });
       _resubscribeAll();
@@ -130,7 +132,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
         if (type === "subscribed" || type === "unsubscribed" || type === "error") {
           // Protocol acknowledgements
           if (type === "error") {
-            console.warn("[WS] Server error:", msg.message);
+            if (_DEV) console.warn("[WS] Server error:", msg.message);
           }
           return;
         }
@@ -152,7 +154,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
 
       if (!_intentionalClose) {
         set({ status: "reconnecting" });
-        console.log(`[WS] Disconnected, reconnecting in ${_reconnectDelay}ms...`);
+        if (_DEV) console.log(`[WS] Disconnected, reconnecting in ${_reconnectDelay}ms...`);
         if (_reconnectTimer) clearTimeout(_reconnectTimer);
         _reconnectTimer = setTimeout(() => {
           get().connect();
@@ -164,7 +166,7 @@ export const useWebSocket = create<WSState>((set, get) => ({
     };
 
     ws.onerror = () => {
-      console.warn("[WS] Connection error — reconnect will follow");
+      if (_DEV) console.warn("[WS] Connection error — reconnect will follow");
       // onerror is always followed by onclose, so reconnect is handled there
     };
   },

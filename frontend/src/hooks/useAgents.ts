@@ -335,7 +335,7 @@ export const useAgents = create<AgentsState>((set, get) => ({
       const [logsData, tradesData, perfData] = await Promise.all([
         api.get<AgentLogList>(`/api/agents/${agentId}/logs?limit=50`),
         api.get<AgentTradeList>(`/api/agents/${agentId}/trades?limit=50`),
-        api.get<AgentPerformance>(`/api/agents/${agentId}/performance`).catch(() => null),
+        api.get<AgentPerformance>(`/api/agents/${agentId}/performance`).catch((err) => { console.error("[useAgents] perf fetch:", err); return null; }),
       ]);
       set((s) => ({
         agentDetails: {

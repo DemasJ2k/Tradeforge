@@ -88,7 +88,7 @@ export default function StrategyOverlayPanel({ chart, datasourceId }: Props) {
         const arr = Array.isArray(data) ? data : (data as unknown as { items: Strategy[] }).items ?? [];
         setStrategies(arr);
       })
-      .catch(() => {});
+      .catch(console.error);
   }, []);
 
   // Cleanup overlay lines when component unmounts or chart changes

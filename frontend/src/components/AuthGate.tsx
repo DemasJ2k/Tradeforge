@@ -53,7 +53,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       // Auto-connect brokers only once per session
       if (!autoConnectRan.current) {
         autoConnectRan.current = true;
-        api.post("/api/settings/broker-auto-connect").catch(() => {});
+        api.post("/api/settings/broker-auto-connect").catch(console.error);
       }
     }
   }, [user, mustChangePassword, totpRequired, loadSettings]);

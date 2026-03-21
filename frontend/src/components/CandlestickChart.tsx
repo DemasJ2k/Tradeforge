@@ -131,7 +131,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       if (t > lastSeriesTimeRef.current) lastSeriesTimeRef.current = t;
     } catch (e) {
       const msg = e instanceof Error ? e.message : (typeof e === "object" && e !== null ? JSON.stringify(e) : String(e));
-      console.warn("[CandlestickChart] update error:", msg, "| bar.time=", bar.time);
+      if (process.env.NODE_ENV === "development") console.warn("[CandlestickChart] update error:", msg, "| bar.time=", bar.time);
     }
   }, []);
 

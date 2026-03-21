@@ -6,8 +6,7 @@ import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, Shield, type LucideIcon } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_BASE } from "@/lib/api";
 
 function getToken() {
   if (typeof window === 'undefined') return null;
@@ -52,7 +51,7 @@ function RecycleBinSection() {
 
   const loadBin = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/recycle-bin`, { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/api/recycle-bin`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
@@ -67,7 +66,7 @@ function RecycleBinSection() {
     const key = `restore-${type}-${id}`;
     setActionLoading(key);
     try {
-      await fetch(`${API}/api/recycle-bin/${type}/${id}/restore`, { method: 'POST', headers: authHeaders() });
+      await fetch(`${API_BASE}/api/recycle-bin/${type}/${id}/restore`, { method: 'POST', headers: authHeaders() });
       await loadBin();
     } catch { /* ignore */ }
     finally { setActionLoading(null); }
@@ -78,7 +77,7 @@ function RecycleBinSection() {
     const key = `delete-${type}-${id}`;
     setActionLoading(key);
     try {
-      await fetch(`${API}/api/recycle-bin/${type}/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await fetch(`${API_BASE}/api/recycle-bin/${type}/${id}`, { method: 'DELETE', headers: authHeaders() });
       await loadBin();
     } catch { /* ignore */ }
     finally { setActionLoading(null); }
@@ -88,7 +87,7 @@ function RecycleBinSection() {
     if (!confirm('Permanently delete ALL items in the recycle bin? This cannot be undone.')) return;
     setActionLoading('clear-all');
     try {
-      await fetch(`${API}/api/recycle-bin/clear`, { method: 'DELETE', headers: authHeaders() });
+      await fetch(`${API_BASE}/api/recycle-bin/clear`, { method: 'DELETE', headers: authHeaders() });
       await loadBin();
     } catch { /* ignore */ }
     finally { setActionLoading(null); }
@@ -313,7 +312,7 @@ function WebhookSettingsSection() {
 
   const loadWebhooks = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/webhooks`, { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/api/webhooks`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setWebhooks(data.webhooks || []);
@@ -331,7 +330,7 @@ function WebhookSettingsSection() {
     setSaving(true);
     try {
       const method = editId ? 'PUT' : 'POST';
-      const url = editId ? `${API}/api/webhooks/${editId}` : `${API}/api/webhooks`;
+      const url = editId ? `${API_BASE}/api/webhooks/${editId}` : `${API_BASE}/api/webhooks`;
       const body: Record<string, unknown> = { name: form.name, url: form.url, events: form.events, enabled: form.enabled };
       if (form.secret) body.secret = form.secret;
       await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -343,14 +342,14 @@ function WebhookSettingsSection() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this webhook endpoint?')) return;
-    await fetch(`${API}/api/webhooks/${id}`, { method: 'DELETE', headers: authHeaders() });
+    await fetch(`${API_BASE}/api/webhooks/${id}`, { method: 'DELETE', headers: authHeaders() });
     await loadWebhooks();
   };
 
   const handleTest = async (id: number) => {
     setTestResult(null);
     try {
-      const res = await fetch(`${API}/api/webhooks/${id}/test`, { method: 'POST', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/api/webhooks/${id}/test`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       setTestResult({ id, msg: data.message || (data.success ? 'OK' : 'Failed'), ok: data.success });
     } catch {
@@ -363,7 +362,7 @@ function WebhookSettingsSection() {
     setLogsFor(id);
     setLogsLoading(true);
     try {
-      const res = await fetch(`${API}/api/webhooks/${id}/logs?limit=20`, { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/api/webhooks/${id}/logs?limit=20`, { headers: authHeaders() });
       if (res.ok) { const data = await res.json(); setLogs(data.logs || []); }
     } catch { setLogs([]); }
     finally { setLogsLoading(false); }
@@ -566,8 +565,8 @@ function PropFirmTab() {
   const loadData = useCallback(async () => {
     try {
       const [accRes, dashRes] = await Promise.all([
-        fetch(`${API}/api/prop-firm/accounts`, { headers: authHeaders() }),
-        fetch(`${API}/api/prop-firm/dashboard`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/prop-firm/accounts`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/prop-firm/dashboard`, { headers: authHeaders() }),
       ]);
       if (accRes.ok) {
         const data = await accRes.json();
@@ -600,7 +599,7 @@ function PropFirmTab() {
     setSubmitting(true);
     setFormError('');
     try {
-      const res = await fetch(`${API}/api/prop-firm/accounts`, {
+      const res = await fetch(`${API_BASE}/api/prop-firm/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
@@ -628,7 +627,7 @@ function PropFirmTab() {
     if (!confirm(`Delete prop firm account "${name}"? This cannot be undone.`)) return;
     setDeleting(id);
     try {
-      await fetch(`${API}/api/prop-firm/accounts/${id}`, { method: 'DELETE', headers: authHeaders() });
+      await fetch(`${API_BASE}/api/prop-firm/accounts/${id}`, { method: 'DELETE', headers: authHeaders() });
       await loadData();
     } catch { /* ignore */ }
     finally { setDeleting(null); }
@@ -879,42 +878,42 @@ export default function SettingsPage() {
   // Load invitations + reset requests + registered users if admin
   useEffect(() => {
     if (user?.is_admin && tab === 'profile') {
-      fetch(`${API}/api/auth/invitations`, { headers: authHeaders() })
+      fetch(`${API_BASE}/api/auth/invitations`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setInvitations(d); })
-        .catch(() => {});
-      fetch(`${API}/api/auth/admin/reset-requests`, { headers: authHeaders() })
+        .catch(console.error);
+      fetch(`${API_BASE}/api/auth/admin/reset-requests`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setResetRequests(d); })
-        .catch(() => {});
-      fetch(`${API}/api/auth/admin/users`, { headers: authHeaders() })
+        .catch(console.error);
+      fetch(`${API_BASE}/api/auth/admin/users`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setRegisteredUsers(d); })
-        .catch(() => {});
-      fetch(`${API}/api/admin/broadcasts`, { headers: authHeaders() })
+        .catch(console.error);
+      fetch(`${API_BASE}/api/admin/broadcasts`, { headers: authHeaders() })
         .then(r => r.json())
         .then(d => { if (Array.isArray(d)) setBcHistory(d); })
-        .catch(() => {});
+        .catch(console.error);
     }
   }, [user, tab]);
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/settings`, { headers: authHeaders() })
+    fetch(`${API_BASE}/api/settings`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => { setSettings(d); setLoading(false); })
       .catch(() => setLoading(false));
 
-    fetch(`${API}/api/settings/storage`, { headers: authHeaders() })
+    fetch(`${API_BASE}/api/settings/storage`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setStorage(d))
-      .catch(() => {});
+      .catch(console.error);
   }, []);
 
   // Load broker credentials
   const loadBrokerCreds = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/settings/broker-credentials`, { headers: authHeaders() });
+      const r = await fetch(`${API_BASE}/api/settings/broker-credentials`, { headers: authHeaders() });
       if (r.ok) {
         const d = await r.json();
         setBrokerCreds(d.brokers || []);
@@ -938,7 +937,7 @@ export default function SettingsPage() {
     setBrokerMsg(p => ({ ...p, [broker]: '' }));
     try {
       const form = brokerForms[broker] || {};
-      const r = await fetch(`${API}/api/settings/broker-credentials`, {
+      const r = await fetch(`${API_BASE}/api/settings/broker-credentials`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ credentials: { broker, ...form, auto_connect: brokerAutoConnect[broker] ?? false } }),
@@ -959,7 +958,7 @@ export default function SettingsPage() {
     setBrokerBusy(p => ({ ...p, [broker]: true }));
     setBrokerMsg(p => ({ ...p, [broker]: '' }));
     try {
-      const r = await fetch(`${API}/api/settings/broker-credentials/${broker}/connect`, {
+      const r = await fetch(`${API_BASE}/api/settings/broker-credentials/${broker}/connect`, {
         method: 'POST',
         headers: authHeaders(),
       });
@@ -978,7 +977,7 @@ export default function SettingsPage() {
     if (!confirm(`Remove saved credentials for ${broker.toUpperCase()}?`)) return;
     setBrokerBusy(p => ({ ...p, [broker]: true }));
     try {
-      await fetch(`${API}/api/settings/broker-credentials/${broker}`, {
+      await fetch(`${API_BASE}/api/settings/broker-credentials/${broker}`, {
         method: 'DELETE',
         headers: authHeaders(),
       });
@@ -996,7 +995,7 @@ export default function SettingsPage() {
     setBrokerBusy(p => ({ ...p, ctrader: true }));
     setBrokerMsg(p => ({ ...p, ctrader: '' }));
     try {
-      const r = await fetch(`${API}/api/broker/ctrader/auth-url`, { headers: authHeaders() });
+      const r = await fetch(`${API_BASE}/api/broker/ctrader/auth-url`, { headers: authHeaders() });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || 'Failed to get auth URL');
       window.location.href = d.auth_url;
@@ -1012,7 +1011,7 @@ export default function SettingsPage() {
     setBrokerMsg(p => ({ ...p, ctrader: 'Fetching accounts...' }));
     try {
       // Fetch accounts using stored token (backend reads from DB)
-      const r = await fetch(`${API}/api/broker/ctrader/accounts`, { headers: authHeaders() });
+      const r = await fetch(`${API_BASE}/api/broker/ctrader/accounts`, { headers: authHeaders() });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || 'Failed to fetch accounts');
       const accounts = d.accounts || [];
@@ -1033,7 +1032,7 @@ export default function SettingsPage() {
   const saveCtraderAccount = async (accountId: string, isLive: boolean) => {
     setBrokerBusy(p => ({ ...p, ctrader: true }));
     try {
-      const r = await fetch(`${API}/api/broker/ctrader/save-account?account_id=${accountId}&is_live=${isLive}`, {
+      const r = await fetch(`${API_BASE}/api/broker/ctrader/save-account?account_id=${accountId}&is_live=${isLive}`, {
         method: 'POST',
         headers: authHeaders(),
       });
@@ -1063,7 +1062,7 @@ export default function SettingsPage() {
         setTab('trading');
         setExpandedBroker('ctrader');
         try {
-          const r = await fetch(`${API}/api/broker/ctrader/callback?code=${encodeURIComponent(ctraderCode)}`, {
+          const r = await fetch(`${API_BASE}/api/broker/ctrader/callback?code=${encodeURIComponent(ctraderCode)}`, {
             headers: authHeaders(),
           });
           const d = await r.json();
@@ -1072,7 +1071,7 @@ export default function SettingsPage() {
           await loadBrokerCreds();
 
           // Fetch trading accounts (backend uses stored token from the callback exchange)
-          const acctR = await fetch(`${API}/api/broker/ctrader/accounts`, {
+          const acctR = await fetch(`${API_BASE}/api/broker/ctrader/accounts`, {
             headers: authHeaders(),
           });
           if (acctR.ok) {
@@ -1114,7 +1113,7 @@ export default function SettingsPage() {
       // Include llm_api_key if user typed one
       if (llmApiKey) body.llm_api_key = llmApiKey;
 
-      const r = await fetch(`${API}/api/settings`, {
+      const r = await fetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(body),
@@ -1142,7 +1141,7 @@ export default function SettingsPage() {
   const changePassword = async () => {
     setPwMsg('');
     try {
-      const r = await fetch(`${API}/api/settings/change-password`, {
+      const r = await fetch(`${API_BASE}/api/settings/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
@@ -1163,7 +1162,7 @@ export default function SettingsPage() {
     setLlmTesting(true);
     setLlmTestResult('');
     try {
-      const r = await fetch(`${API}/api/settings/test-llm`, {
+      const r = await fetch(`${API_BASE}/api/settings/test-llm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
@@ -1301,7 +1300,7 @@ export default function SettingsPage() {
               <button onClick={async () => {
                 setProfileMsg('');
                 try {
-                  await fetch(`${API}/api/auth/profile`, {
+                  await fetch(`${API_BASE}/api/auth/profile`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', ...authHeaders() },
                     body: JSON.stringify({ email: profileEmail, phone: profilePhone }),
@@ -1325,7 +1324,7 @@ export default function SettingsPage() {
                     <button onClick={async () => {
                       setTotpMsg('');
                       try {
-                        const r = await fetch(`${API}/api/auth/disable-totp`, {
+                        const r = await fetch(`${API_BASE}/api/auth/disable-totp`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', ...authHeaders() },
                           body: JSON.stringify({ code: '' }),
@@ -1343,7 +1342,7 @@ export default function SettingsPage() {
                         <button onClick={async () => {
                           setTotpMsg('');
                           try {
-                            const r = await fetch(`${API}/api/auth/disable-totp`, {
+                            const r = await fetch(`${API_BASE}/api/auth/disable-totp`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json', ...authHeaders() },
                               body: JSON.stringify({ code: disableCode }),
@@ -1368,7 +1367,7 @@ export default function SettingsPage() {
                       <button onClick={async () => {
                         setTotpMsg('');
                         try {
-                          const r = await fetch(`${API}/api/auth/confirm-totp`, {
+                          const r = await fetch(`${API_BASE}/api/auth/confirm-totp`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', ...authHeaders() },
                             body: JSON.stringify({ code: totpCode }),
@@ -1392,7 +1391,7 @@ export default function SettingsPage() {
                   <button disabled={!user?.email} onClick={async () => {
                     setTotpMsg('');
                     try {
-                      const r = await fetch(`${API}/api/auth/setup-totp`, {
+                      const r = await fetch(`${API_BASE}/api/auth/setup-totp`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', ...authHeaders() },
                       });
@@ -1435,7 +1434,7 @@ export default function SettingsPage() {
                   <button onClick={async () => {
                     setInvMsg('');
                     try {
-                      const r = await fetch(`${API}/api/auth/invite`, {
+                      const r = await fetch(`${API_BASE}/api/auth/invite`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', ...authHeaders() },
                         body: JSON.stringify({ email: invEmail, username: invUsername, temp_password: invPassword }),
@@ -1445,7 +1444,7 @@ export default function SettingsPage() {
                         setInvMsg(`Invitation created for ${invUsername}`);
                         setInvEmail(''); setInvUsername(''); setInvPassword('');
                         // Refresh invitations list
-                        const lr = await fetch(`${API}/api/auth/invitations`, { headers: authHeaders() });
+                        const lr = await fetch(`${API_BASE}/api/auth/invitations`, { headers: authHeaders() });
                         const ld = await lr.json();
                         if (Array.isArray(ld)) setInvitations(ld);
                       } else {
@@ -1481,13 +1480,13 @@ export default function SettingsPage() {
                               <td className="px-3 py-2 text-right flex gap-2 justify-end">
                                 {inv.status === 'pending' && (
                                   <button onClick={async () => {
-                                    await fetch(`${API}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
+                                    await fetch(`${API_BASE}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
                                     setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'revoked' } : i));
                                   }} className="text-xs text-red-400 hover:text-red-300">Revoke</button>
                                 )}
                                 {inv.status === 'revoked' && (
                                   <button onClick={async () => {
-                                    const r = await fetch(`${API}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
+                                    const r = await fetch(`${API_BASE}/api/auth/invitations/${inv.id}`, { method: 'DELETE', headers: authHeaders() });
                                     if (r.ok) setInvitations(prev => prev.filter(i => i.id !== inv.id));
                                   }} className="text-xs text-muted-foreground/60 hover:text-red-400">Delete</button>
                                 )}
@@ -1613,7 +1612,7 @@ export default function SettingsPage() {
                             <button
                               onClick={async () => {
                                 try {
-                                  const r = await fetch(`${API}/api/auth/admin/users/${deleteConfirmId}`, {
+                                  const r = await fetch(`${API_BASE}/api/auth/admin/users/${deleteConfirmId}`, {
                                     method: 'DELETE',
                                     headers: authHeaders(),
                                   });
@@ -1675,7 +1674,7 @@ export default function SettingsPage() {
                       if (!bcSubject.trim() || !bcBody.trim()) { setBcMsg('Subject and message are required'); return; }
                       setBcSending(true); setBcMsg('');
                       try {
-                        const r = await fetch(`${API}/api/admin/broadcast`, {
+                        const r = await fetch(`${API_BASE}/api/admin/broadcast`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', ...authHeaders() },
                           body: JSON.stringify({ category: bcCategory, subject: bcSubject.trim(), body: bcBody.trim() }),
@@ -1685,7 +1684,7 @@ export default function SettingsPage() {
                           setBcMsg(`Broadcast sent to ${d.recipients_count} user(s) — ${d.email_sent} email(s), ${d.telegram_sent} Telegram`);
                           setBcSubject(''); setBcBody('');
                           // Refresh history
-                          const hr = await fetch(`${API}/api/admin/broadcasts`, { headers: authHeaders() });
+                          const hr = await fetch(`${API_BASE}/api/admin/broadcasts`, { headers: authHeaders() });
                           const hd = await hr.json();
                           if (Array.isArray(hd)) setBcHistory(hd);
                         } else {
@@ -1766,7 +1765,7 @@ export default function SettingsPage() {
                             onClick={async () => {
                               if (manualResetPw.length < 6) { setManualResetMsg('Password must be at least 6 characters'); return; }
                               try {
-                                const r = await fetch(`${API}/api/auth/admin/manual-reset`, {
+                                const r = await fetch(`${API_BASE}/api/auth/admin/manual-reset`, {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json', ...authHeaders() },
                                   body: JSON.stringify({ user_id: manualResetUserId, temp_password: manualResetPw }),
@@ -1775,7 +1774,7 @@ export default function SettingsPage() {
                                 if (r.ok) {
                                   setManualResetMsg('Reset successful — user must change password on next login.');
                                   // Refresh reset requests
-                                  const lr = await fetch(`${API}/api/auth/admin/reset-requests`, { headers: authHeaders() });
+                                  const lr = await fetch(`${API_BASE}/api/auth/admin/reset-requests`, { headers: authHeaders() });
                                   const ld = await lr.json();
                                   if (Array.isArray(ld)) setResetRequests(ld);
                                   setTimeout(() => { setManualResetUserId(null); setManualResetPw(''); setManualResetMsg(''); }, 1800);
@@ -2243,7 +2242,7 @@ export default function SettingsPage() {
                             onChange={async v => {
                               setBrokerAutoConnect(p => ({ ...p, [broker.id]: v }));
                               try {
-                                await fetch(`${API}/api/settings/broker-credentials/${broker.id}/auto-connect`, {
+                                await fetch(`${API_BASE}/api/settings/broker-credentials/${broker.id}/auto-connect`, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json', ...authHeaders() },
                                   body: JSON.stringify({ auto_connect: v }),
@@ -2404,7 +2403,7 @@ export default function SettingsPage() {
                             onChange={async v => {
                               setBrokerAutoConnect(p => ({ ...p, ctrader: v }));
                               try {
-                                await fetch(`${API}/api/settings/broker-credentials/ctrader/auto-connect`, {
+                                await fetch(`${API_BASE}/api/settings/broker-credentials/ctrader/auto-connect`, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json', ...authHeaders() },
                                   body: JSON.stringify({ auto_connect: v }),
@@ -2514,7 +2513,7 @@ export default function SettingsPage() {
                   onClick={async () => {
                     try {
                       const token = getToken();
-                      const res = await fetch(`${API}/api/settings/backup`, {
+                      const res = await fetch(`${API_BASE}/api/settings/backup`, {
                         headers: token ? { Authorization: `Bearer ${token}` } : {},
                       });
                       if (!res.ok) throw new Error('Backup failed');
@@ -2543,9 +2542,9 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">Clear all uploaded CSV data and data source records. This cannot be undone.</p>
               <button onClick={async () => {
                 if (!confirm('Delete ALL uploaded CSV data? This cannot be undone.')) return;
-                await fetch(`${API}/api/settings/clear-data`, { method: 'DELETE', headers: authHeaders() });
+                await fetch(`${API_BASE}/api/settings/clear-data`, { method: 'DELETE', headers: authHeaders() });
                 // Refresh storage
-                const r = await fetch(`${API}/api/settings/storage`, { headers: authHeaders() });
+                const r = await fetch(`${API_BASE}/api/settings/storage`, { headers: authHeaders() });
                 if (r.ok) setStorage(await r.json());
               }} className={btnDanger}>
                 Clear All Data
@@ -2575,7 +2574,7 @@ export default function SettingsPage() {
                     setNotifTesting('email');
                     setNotifTestResult({});
                     try {
-                      const resp = await fetch(`${API}/api/settings/test-notification`, {
+                      const resp = await fetch(`${API_BASE}/api/settings/test-notification`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
                         body: JSON.stringify({ channel: 'email', email: s.notification_email }),
                       });
@@ -2632,7 +2631,7 @@ export default function SettingsPage() {
                     setNotifTesting('telegram');
                     setNotifTestResult({});
                     try {
-                      const resp = await fetch(`${API}/api/settings/test-notification`, {
+                      const resp = await fetch(`${API_BASE}/api/settings/test-notification`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
                         body: JSON.stringify({ channel: 'telegram' }),
                       });
@@ -2649,7 +2648,7 @@ export default function SettingsPage() {
                     <button onClick={async () => {
                       if (!confirm('Disconnect Telegram? You will stop receiving notifications.')) return;
                       try {
-                        await fetch(`${API}/api/settings`, {
+                        await fetch(`${API_BASE}/api/settings`, {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json', ...authHeaders() },
                           body: JSON.stringify({ notification_telegram_chat_id: '', notification_telegram_username: '' }),
