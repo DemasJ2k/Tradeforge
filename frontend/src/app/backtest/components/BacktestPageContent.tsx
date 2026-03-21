@@ -66,7 +66,7 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
       setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
       const histItems = Array.isArray(hist) ? hist : (hist as { items: BacktestListItem[] }).items || [];
       setHistory(histItems);
-    }).finally(() => setInitialLoading(false));
+    }).catch(console.error).finally(() => setInitialLoading(false));
   }, []);
 
   // Auto-open config dialog when defaultStrategyId is passed
