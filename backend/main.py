@@ -258,6 +258,10 @@ def _create_indexes():
         ("idx_datasources_creator", "datasources", "creator_id"),
         ("idx_trades_user", "trades", "user_id"),
         ("idx_agent_logs_agent_created", "agent_logs", "agent_id, created_at DESC"),
+        ("idx_backtests_datasource", "backtests", "datasource_id"),
+        ("idx_trades_strategy", "trades", "strategy_id"),
+        ("idx_agent_trades_agent", "agent_trades", "agent_id"),
+        ("idx_optimizations_datasource", "optimizations", "datasource_id"),
     ]
 
     with engine.connect() as conn:
@@ -334,29 +338,32 @@ def _remove_incompatible_strategies():
             _log.info("No incompatible strategies to remove")
             return
 
-        id_list = ",".join(str(i) for i in ids_to_remove)
-        _log.info("Removing %d incompatible strategies: %s", len(ids_to_remove), id_list)
+        _log.info("Removing %d incompatible strategies: %s", len(ids_to_remove), ids_to_remove)
+
+        # Use parameterized queries to avoid SQL injection risk
+        placeholders = ",".join(f":id_{i}" for i in range(len(ids_to_remove)))
+        params = {f"id_{i}": sid for i, sid in enumerate(ids_to_remove)}
 
         # Delete orphaned agents first (FK to strategies)
         conn.execute(text(
             f"DELETE FROM agent_logs WHERE agent_id IN "
-            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
-        ))
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({placeholders}))"
+        ), params)
         conn.execute(text(
             f"DELETE FROM agent_trades WHERE agent_id IN "
-            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({id_list}))"
-        ))
+            f"(SELECT id FROM trading_agents WHERE strategy_id IN ({placeholders}))"
+        ), params)
         conn.execute(text(
-            f"DELETE FROM trading_agents WHERE strategy_id IN ({id_list})"
-        ))
+            f"DELETE FROM trading_agents WHERE strategy_id IN ({placeholders})"
+        ), params)
         # Delete orphaned backtests
         conn.execute(text(
-            f"DELETE FROM backtests WHERE strategy_id IN ({id_list})"
-        ))
+            f"DELETE FROM backtests WHERE strategy_id IN ({placeholders})"
+        ), params)
         # Delete the strategies
         result = conn.execute(text(
-            f"DELETE FROM strategies WHERE id IN ({id_list})"
-        ))
+            f"DELETE FROM strategies WHERE id IN ({placeholders})"
+        ), params)
         conn.commit()
         _log.info("Removed %d incompatible strategies and orphaned records", result.rowcount)
 

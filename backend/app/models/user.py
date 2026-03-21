@@ -32,4 +32,4 @@ class User(Base):
     must_change_password = Column(Boolean, default=False)
     invited_by = Column(Integer, default=None, nullable=True)
 
-    strategies = relationship("Strategy", back_populates="creator")
+    strategies = relationship("Strategy", back_populates="creator", cascade="all, delete-orphan")

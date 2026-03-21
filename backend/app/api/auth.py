@@ -233,6 +233,10 @@ def update_profile(
     current_user: User = Depends(get_current_user),
 ):
     if payload.email is not None:
+        if payload.email:
+            existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email already in use")
         current_user.email = payload.email
     if payload.phone is not None:
         current_user.phone = payload.phone
@@ -439,18 +443,15 @@ def list_reset_requests(
     admin: User = Depends(get_current_admin),
 ):
     """Return all password reset tokens (pending and used) ordered newest first."""
-    now = datetime.now(timezone.utc)
     records = (
-        db.query(PasswordResetToken)
+        db.query(PasswordResetToken, User)
+        .join(User, PasswordResetToken.user_id == User.id)
         .order_by(PasswordResetToken.created_at.desc())
         .limit(100)
         .all()
     )
     result = []
-    for r in records:
-        user = db.query(User).filter(User.id == r.user_id).first()
-        if not user:
-            continue
+    for r, user in records:
         expires = r.expires_at
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
