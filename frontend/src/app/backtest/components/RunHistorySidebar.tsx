@@ -124,7 +124,7 @@ export default function RunHistorySidebar({
                     )}
                     {winRate !== undefined && (
                       <span className="text-xs text-muted-foreground font-mono">
-                        WR {typeof winRate === 'number' ? (winRate * 100).toFixed(0) : winRate}%
+                        WR {typeof winRate === 'number' ? winRate.toFixed(0) : winRate}%
                       </span>
                     )}
                     {item.stats?.total_trades !== undefined && (
