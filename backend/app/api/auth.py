@@ -415,7 +415,7 @@ def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db))
 
     user = db.query(User).filter(User.id == record.user_id).first()
     if not user:
-        raise HTTPException(status_code=400, detail="User not found")
+        raise HTTPException(status_code=404, detail="User not found")
 
     user.password_hash = hash_password(payload.new_password)
     user.must_change_password = False

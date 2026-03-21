@@ -6,7 +6,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -58,6 +58,8 @@ def _check_ownership(obj, owner_field: str, user_id: int) -> bool:
 
 @router.get("")
 def list_recycle_bin(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -92,10 +94,12 @@ def list_recycle_bin(
 
     # Sort all items by deleted_at descending
     all_items.sort(key=lambda x: x["deleted_at"], reverse=True)
+    total = len(all_items)
+    all_items = all_items[offset:offset + limit]
 
     return {
         "items": all_items,
-        "total": len(all_items),
+        "total": total,
         "by_type": result,
     }
 

@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import or_
@@ -262,19 +262,22 @@ def use_strategy_template(
 
 @router.get("")
 def list_strategies(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    strategies = (
+    q = (
         db.query(Strategy)
         .filter(or_(Strategy.creator_id == current_user.id, Strategy.is_system == True))
         .filter(Strategy.deleted_at.is_(None))
         .order_by(Strategy.is_system.desc(), Strategy.updated_at.desc())
-        .all()
     )
+    total = q.count()
+    strategies = q.offset(offset).limit(limit).all()
     return JSONResponse(content={
         "items": [_to_response(s) for s in strategies],
-        "total": len(strategies),
+        "total": total,
     })
 
 

@@ -1,6 +1,6 @@
 """LLM API routes — chat, conversations, memories, usage stats."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -90,6 +90,8 @@ async def chat_stream(
 
 @router.get("/conversations", response_model=ConversationList)
 def list_conversations(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -99,6 +101,8 @@ def list_conversations(
         .filter(LLMConversation.user_id == current_user.id)
         .filter(LLMConversation.deleted_at.is_(None))
         .order_by(LLMConversation.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     items = []
@@ -165,6 +169,8 @@ def delete_conversation(
 
 @router.get("/memories", response_model=MemoryList)
 def list_memories(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -173,6 +179,8 @@ def list_memories(
         db.query(LLMMemory)
         .filter(LLMMemory.user_id == current_user.id)
         .order_by(LLMMemory.category, LLMMemory.key)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     items = [

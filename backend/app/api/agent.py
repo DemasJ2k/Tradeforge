@@ -50,17 +50,20 @@ def _agent_to_response(a: TradingAgent) -> AgentResponse:
 
 @router.get("")
 def list_agents(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    agents = (
+    q = (
         db.query(TradingAgent)
         .filter(TradingAgent.created_by == user.id)
         .filter(TradingAgent.deleted_at.is_(None))
         .order_by(TradingAgent.created_at.desc())
-        .all()
     )
-    return {"items": [_agent_to_response(a) for a in agents], "total": len(agents)}
+    total = q.count()
+    agents = q.offset(offset).limit(limit).all()
+    return {"items": [_agent_to_response(a) for a in agents], "total": total}
 
 
 def _trade_to_response(t: AgentTrade) -> dict:
