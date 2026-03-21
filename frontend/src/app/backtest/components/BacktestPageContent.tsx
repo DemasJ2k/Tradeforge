@@ -36,7 +36,7 @@ import DataSourcesPanel from './DataSourcesPanel';
 import WalkForwardPanel from './WalkForwardPanel';
 
 interface BacktestPageContentProps {
-  defaultStrategyId?: number | null;
+  defaultStrategyId?: number;
 }
 
 export default function BacktestPageContent({ defaultStrategyId }: BacktestPageContentProps = {}) {
