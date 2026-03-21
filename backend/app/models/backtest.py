@@ -17,6 +17,7 @@ class Backtest(Base):
     timeframe = Column(String(10), nullable=False)
     date_from = Column(String(20), nullable=False)
     date_to = Column(String(20), nullable=False)
+    datasource_id = Column(Integer, ForeignKey("datasources.id"), nullable=True)
     initial_balance = Column(Float, default=10000.0)
     status = Column(String(20), default="pending")  # pending, running, completed, failed
     results = Column(JSON, default=dict)  # Full results blob (stats, elapsed_seconds)

@@ -518,8 +518,11 @@ def rebalance_portfolio(
     if not pm_db:
         raise HTTPException(404, "No portfolio manager found")
 
-    # Validate allocations sum to <= 1.0
-    total = sum(req.capital_allocation.values())
+    # Validate allocations: no negative values and sum <= 1.0
+    values = req.capital_allocation.values()
+    if any(v < 0 for v in values):
+        raise HTTPException(400, "Allocation values must be non-negative")
+    total = sum(values)
     if total > 1.0:
         raise HTTPException(400, f"Allocation sum {total:.2f} exceeds 1.0")
 
@@ -560,6 +563,14 @@ async def pause_all_agents(
     pm = get_portfolio_manager(user.id)
     if pm:
         pm._paused = True
+
+    # Persist paused status to DB
+    pm_db = db.query(PortfolioManager).filter(
+        PortfolioManager.user_id == user.id
+    ).first()
+    if pm_db:
+        pm_db.status = "paused"
+        db.commit()
 
     return {"status": "paused", "agents_paused": paused}
 

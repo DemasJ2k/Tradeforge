@@ -105,6 +105,8 @@ def _run_schema_migrations():
         ("datasources", "default_spread",     "REAL DEFAULT 0.3"),
         ("datasources", "commission_model",   "VARCHAR(20) DEFAULT 'per_lot'"),
         ("datasources", "default_commission", "REAL DEFAULT 7.0"),
+        # Backtest datasource tracking
+        ("backtests", "datasource_id", "INTEGER"),
         # Optimization datasource tracking
         ("optimizations", "datasource_id", "INTEGER"),
         # ML model ownership

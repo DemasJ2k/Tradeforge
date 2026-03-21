@@ -416,6 +416,7 @@ def run_backtest(
 
             bt = Backtest(
                 strategy_id=strategy.id,
+                datasource_id=payload.datasource_id,
                 symbol=",".join(sym_names),
                 timeframe=datasources_multi[0].timeframe or "",
                 date_from=datasources_multi[0].date_from or "",
@@ -563,6 +564,7 @@ def run_backtest(
         # Save to DB
         bt = Backtest(
             strategy_id=strategy.id,
+            datasource_id=payload.datasource_id,
             symbol=datasource.symbol or "UNKNOWN",
             timeframe=datasource.timeframe or "",
             date_from=datasource.date_from or "",
@@ -689,6 +691,7 @@ def run_backtest_v3(
     # Create DB record immediately with status "running"
     bt = Backtest(
         strategy_id=strategy.id,
+        datasource_id=payload.datasource_id,
         symbol=symbol,
         timeframe=datasource.timeframe or "",
         date_from=datasource.date_from or "",
@@ -1159,16 +1162,18 @@ def get_backtest(
     ).first()
     if not bt:
         raise HTTPException(404, "Backtest not found")
+    results = bt.results or {}
     return {
         "id": bt.id,
         "strategy_id": bt.strategy_id,
+        "datasource_id": bt.datasource_id or results.get("datasource_id", 0),
         "symbol": bt.symbol,
         "timeframe": bt.timeframe,
         "date_from": bt.date_from,
         "date_to": bt.date_to,
         "initial_balance": bt.initial_balance,
         "status": bt.status,
-        "results": bt.results or {},
+        "results": results,
         "created_at": bt.created_at.isoformat() if bt.created_at else "",
     }
 
