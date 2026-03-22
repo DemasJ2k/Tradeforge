@@ -12,7 +12,7 @@ class AgentCreate(BaseModel):
     symbol: str
     timeframe: str = "M10"
     broker_name: str = ""  # empty = auto-detect from active broker
-    mode: AGENT_MODES = "paper"  # paper | confirmation | auto
+    mode: AGENT_MODES = "auto"  # paper | confirmation | auto
     risk_config: dict = {}
     ml_model_id: Optional[int] = None  # Optional ML model for signal filtering
     prop_firm_account_id: Optional[int] = None  # Link to prop firm account for rule enforcement

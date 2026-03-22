@@ -109,6 +109,15 @@ class MLTrainer:
         if len(X) < 50:
             raise ValueError(f"Not enough valid samples after cleaning: {len(X)}")
 
+        # Convert float class labels to integers for classifiers
+        # (triple_barrier produces 0.0, 0.5, 1.0 which XGBoost/LightGBM reject)
+        is_classification = (target_config or {}).get("type", "direction") in ("direction", "triple_barrier")
+        if is_classification:
+            import numpy as _np
+            unique_vals = sorted(set(y))
+            label_map = {v: i for i, v in enumerate(unique_vals)}
+            y = _np.array([label_map[v] for v in y])
+
         logger.info("Training %s: %d samples, %d features", model_type, len(X), len(feature_names))
 
         # Train/validation split (time-series aware: use last 20% as validation)

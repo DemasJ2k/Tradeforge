@@ -84,7 +84,7 @@ export default function AgentPanel() {
   const [cMode, setCMode] = useState<AgentMode>("paper");
   const [cMlModelId, setCMlModelId] = useState<number | null>(null);
   const [cBroker, setCBroker] = useState<string>("");
-  const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>([]);
+  const [mlModels, setMlModels] = useState<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null; symbol?: string; timeframe?: string; model_type?: string }[]>([]);
   const [rlModels, setRlModels] = useState<{ id: number; name: string; symbol: string; train_metrics?: Record<string, number> }[]>([]);
   const [cRlEnhanced, setCRlEnhanced] = useState(false);
   const [cRlModelId, setCRlModelId] = useState<number | null>(null);
@@ -169,7 +169,7 @@ export default function AgentPanel() {
       .then((res) => setStrategies(res.items))
       .catch(console.error);
     api
-      .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null }[]>("/api/ml/models?status=ready")
+      .get<{ id: number; name: string; val_accuracy: number | null; strategy_id: number | null; symbol?: string; timeframe?: string; model_type?: string }[]>("/api/ml/models?status=ready")
       .then((models) => setMlModels(Array.isArray(models) ? models : []))
       .catch(console.error);
     api
@@ -721,13 +721,45 @@ export default function AgentPanel() {
                 <option value="">No ML filter</option>
                 {mlModels
                   .filter((m) => !cStrategyId || m.strategy_id === cStrategyId || !m.strategy_id)
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                      {m.val_accuracy != null ? ` (${(m.val_accuracy * 100).toFixed(1)}% acc)` : ""}
-                    </option>
-                  ))}
+                  .sort((a, b) => {
+                    // Sort: matching symbol first, then by accuracy desc
+                    const aMatch = a.symbol === cSymbolInput ? 1 : 0;
+                    const bMatch = b.symbol === cSymbolInput ? 1 : 0;
+                    if (aMatch !== bMatch) return bMatch - aMatch;
+                    return (b.val_accuracy ?? 0) - (a.val_accuracy ?? 0);
+                  })
+                  .map((m) => {
+                    const symMatch = m.symbol === cSymbolInput;
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {symMatch ? "★ " : ""}{m.name}
+                        {m.symbol ? ` [${m.symbol}]` : ""}
+                        {m.timeframe ? ` ${m.timeframe}` : ""}
+                        {m.val_accuracy != null ? ` — ${(m.val_accuracy * 100).toFixed(1)}% acc` : ""}
+                      </option>
+                    );
+                  })}
               </select>
+              {cMlModelId && (() => {
+                const sel = mlModels.find(m => m.id === cMlModelId);
+                if (!sel) return null;
+                const symMatch = sel.symbol === cSymbolInput;
+                return (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {sel.val_accuracy != null && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${sel.val_accuracy > 0.6 ? "bg-green-500/20 text-green-400" : sel.val_accuracy > 0.5 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
+                        {(sel.val_accuracy * 100).toFixed(1)}% acc
+                      </span>
+                    )}
+                    {sel.model_type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent">{sel.model_type}</span>}
+                    {symMatch ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">symbol match</span>
+                    ) : sel.symbol ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">trained on {sel.symbol}</span>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* RL-Enhanced Toggle */}

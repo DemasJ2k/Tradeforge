@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity, TrendingUp, Bot } from "lucide-react";
+import { Sparkles, Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Activity, TrendingUp, Bot, Database, Zap, Target, ChevronRight, Signal } from "lucide-react";
+import { toast } from "sonner";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,31 @@ import type {
   FeatureList,
   DataSource,
 } from "@/types";
+
+/* ── types ────────────────────────────────────────── */
+interface DabentoDataset {
+  filename: string;
+  symbol: string;
+  timeframe: string;
+  row_count: number;
+  size_mb: number;
+  path: string;
+}
+
+interface ModelPerformance {
+  id: number;
+  name: string;
+  model_type: string;
+  symbol: string;
+  timeframe: string;
+  level: number;
+  train_accuracy: number | null;
+  val_accuracy: number | null;
+  val_f1: number | null;
+  val_sharpe: number | null;
+  n_features: number;
+  trained_at: string | null;
+}
 
 /* ── tiny helpers ─────────────────────────────────── */
 const pct = (v: number | null) => (v != null ? `${(v * 100).toFixed(1)}%` : "—");
@@ -34,7 +61,7 @@ const levelLabel = (l: number) =>
 
 export default function MLPage() {
   /* ── state ──────────────────────────────────── */
-  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime" | "forecast" | "rl">("list");
+  const [view, setView] = useState<"list" | "detail" | "train" | "predict" | "compare" | "regime" | "forecast" | "rl" | "data">("list");
   const [models, setModels] = useState<MLModelListItem[]>([]);
   const [selected, setSelected] = useState<MLModelDetail | null>(null);
   const [predictions, setPredictions] = useState<MLPredictionResult | null>(null);
@@ -125,6 +152,11 @@ export default function MLPage() {
   // Meta-labeling
   const [metaTraining, setMetaTraining] = useState(false);
 
+  // Databento datasets
+  const [dabentoDatasets, setDabentoDatasets] = useState<DabentoDataset[]>([]);
+  // Performance summary for charts
+  const [perfSummary, setPerfSummary] = useState<ModelPerformance[]>([]);
+
   // AI assist state
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -139,11 +171,27 @@ export default function MLPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const loadDabentoDatasets = useCallback(async () => {
+    try {
+      const data = await api.get<{ datasets: DabentoDataset[] }>("/api/ml/databento/datasets");
+      setDabentoDatasets(data.datasets || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const loadPerfSummary = useCallback(async () => {
+    try {
+      const data = await api.get<{ models: ModelPerformance[] }>("/api/ml/performance-summary");
+      setPerfSummary(data.models || []);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     loadModels();
+    loadDabentoDatasets();
+    loadPerfSummary();
     api.get<FeatureList>("/api/ml/features").then(setFeatures).catch(console.error);
     api.get<{ items: DataSource[] }>("/api/data/sources").then(r => setDataSources(r.items || [])).catch(console.error);
-  }, [loadModels]);
+  }, [loadModels, loadDabentoDatasets, loadPerfSummary]);
 
   const openDetail = async (id: number) => {
     try {
@@ -267,14 +315,24 @@ export default function MLPage() {
 
       // Background training: poll for completion
       if (result.status === "training" && result.id) {
+        toast.info("Training started", { description: `Model "${tName}" is training in the background…` });
         setView("list");
         loadModels();
         const pollId = result.id;
         const poll = setInterval(async () => {
           try {
             const m = await api.get<MLModelDetail>(`/api/ml/models/${pollId}`);
-            if (m.status === "ready" || m.status === "failed") {
+            if (m.status === "ready") {
               clearInterval(poll);
+              toast.success("Training complete", { description: `"${m.name}" — val acc ${pct(m.val_metrics?.accuracy ?? null)}` });
+              setSelected(m);
+              setView("detail");
+              loadModels();
+              loadPerfSummary();
+              setLoading(false);
+            } else if (m.status === "failed") {
+              clearInterval(poll);
+              toast.error("Training failed", { description: `"${m.name}" could not be trained` });
               setSelected(m);
               setView("detail");
               loadModels();
@@ -289,13 +347,17 @@ export default function MLPage() {
         setTimeout(() => { clearInterval(poll); setLoading(false); }, 600000);
       } else {
         // Synchronous response (legacy fallback)
+        toast.success("Training complete", { description: `"${result.name || tName}" is ready` });
         setSelected(result);
         setView("detail");
         loadModels();
+        loadPerfSummary();
         setLoading(false);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Training failed");
+      const msg = e instanceof Error ? e.message : "Training failed";
+      toast.error("Training failed", { description: msg });
+      setError(msg);
       setLoading(false);
     }
   };
@@ -323,13 +385,17 @@ export default function MLPage() {
   const handleDelete = async (id: number) => {
     try {
       await api.delete(`/api/ml/models/${id}`);
+      toast.success("Model deleted");
       loadModels();
+      loadPerfSummary();
       if (selected?.id === id) {
         setSelected(null);
         setView("list");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed");
+      const msg = e instanceof Error ? e.message : "Delete failed";
+      toast.error("Delete failed", { description: msg });
+      setError(msg);
     }
   };
 
@@ -629,6 +695,9 @@ export default function MLPage() {
           }}>
             <Upload className="h-4 w-4" /> Upload Model
           </Button>
+          <Button variant="outline" size="sm" onClick={() => { setView("data"); loadDabentoDatasets(); }} className="gap-1.5">
+            <Database className="h-4 w-4" /> Data
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setView("regime")} className="gap-1.5">
             <Activity className="h-4 w-4" /> Regime
           </Button>
@@ -788,37 +857,112 @@ export default function MLPage() {
         </Card>
       )}
 
-      {/* Level Overview Cards */}
+      {/* Level Overview Cards — Enhanced with icons and sparklines */}
+      {view === "list" && (
+      <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[1, 2, 3].map(level => {
+        {([
+          { level: 1, icon: <Zap className="h-4 w-4" />, title: "Regime Detection", desc: "HMM detects market state for adaptive strategy tuning.", color: "text-amber-400" },
+          { level: 2, icon: <Target className="h-4 w-4" />, title: "Signal Prediction", desc: "XGBoost/LightGBM predict direction, filter bad signals.", color: "text-cyan-400" },
+          { level: 3, icon: <Bot className="h-4 w-4" />, title: "Autonomous Trading", desc: "RL agents + LSTM forecasters for fully automated execution.", color: "text-purple-400" },
+        ]).map(({ level, icon, title, desc, color }) => {
           const levelModels = models.filter(m => m.level === level);
           const ready = levelModels.filter(m => m.status === "ready");
+          const training = levelModels.filter(m => m.status === "training");
+          const bestAcc = ready.length > 0 ? Math.max(...ready.map(m => m.val_accuracy || 0)) : null;
           return (
-            <Card key={level} className="bg-card-bg border-card-border">
+            <Card key={level} className="bg-card-bg border-card-border hover:border-accent/30 transition-colors">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-accent">
-                    {level === 1 ? "Level 1: Adaptive Params" : level === 2 ? "Level 2: Signal Prediction" : "Level 3: Advanced ML"}
-                  </h3>
-                  <Badge variant="secondary" className="text-[10px]">{ready.length} ready</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {level === 1 && "ML predicts best strategy params for current market regime."}
-                  {level === 2 && "Predict next-bar direction/movement using trained classifiers."}
-                  {level === 3 && "Stacked ensemble classifiers (RF + XGB + Logistic Regression meta-learner)."}
-                </p>
-                {ready.length > 0 && (
-                  <div className="mt-2 text-xs">
-                    Best val acc: <span className="text-green-400 font-medium">
-                      {pct(Math.max(...ready.map(m => m.val_accuracy || 0)))}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <span className={color}>{icon}</span>
+                    <h3 className={`text-sm font-semibold ${color}`}>{title}</h3>
                   </div>
-                )}
+                  <div className="flex gap-1.5">
+                    {training.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px] bg-blue-500/20 text-blue-400 animate-pulse">{training.length} training</Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[10px]">{ready.length} ready</Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  {bestAcc != null ? (
+                    <div className="text-xs">
+                      Best accuracy: <span className="text-green-400 font-semibold">{pct(bestAcc)}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground/50">No models yet</div>
+                  )}
+                  {ready.length > 0 && (
+                    <div className="flex -space-x-1">
+                      {ready.slice(0, 4).map(m => (
+                        <div key={m.id} title={m.name} className="h-5 w-5 rounded-full bg-accent/20 border border-card-border flex items-center justify-center text-[8px] font-bold text-accent">
+                          {m.model_type.charAt(0).toUpperCase()}
+                        </div>
+                      ))}
+                      {ready.length > 4 && (
+                        <div className="h-5 w-5 rounded-full bg-card-border flex items-center justify-center text-[8px] text-muted-foreground">
+                          +{ready.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {/* Performance Comparison Bar Chart */}
+      {perfSummary.length > 0 && (
+        <Card className="bg-card-bg border-card-border">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-accent" /> Model Performance Comparison
+              </h3>
+              <span className="text-[10px] text-muted-foreground">{perfSummary.length} models</span>
+            </div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {perfSummary
+                .sort((a, b) => (b.val_accuracy || 0) - (a.val_accuracy || 0))
+                .slice(0, 20)
+                .map(m => {
+                  const valAcc = m.val_accuracy || 0;
+                  const trainAcc = m.train_accuracy || 0;
+                  const barWidth = Math.max(valAcc * 100, 2);
+                  const isOverfit = trainAcc - valAcc > 0.15;
+                  return (
+                    <div key={m.id} className="flex items-center gap-3 group cursor-pointer hover:bg-background/50 rounded-lg px-2 py-1.5 transition-colors"
+                      onClick={() => openDetail(m.id)}>
+                      <div className="w-40 min-w-[160px] truncate">
+                        <div className="text-xs font-medium truncate">{m.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{m.symbol} {m.timeframe} · {m.model_type}</div>
+                      </div>
+                      <div className="flex-1 flex items-center gap-2">
+                        <div className="flex-1 h-5 bg-background/50 rounded-full overflow-hidden relative">
+                          <div className="h-full rounded-full bg-gradient-to-r from-accent/80 to-accent transition-all"
+                            style={{ width: `${barWidth}%` }} />
+                          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white mix-blend-difference">
+                            {pct(valAcc)}
+                          </div>
+                        </div>
+                        {isOverfit && (
+                          <Badge variant="secondary" className="text-[9px] bg-orange-500/20 text-orange-400 px-1 py-0 shrink-0">overfit</Badge>
+                        )}
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-accent transition-colors shrink-0" />
+                    </div>
+                  );
+                })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      </>
+      )}
 
       {/* ── MODEL LIST ──────────────────────────── */}
       {view === "list" && (
@@ -857,11 +1001,32 @@ export default function MLPage() {
                 <Sparkles className="h-4 w-4" /> Train New Model
               </Button>
             </div>
+          ) : loading ? (
+            /* Loading skeleton */
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="rounded-lg border border-card-border bg-background/50 p-4 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="h-4 w-4 rounded bg-card-border" />
+                    <div className="h-5 w-16 rounded bg-card-border" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-4 w-48 rounded bg-card-border" />
+                      <div className="h-3 w-32 rounded bg-card-border/60" />
+                    </div>
+                    <div className="h-8 w-24 rounded bg-card-border hidden sm:block" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="space-y-2">
-              {models.map(m => (
+              {models.map(m => {
+                const modelTypeIcon = m.model_type === "rl_ppo" ? "RL" : m.model_type === "lstm" ? "LS" : m.model_type === "hmm_regime" ? "HM" : m.model_type.charAt(0).toUpperCase() + m.model_type.charAt(1);
+                const isRegime = m.model_type === "hmm_regime";
+                const isRL = m.model_type === "rl_ppo";
+                return (
                 <div key={m.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-card-border bg-background/50 p-3 hover:bg-background/80 cursor-pointer transition-colors"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-card-border bg-background/50 p-3.5 hover:bg-background/80 hover:border-accent/20 cursor-pointer transition-all group"
                   onClick={() => openDetail(m.id)}>
                   <div className="flex items-center gap-3 min-w-0">
                     <input
@@ -871,39 +1036,63 @@ export default function MLPage() {
                       onClick={(e) => e.stopPropagation()}
                       className="accent-accent h-3.5 w-3.5"
                     />
-                    <Badge variant="secondary" className={`text-xs font-medium ${statusColor(m.status)}`}>{m.status}</Badge>
+                    {/* Model type avatar */}
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      isRegime ? "bg-amber-500/20 text-amber-400" :
+                      isRL ? "bg-purple-500/20 text-purple-400" :
+                      "bg-accent/15 text-accent"
+                    }`}>
+                      {modelTypeIcon}
+                    </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{m.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {levelLabel(m.level)} · {m.model_type} · {m.symbol || "—"} · {m.timeframe}
-                        {m.level === 3 && (m as { architecture?: string }).architecture && (
-                          <span className="ml-1 text-accent/70">· {(m as { architecture?: string }).architecture}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{m.name}</span>
+                        <Badge variant="secondary" className={`text-[10px] font-medium ${statusColor(m.status)}`}>{m.status}</Badge>
+                        {isRegime && (
+                          <Badge variant="secondary" className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/20 px-1.5 py-0">
+                            <Signal className="h-2.5 w-2.5 mr-0.5" />REGIME
+                          </Badge>
                         )}
                         {m.name.startsWith("Meta:") && (
-                          <Badge variant="secondary" className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 py-0">META</Badge>
+                          <Badge variant="secondary" className="text-[9px] bg-purple-500/20 text-purple-400 px-1 py-0">META</Badge>
                         )}
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 sm:gap-6 shrink-0">
-                    <div className="text-right hidden sm:block">
-                      <div className="text-xs text-muted-foreground">Train / Val Accuracy</div>
-                      <div className="text-sm font-medium">
-                        <span className="text-fa-accent">{pct(m.train_accuracy)}</span>
-                        {" / "}
-                        <span className="text-green-400">{pct(m.val_accuracy)}</span>
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">
+                        {m.model_type} · {m.symbol || "—"} · {m.timeframe} · {m.n_features} features
                       </div>
                     </div>
-                    <div className="text-right text-xs text-muted-foreground hidden sm:block">
-                      {m.n_features} features
+                  </div>
+                  <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+                    {/* Accuracy mini-bars */}
+                    <div className="hidden sm:flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-[10px] text-muted-foreground mb-0.5">Train</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden">
+                            <div className="h-full bg-accent/60 rounded-full" style={{ width: `${(m.train_accuracy || 0) * 100}%` }} />
+                          </div>
+                          <span className="text-xs font-medium text-accent w-10 text-right">{pct(m.train_accuracy)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-muted-foreground mb-0.5">Val</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-background rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500/60 rounded-full" style={{ width: `${(m.val_accuracy || 0) * 100}%` }} />
+                          </div>
+                          <span className="text-xs font-medium text-green-400 w-10 text-right">{pct(m.val_accuracy)}</span>
+                        </div>
+                      </div>
                     </div>
                     <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }}
-                      className="text-red-400 border-red-500/40 hover:bg-red-500/10 h-7 gap-1">
-                      <Trash2 className="h-3 w-3" /> Delete
+                      className="text-red-400 border-red-500/30 hover:bg-red-500/10 h-7 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Trash2 className="h-3 w-3" />
                     </Button>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-accent transition-colors" />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           </CardContent>
@@ -1279,31 +1468,37 @@ export default function MLPage() {
             </div>
           )}
 
-          {/* Feature Importance */}
-          {selected.feature_importance && Object.keys(selected.feature_importance).length > 0 && (
-            <Card className="bg-card-bg border-card-border">
-              <CardContent className="p-5">
-              <h4 className="text-sm font-medium text-muted-foreground mb-3">Feature Importance (top 15)</h4>
-              <div className="space-y-1.5">
-                {Object.entries(selected.feature_importance)
-                  .slice(0, 15)
-                  .map(([name, imp]) => {
-                    const maxImp = Math.max(...Object.values(selected.feature_importance));
-                    const widthPct = maxImp > 0 ? (imp / maxImp) * 100 : 0;
-                    return (
-                      <div key={name} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-40 truncate">{name}</span>
-                        <div className="flex-1 h-4 rounded bg-background/50 overflow-hidden">
-                          <div className="h-full rounded bg-accent/60" style={{ width: `${widthPct}%` }} />
-                        </div>
-                        <span className="text-xs font-mono w-16 text-right">{(imp * 100).toFixed(2)}%</span>
-                      </div>
-                    );
-                  })}
-              </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Feature Importance — Recharts bar chart */}
+          {selected.feature_importance && Object.keys(selected.feature_importance).length > 0 && (() => {
+            const fiData = Object.entries(selected.feature_importance)
+              .slice(0, 15)
+              .map(([name, imp]) => ({ name, importance: +(imp * 100).toFixed(2) }))
+              .reverse(); // bottom-to-top for horizontal bar
+            const barColors = ["#6366f1", "#818cf8", "#a5b4fc", "#8b5cf6", "#a78bfa", "#c084fc"];
+            return (
+              <Card className="bg-card-bg border-card-border">
+                <CardContent className="p-5">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Feature Importance (top 15)</h4>
+                  <ResponsiveContainer width="100%" height={Math.max(fiData.length * 28, 200)}>
+                    <BarChart data={fiData} layout="vertical" margin={{ left: 100, right: 20, top: 5, bottom: 5 }}>
+                      <XAxis type="number" tick={{ fontSize: 11, fill: "#9ca3af" }} tickFormatter={v => `${v}%`} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#9ca3af" }} width={95} />
+                      <Tooltip
+                        contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={((value: number) => [`${value}%`, "Importance"]) as any}
+                      />
+                      <Bar dataKey="importance" radius={[0, 4, 4, 0]} barSize={18}>
+                        {fiData.map((_, i) => (
+                          <Cell key={i} fill={barColors[i % barColors.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Config details */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2035,6 +2230,89 @@ export default function MLPage() {
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* ── DATABENTO DATA MANAGEMENT ──────────── */}
+      {view === "data" && (
+        <div className="space-y-4">
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Database className="h-5 w-5 text-accent" /> Databento Datasets
+                </h3>
+                <Button variant="outline" size="sm" onClick={loadDabentoDatasets} className="gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </Button>
+              </div>
+
+              {dabentoDatasets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Database className="h-10 w-10 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-base font-medium mb-2">No Datasets Downloaded</h3>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-md">
+                    Run the Databento download pipeline to fetch CME futures data for ML training.
+                  </p>
+                  <code className="text-xs bg-background/80 border border-card-border rounded-lg px-4 py-2 text-muted-foreground font-mono">
+                    python scripts/download_databento.py --symbols GC ES NQ YM BTC
+                  </code>
+                </div>
+              ) : (
+                <>
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Datasets</div>
+                      <div className="text-xl font-bold text-accent">{dabentoDatasets.length}</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Symbols</div>
+                      <div className="text-xl font-bold">{new Set(dabentoDatasets.map(d => d.symbol)).size}</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Bars</div>
+                      <div className="text-xl font-bold">{(dabentoDatasets.reduce((s, d) => s + d.row_count, 0) / 1000000).toFixed(1)}M</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Size</div>
+                      <div className="text-xl font-bold">{dabentoDatasets.reduce((s, d) => s + d.size_mb, 0).toFixed(0)} MB</div>
+                    </div>
+                  </div>
+
+                  {/* Group by symbol */}
+                  {Array.from(new Set(dabentoDatasets.map(d => d.symbol))).sort().map(symbol => {
+                    const symbolDatasets = dabentoDatasets.filter(d => d.symbol === symbol);
+                    return (
+                      <div key={symbol} className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="text-sm font-semibold text-accent">{symbol}</h4>
+                          <span className="text-xs text-muted-foreground">{symbolDatasets.length} timeframes</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                          {symbolDatasets
+                            .sort((a, b) => {
+                              const tfOrder: Record<string, number> = { M1: 1, M5: 2, M10: 3, M15: 4, M30: 5, H1: 6, H4: 7, D1: 8 };
+                              return (tfOrder[a.timeframe] || 99) - (tfOrder[b.timeframe] || 99);
+                            })
+                            .map(ds => (
+                            <div key={ds.filename} className="rounded-lg border border-card-border bg-background/50 p-3 hover:border-accent/30 transition-colors">
+                              <div className="flex items-center justify-between mb-1">
+                                <Badge variant="secondary" className="text-[10px] bg-accent/10 text-accent">{ds.timeframe}</Badge>
+                                <span className="text-[10px] text-muted-foreground">{ds.size_mb} MB</span>
+                              </div>
+                              <div className="text-lg font-bold">{ds.row_count >= 1000000 ? `${(ds.row_count / 1000000).toFixed(1)}M` : ds.row_count >= 1000 ? `${(ds.row_count / 1000).toFixed(1)}K` : ds.row_count}</div>
+                              <div className="text-[10px] text-muted-foreground">bars</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 

@@ -1484,3 +1484,79 @@ def _parse_csv_datetime(dt_str: str) -> datetime | None:
             continue
 
     return None
+
+
+# ── Databento Data Management ─────────────────────────────
+
+
+@router.get("/databento/datasets")
+async def list_databento_datasets(user: User = Depends(get_current_user)):
+    """List downloaded Databento datasets available for training."""
+    from pathlib import Path
+
+    data_dir = Path(settings.UPLOAD_DIR).parent / "databento"
+    if not data_dir.exists():
+        return {"datasets": []}
+
+    datasets = []
+    for csv_file in sorted(data_dir.glob("*.csv")):
+        # Parse filename: XAUUSD_M15.csv → symbol=XAUUSD, timeframe=M15
+        parts = csv_file.stem.split("_")
+        if len(parts) >= 2:
+            symbol = parts[0]
+            timeframe = parts[1]
+        else:
+            symbol = csv_file.stem
+            timeframe = "?"
+
+        # Get row count and file size
+        try:
+            with open(csv_file, "r") as f:
+                row_count = sum(1 for _ in f) - 1  # subtract header
+        except Exception:
+            row_count = 0
+
+        size_mb = csv_file.stat().st_size / (1024 * 1024)
+
+        datasets.append({
+            "filename": csv_file.name,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "row_count": row_count,
+            "size_mb": round(size_mb, 2),
+            "path": str(csv_file),
+        })
+
+    return {"datasets": datasets}
+
+
+@router.get("/performance-summary")
+async def model_performance_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get aggregated performance summary for comparison charts."""
+    models = db.query(MLModel).filter(
+        MLModel.deleted_at.is_(None),
+        MLModel.status == "ready",
+    ).all()
+
+    summary = []
+    for m in models:
+        val_metrics = m.val_metrics or {}
+        train_metrics = m.train_metrics or {}
+        summary.append({
+            "id": m.id,
+            "name": m.name,
+            "model_type": m.model_type,
+            "symbol": m.symbol or "",
+            "timeframe": m.timeframe or "",
+            "level": m.level,
+            "train_accuracy": train_metrics.get("accuracy"),
+            "val_accuracy": val_metrics.get("accuracy"),
+            "train_f1": train_metrics.get("f1"),
+            "val_f1": val_metrics.get("f1"),
+            "train_sharpe": train_metrics.get("sharpe_ratio"),
+            "val_sharpe": val_metrics.get("sharpe_ratio"),
+            "n_features": len(m.feature_importance) if m.feature_importance else 0,
+            "trained_at": m.trained_at.isoformat() if m.trained_at else None,
+        })
+
+    return {"models": summary}
