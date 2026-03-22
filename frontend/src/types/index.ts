@@ -850,12 +850,21 @@ export interface AgentRiskConfig {
   rl_enhanced?: boolean;
   rl_model_id?: number;
   rl_mode?: "filter" | "autonomous";
+  // Expert Agent config
+  agent_type?: "expert";
+  risk_per_trade?: number;
+  news_filter_enabled?: boolean;
+  news_window_minutes?: number;
+  ensemble_min_agreement?: number;
+  ensemble_min_confidence?: number;
+  session_filter?: boolean;
+  regime_filter?: boolean;
 }
 
 export interface Agent {
   id: number;
   name: string;
-  strategy_id: number;
+  strategy_id: number | null;
   broker_name: string;
   symbol: string;
   timeframe: string;
@@ -877,7 +886,7 @@ export interface AgentList {
 
 export interface AgentCreateRequest {
   name: string;
-  strategy_id: number;
+  strategy_id?: number | null;
   symbol: string;
   timeframe?: string;
   broker_name?: string;
