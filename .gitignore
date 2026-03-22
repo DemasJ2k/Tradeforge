@@ -32,3 +32,6 @@ nul
 backend/data/uploads/DIA_5m_5Yea.csv
 backend/data/uploads/EURUSD_5m_2Yea.csv
 backend/data/uploads/SPY_5m_1Yea.csv
+
+# Databento downloaded data (large CSVs, re-downloadable)
+backend/data/databento/
