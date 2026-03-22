@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock, Building2, AlertTriangle } from "lucide-react";
+import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock, Building2, AlertTriangle, Brain } from "lucide-react";
 import WelcomeWizard, { useOnboarding } from "@/components/Onboarding/WelcomeWizard";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { showToast } from "@/lib/toast";
@@ -620,6 +620,9 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* ── ML Intelligence Summary ──────────────────── */}
+      <MLStatusWidget />
+
       {/* ── Portfolio Quick Link ──────────────────────── */}
       <Card className="bg-card-bg border-card-border">
         <CardContent className="p-4">
@@ -705,6 +708,108 @@ function MiniEquityChart({ points }: { points: { date: string; pnl: number }[] }
       {/* End dot */}
       <circle cx={toX(points.length - 1)} cy={toY(lastPnl)} r={3} fill={color} />
     </svg>
+  );
+}
+
+function MLStatusWidget() {
+  const [mlData, setMlData] = useState<{
+    models: { id: number; name: string; model_type: string; symbol: string; timeframe: string; train_accuracy: number | null; val_accuracy: number | null; val_f1: number | null; trained_at: string | null }[];
+  } | null>(null);
+
+  useEffect(() => {
+    api.get<{ models: { id: number; name: string; model_type: string; symbol: string; timeframe: string; train_accuracy: number | null; val_accuracy: number | null; val_f1: number | null; trained_at: string | null }[] }>("/api/ml/performance-summary")
+      .then(d => setMlData({ models: d.models || [] }))
+      .catch(() => {});
+  }, []);
+
+  if (!mlData || mlData.models.length === 0) return null;
+
+  const models = mlData.models;
+  const ready = models.filter(m => m.trained_at);
+  const symbols = [...new Set(models.map(m => m.symbol))];
+  const types = [...new Set(models.map(m => m.model_type))];
+  const bestModel = ready.length > 0
+    ? ready.reduce((best, m) => ((m.val_accuracy ?? 0) > (best.val_accuracy ?? 0) ? m : best))
+    : null;
+  const avgAccuracy = ready.length > 0
+    ? ready.reduce((sum, m) => sum + (m.val_accuracy ?? 0), 0) / ready.length
+    : 0;
+
+  return (
+    <Card className="bg-card-bg border-card-border">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Brain className="h-3.5 w-3.5 text-purple-400" />
+            ML Intelligence
+          </h3>
+          <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1">
+            <Link href="/ml">View All <ArrowRight className="h-3 w-3" /></Link>
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-lg bg-background/50 border border-card-border p-3">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Models</div>
+            <div className="text-xl font-bold text-purple-400">{ready.length}</div>
+            <div className="text-[10px] text-muted-foreground">{types.length} types</div>
+          </div>
+          <div className="rounded-lg bg-background/50 border border-card-border p-3">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Symbols</div>
+            <div className="text-xl font-bold">{symbols.length}</div>
+            <div className="text-[10px] text-muted-foreground">{symbols.join(", ")}</div>
+          </div>
+          <div className="rounded-lg bg-background/50 border border-card-border p-3">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg Accuracy</div>
+            <div className={`text-xl font-bold ${avgAccuracy > 0.55 ? "text-green-400" : avgAccuracy > 0.5 ? "text-yellow-400" : "text-muted-foreground"}`}>
+              {(avgAccuracy * 100).toFixed(1)}%
+            </div>
+          </div>
+          <div className="rounded-lg bg-background/50 border border-card-border p-3">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Best Model</div>
+            <div className="text-sm font-bold truncate">{bestModel?.name ?? "—"}</div>
+            <div className="text-[10px] text-green-400">
+              {bestModel ? `${((bestModel.val_accuracy ?? 0) * 100).toFixed(1)}% acc` : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Mini heatmap: symbol × type */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr>
+                <th className="text-left text-muted-foreground font-normal pb-1 pr-2">Symbol</th>
+                {types.map(t => (
+                  <th key={t} className="text-center text-muted-foreground font-normal pb-1 px-1">{t}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {symbols.map(sym => (
+                <tr key={sym}>
+                  <td className="font-medium text-foreground py-0.5 pr-2">{sym}</td>
+                  {types.map(type => {
+                    const m = ready.find(m => m.symbol === sym && m.model_type === type);
+                    const acc = m?.val_accuracy ?? null;
+                    const bg = acc === null ? "bg-zinc-800/50"
+                      : acc > 0.6 ? "bg-green-500/30"
+                      : acc > 0.55 ? "bg-green-500/15"
+                      : acc > 0.5 ? "bg-yellow-500/15"
+                      : "bg-red-500/15";
+                    return (
+                      <td key={type} className={`text-center py-0.5 px-1 rounded ${bg}`}>
+                        {acc !== null ? `${(acc * 100).toFixed(0)}%` : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
