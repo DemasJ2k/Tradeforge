@@ -8,7 +8,7 @@ AGENT_MODES = Literal["paper", "confirmation", "auto"]
 
 class AgentCreate(BaseModel):
     name: str
-    strategy_id: int
+    strategy_id: Optional[int] = None  # None for expert agents (ML-only, no strategy)
     symbol: str
     timeframe: str = "M10"
     broker_name: str = ""  # empty = auto-detect from active broker
@@ -29,7 +29,7 @@ class AgentUpdate(BaseModel):
 class AgentResponse(BaseModel):
     id: int
     name: str
-    strategy_id: int
+    strategy_id: Optional[int] = None
     broker_name: str
     symbol: str
     timeframe: str

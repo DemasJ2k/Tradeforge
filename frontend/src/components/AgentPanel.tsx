@@ -93,6 +93,14 @@ export default function AgentPanel() {
   const [cPropFirmId, setCPropFirmId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
 
+  // Expert Agent mode
+  const [cExpertMode, setCExpertMode] = useState(false);
+  const [cNewsFilter, setCNewsFilter] = useState(true);
+  const [cSessionFilter, setCSessionFilter] = useState(true);
+  const [cRegimeFilter, setCRegimeFilter] = useState(true);
+  const [cMinAgreement, setCMinAgreement] = useState("2");
+  const [cMinConfidence, setCMinConfidence] = useState("0.55");
+
   // Symbol combobox state for create form
   const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
   const [brokerSymbols, setBrokerSymbols] = useState<string[]>([]);
@@ -232,32 +240,51 @@ export default function AgentPanel() {
   );
 
   const handleCreate = async () => {
-    if (!cName || !cStrategyId) return;
+    if (!cName || (!cExpertMode && !cStrategyId)) return;
     setCreating(true);
     setActionError("");
     try {
+      const riskConfig: Record<string, unknown> = cExpertMode
+        ? {
+            // Expert Agent config
+            agent_type: "expert",
+            risk_per_trade: 0.005,
+            position_size_type: "percent_risk",
+            position_size_value: 0.5,
+            max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 4,
+            max_drawdown_pct: parseFloat(cMaxDrawdown) || 8,
+            max_open_positions: parseInt(cMaxOpenPositions) || 2,
+            news_filter_enabled: cNewsFilter,
+            news_window_minutes: 15,
+            ensemble_min_agreement: parseInt(cMinAgreement) || 2,
+            ensemble_min_confidence: parseFloat(cMinConfidence) || 0.55,
+            session_filter: cSessionFilter,
+            regime_filter: cRegimeFilter,
+          }
+        : {
+            position_size_type: cSizeType,
+            position_size_value: parseFloat(cSizeValue) || 0.01,
+            max_exposure_per_symbol: parseFloat(cMaxExposure) || 1.0,
+            max_open_positions: parseInt(cMaxOpenPositions) || 3,
+            max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 0,
+            max_drawdown_pct: parseFloat(cMaxDrawdown) || 0,
+            ...(cRlEnhanced && cRlModelId ? {
+              rl_enhanced: true,
+              rl_model_id: cRlModelId,
+              rl_mode: cRlMode,
+            } : {}),
+          };
+
       const data: AgentCreateRequest = {
         name: cName,
-        strategy_id: cStrategyId,
+        strategy_id: cExpertMode ? null : cStrategyId,
         symbol: cSymbol,
-        timeframe: cTimeframe,
+        timeframe: cExpertMode ? "M5" : cTimeframe,
         mode: cMode,
         ml_model_id: cMlModelId,
         prop_firm_account_id: cPropFirmId,
         broker_name: cBroker || activeBroker || "",
-        risk_config: {
-          position_size_type: cSizeType,
-          position_size_value: parseFloat(cSizeValue) || 0.01,
-          max_exposure_per_symbol: parseFloat(cMaxExposure) || 1.0,
-          max_open_positions: parseInt(cMaxOpenPositions) || 3,
-          max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 0,
-          max_drawdown_pct: parseFloat(cMaxDrawdown) || 0,
-          ...(cRlEnhanced && cRlModelId ? {
-            rl_enhanced: true,
-            rl_model_id: cRlModelId,
-            rl_mode: cRlMode,
-          } : {}),
-        },
+        risk_config: riskConfig,
       };
       await createAgent(data);
       setShowCreate(false);
@@ -268,6 +295,7 @@ export default function AgentPanel() {
       setCRlEnhanced(false);
       setCRlModelId(null);
       setCRlMode("filter");
+      setCExpertMode(false);
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -415,7 +443,12 @@ export default function AgentPanel() {
                             {agent.name}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {strategyName(agent.strategy_id)} - {agent.symbol} - {agent.timeframe}
+                            {agent.risk_config?.agent_type === "expert" || !agent.strategy_id ? (
+                              <Badge className="bg-emerald-500/20 text-emerald-400 text-[9px] py-0 mr-1">Expert AI</Badge>
+                            ) : (
+                              <span>{strategyName(agent.strategy_id)} - </span>
+                            )}
+                            {agent.symbol} - {agent.timeframe}
                             {agent.broker_name && (
                               <span className="ml-1 capitalize text-accent/70">- {agent.broker_name}</span>
                             )}
@@ -553,7 +586,7 @@ export default function AgentPanel() {
                     <AgentInlineDetail
                       agent={agent}
                       detail={detail}
-                      strategyName={strategyName(agent.strategy_id)}
+                      strategyName={agent.strategy_id ? strategyName(agent.strategy_id) : "Expert AI"}
                       onConfirm={handleConfirm}
                       onReject={handleReject}
                     />
@@ -583,6 +616,97 @@ export default function AgentPanel() {
               />
             </div>
 
+            {/* Expert Agent toggle */}
+            <div className="border-t border-card-border pt-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={cExpertMode}
+                  onClick={() => {
+                    setCExpertMode(!cExpertMode);
+                    if (!cExpertMode) {
+                      setCTimeframe("M5");
+                      setCMaxDailyLoss("4");
+                      setCMaxDrawdown("8");
+                      setCMaxOpenPositions("2");
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cExpertMode ? "bg-emerald-600" : "bg-zinc-600"}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${cExpertMode ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+                <Label className="text-xs font-semibold text-foreground">
+                  Expert Agent
+                  {cExpertMode && <Badge className="ml-2 bg-emerald-500/20 text-emerald-400 text-[10px]">AI</Badge>}
+                </Label>
+              </div>
+              {cExpertMode && (
+                <p className="text-[10px] text-muted-foreground mt-1.5 pl-12">
+                  Autonomous ML ensemble agent with multi-timeframe analysis, market structure detection, news filtering, and session awareness. No strategy required.
+                </p>
+              )}
+            </div>
+
+            {/* Expert Agent Configuration */}
+            {cExpertMode && (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-3">
+                <Label className="block text-xs font-semibold text-emerald-400">Expert AI Configuration</Label>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {/* News Filter */}
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-card-border p-2">
+                    <Label className="text-[10px] text-muted-foreground">News Filter</Label>
+                    <button type="button" role="switch" aria-checked={cNewsFilter}
+                      onClick={() => setCNewsFilter(!cNewsFilter)}
+                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cNewsFilter ? "bg-emerald-600" : "bg-zinc-600"}`}>
+                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${cNewsFilter ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                  {/* Session Filter */}
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-card-border p-2">
+                    <Label className="text-[10px] text-muted-foreground">Session Filter</Label>
+                    <button type="button" role="switch" aria-checked={cSessionFilter}
+                      onClick={() => setCSessionFilter(!cSessionFilter)}
+                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cSessionFilter ? "bg-emerald-600" : "bg-zinc-600"}`}>
+                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${cSessionFilter ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                  {/* Regime Filter */}
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-card-border p-2">
+                    <Label className="text-[10px] text-muted-foreground">Regime Filter</Label>
+                    <button type="button" role="switch" aria-checked={cRegimeFilter}
+                      onClick={() => setCRegimeFilter(!cRegimeFilter)}
+                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cRegimeFilter ? "bg-emerald-600" : "bg-zinc-600"}`}>
+                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${cRegimeFilter ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">Min Agreement (of 3)</Label>
+                    <select value={cMinAgreement} onChange={(e) => setCMinAgreement(e.target.value)}
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-1.5 text-sm">
+                      <option value="2">2 of 3 (default)</option>
+                      <option value="3">3 of 3 (strict)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="block text-[10px] text-muted-foreground mb-1">Min Confidence</Label>
+                    <input type="number" step="0.05" min="0.3" max="0.95" value={cMinConfidence}
+                      onChange={(e) => setCMinConfidence(e.target.value)}
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-1.5 text-sm" />
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-emerald-400/70 flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Timeframe locked to M5 &bull; Risk: 0.5% per trade &bull; Ensemble: XGBoost + LightGBM + LSTM
+                </div>
+              </div>
+            )}
+
             {/* Broker account selector */}
             {brokerAccounts.length > 0 && (
               <div>
@@ -611,21 +735,23 @@ export default function AgentPanel() {
               </div>
             )}
 
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1">Strategy</Label>
-              <select
-                value={cStrategyId ?? ""}
-                onChange={(e) => setCStrategyId(Number(e.target.value) || null)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select a strategy...</option>
-                {strategies.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.is_system ? "(System)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!cExpertMode && (
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1">Strategy</Label>
+                <select
+                  value={cStrategyId ?? ""}
+                  onChange={(e) => setCStrategyId(Number(e.target.value) || null)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select a strategy...</option>
+                  {strategies.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.is_system ? "(System)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -663,15 +789,21 @@ export default function AgentPanel() {
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1">Timeframe</Label>
-                <select
-                  value={cTimeframe}
-                  onChange={(e) => setCTimeframe(e.target.value)}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                >
-                  {TIMEFRAMES.map((tf) => (
-                    <option key={tf} value={tf}>{tf}</option>
-                  ))}
-                </select>
+                {cExpertMode ? (
+                  <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-400 font-medium">
+                    M5 <span className="text-[10px] text-muted-foreground font-normal">(locked)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={cTimeframe}
+                    onChange={(e) => setCTimeframe(e.target.value)}
+                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                  >
+                    {TIMEFRAMES.map((tf) => (
+                      <option key={tf} value={tf}>{tf}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -708,8 +840,8 @@ export default function AgentPanel() {
               )}
             </div>
 
-            {/* ML Model (optional) */}
-            <div>
+            {/* ML Model (optional) — hidden for expert agents */}
+            {!cExpertMode && (<><div>
               <Label className="text-xs text-muted-foreground mb-1">
                 ML Model <span className="text-zinc-500">(optional)</span>
               </Label>
@@ -835,7 +967,7 @@ export default function AgentPanel() {
                   )}
                 </div>
               )}
-            </div>
+            </div></>)}
 
             {/* Prop Firm Account (optional) */}
             {propFirmAccounts.length > 0 && (
@@ -860,8 +992,8 @@ export default function AgentPanel() {
               </div>
             )}
 
-            {/* ── Risk Configuration ── */}
-            <div className="border-t border-card-border pt-3">
+            {/* ── Risk Configuration (hidden for expert — uses built-in prop firm defaults) ── */}
+            {!cExpertMode && (<div className="border-t border-card-border pt-3">
               <Label className="block text-xs font-semibold text-foreground mb-2">Risk Configuration</Label>
 
               <div className="grid grid-cols-2 gap-3">
@@ -915,12 +1047,12 @@ export default function AgentPanel() {
                 <input type="number" step="1" min="0" value={cMaxDrawdown} onChange={(e) => setCMaxDrawdown(e.target.value)}
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm" placeholder="10%" />
               </div>
-            </div>
+            </div>)}
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={creating || !cName || !cStrategyId}>
-                {creating ? "Creating..." : "Create Agent"}
+              <Button onClick={handleCreate} disabled={creating || !cName || (!cExpertMode && !cStrategyId)}>
+                {creating ? "Creating..." : cExpertMode ? "Create Expert Agent" : "Create Agent"}
               </Button>
             </div>
         </DialogContent>

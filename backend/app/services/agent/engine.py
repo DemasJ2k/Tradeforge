@@ -110,7 +110,9 @@ class AgentRunner:
                 logger.warning("[Agent %d] Failed to link portfolio manager: %s", self.agent_id, e)
 
             # Initialize evaluator based on strategy type
-            strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
+            strategy = None
+            if agent.strategy_id:
+                strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
             filters = strategy.filters or {} if strategy else {}
 
             # Check if this is an Expert Agent (ML-only, no traditional strategy)

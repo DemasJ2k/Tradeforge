@@ -21,7 +21,7 @@ class TradingAgent(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)  # None for expert agents
     broker_name = Column(String(50), default="mt5")
     symbol = Column(String(20), nullable=False)
     timeframe = Column(String(10), nullable=False, default="M10")
