@@ -490,6 +490,12 @@ def main():
             data = load_csv(str(csv_path))
             print(f"  Loaded {len(data):,} bars from {csv_path.name}")
 
+            # Cap data size to prevent OOM on M1 datasets
+            MAX_ROWS = 500_000
+            if len(data) > MAX_ROWS:
+                print(f"  Trimming to last {MAX_ROWS:,} bars (memory limit)")
+                data = data[-MAX_ROWS:]
+
             if len(data) < 200:
                 print(f"  SKIP: Insufficient data ({len(data)} bars)")
                 continue
