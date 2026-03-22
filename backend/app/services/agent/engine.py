@@ -53,6 +53,7 @@ class AgentRunner:
         self._broker_name = ""
         self._bar_buffer: list[dict] = []
         self._strategy_type: str = "mss"
+        self._expert_agent = None  # ExpertAgent (ML-only, replaces traditional strategy)
         # Position tracking (mirrors backtester behavior)
         self._active_direction: int = 0  # 0=flat, 1=long, -1=short
         # Prop firm account link (for pre-trade rule validation)
@@ -112,7 +113,26 @@ class AgentRunner:
             strategy = db.query(Strategy).filter(Strategy.id == agent.strategy_id).first()
             filters = strategy.filters or {} if strategy else {}
 
-            if "gold_bt_config" in filters:
+            # Check if this is an Expert Agent (ML-only, no traditional strategy)
+            risk_config = agent.risk_config or {}
+            if risk_config.get("agent_type") == "expert":
+                from app.services.agent.expert_agent import ExpertAgent
+                self._expert_agent = ExpertAgent(
+                    agent_id=self.agent_id,
+                    symbol=self._symbol,
+                    broker_name=self._broker_name,
+                    config=risk_config,
+                )
+                if self._expert_agent.load():
+                    self._strategy_type = "expert"
+                    self._evaluator = None  # Expert agent replaces traditional evaluator
+                    logger.info("[Agent %d] Expert Agent initialized for %s", self.agent_id, self._symbol)
+                else:
+                    logger.warning("[Agent %d] Expert Agent failed to load — falling back to MSS", self.agent_id)
+                    self._expert_agent = None
+                    self._evaluator = MSSEvaluator(self._symbol)
+                    self._strategy_type = "mss"
+            elif "gold_bt_config" in filters:
                 gold_config = filters["gold_bt_config"]
                 self._evaluator = GoldBTEvaluator(self._symbol, gold_config)
                 self._strategy_type = "gold_bt"
@@ -549,6 +569,11 @@ class AgentRunner:
           4. Apply ML filter and risk checks
           5. Open new trade
         """
+        # ── Expert Agent path (ML-only, no traditional strategy) ──
+        if self._strategy_type == "expert" and self._expert_agent:
+            await self._evaluate_expert_signal()
+            return
+
         if not self._evaluator:
             return
 
@@ -785,6 +810,127 @@ class AgentRunner:
         # ── Create trade and track position ──
         await self._create_trade(signal, direction, lot_size)
         self._active_direction = signal.direction
+
+    async def _evaluate_expert_signal(self):
+        """
+        Expert Agent evaluation path — ML-only, no traditional strategy.
+
+        The ExpertAgent handles everything internally:
+          - Multi-timeframe feature computation
+          - Market structure detection
+          - Session/news filtering
+          - Ensemble voting (XGBoost + LightGBM + LSTM)
+          - Meta-label filtering
+          - Dynamic SL/TP
+          - Risk-adjusted position sizing
+        """
+        if not self._expert_agent:
+            return
+
+        if len(self._bar_buffer) < 60:
+            return
+
+        # Get broker adapter for HTF data fetching
+        broker_adapter = None
+        try:
+            from app.services.broker.manager import broker_manager
+            broker_adapter = broker_manager.get_adapter(self._broker_name)
+        except Exception:
+            pass
+
+        # Run expert evaluation
+        signal = await self._expert_agent.evaluate(self._bar_buffer, broker_adapter)
+        if signal is None:
+            return
+
+        direction_int = signal["direction"]
+        direction_str = "BUY" if direction_int == 1 else "SELL"
+
+        self._log("signal", f"Expert: {signal['reason']}", data={
+            "direction": direction_str,
+            "confidence": signal["confidence"],
+            "entry_price": signal["entry_price"],
+            "stop_loss": signal["stop_loss"],
+            "take_profit": signal["take_profit"],
+            "regime": signal.get("regime", "unknown"),
+            "session": signal.get("session", "unknown"),
+            "agreement": signal.get("agreement", 0),
+            "signal_type": "expert_ensemble",
+        })
+
+        # ── Reversal logic ──
+        if self._active_direction != 0 and self._active_direction != direction_int:
+            current_price = self._bar_buffer[-1]["close"]
+            closed_count = trade_monitor.close_trade_by_reversal(
+                agent_id=self.agent_id,
+                symbol=self._symbol,
+                current_price=current_price,
+            )
+            if closed_count > 0:
+                old_dir = "LONG" if self._active_direction == 1 else "SHORT"
+                new_dir = "LONG" if direction_int == 1 else "SHORT"
+                self._log("trade", f"Reversal: closed {closed_count} {old_dir} → opening {new_dir}")
+                self._active_direction = 0
+                self._risk_manager.set_open_positions(
+                    trade_monitor.get_open_trade_count(self.agent_id)
+                )
+
+        # Skip if already in same direction
+        if self._active_direction == direction_int:
+            return
+
+        # ── Risk check ──
+        balance = await self._get_balance()
+        open_count = trade_monitor.get_open_trade_count(self.agent_id)
+        self._risk_manager.set_open_positions(open_count)
+
+        risk_decision = self._risk_manager.evaluate(
+            symbol=self._symbol,
+            direction=direction_str,
+            balance=balance,
+            entry_price=signal["entry_price"],
+            stop_loss=signal["stop_loss"],
+            broker_name=self._broker_name,
+        )
+
+        if not risk_decision.approved:
+            self._log("warn", f"Trade rejected by risk manager: {risk_decision.reason}")
+            return
+
+        lot_size = signal.get("lot_size") or risk_decision.adjusted_lot_size or 0.01
+
+        # ── Portfolio manager validation ──
+        if self._portfolio_manager:
+            pm_decision = self._portfolio_manager.validate_trade(
+                agent_id=self.agent_id,
+                symbol=self._symbol,
+                direction=direction_str.lower(),
+                entry_price=signal["entry_price"],
+                stop_loss=signal["stop_loss"],
+                lot_size=lot_size,
+            )
+            if not pm_decision.approved:
+                self._log("warn", f"Trade blocked by portfolio manager: {pm_decision.reason}")
+                return
+            if pm_decision.adjusted_lot_size:
+                lot_size = pm_decision.adjusted_lot_size
+
+        # ── Create a signal-like object for _create_trade ──
+        class ExpertSignal:
+            pass
+
+        sig = ExpertSignal()
+        sig.direction = direction_int
+        sig.entry_price = signal["entry_price"]
+        sig.stop_loss = signal["stop_loss"]
+        sig.take_profit_1 = signal["take_profit"]
+        sig.take_profit_2 = signal["take_profit"]
+        sig.confidence = signal["confidence"]
+        sig.signal_type = "expert_ensemble"
+        sig.reason = signal["reason"]
+
+        await self._create_trade(sig, direction_str, lot_size)
+        self._active_direction = direction_int
 
     async def _create_trade(self, signal, direction: str, lot_size: float):
         """

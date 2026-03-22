@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # News APIs
     FINNHUB_API_KEY: str = ""
     ALPHAVANTAGE_API_KEY: str = ""
+    NEWSAPI_ORG_KEY: str = ""
     NEWS_CACHE_TTL_MINUTES: int = 15
 
     # SMTP (app-level, for notifications + invitations + 2FA)
