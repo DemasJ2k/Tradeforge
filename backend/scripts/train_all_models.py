@@ -118,6 +118,8 @@ def load_csv(path: str) -> list[dict]:
     return data
 
 
+_DB_TABLES_ENSURED = False
+
 def register_model_in_db(
     name: str,
     model_type: str,
@@ -131,8 +133,17 @@ def register_model_in_db(
     hyperparams: dict,
 ):
     """Register a trained model in the database."""
-    from app.core.database import SessionLocal
+    global _DB_TABLES_ENSURED
+    from app.core.database import SessionLocal, engine, Base
     from app.models.ml import MLModel
+
+    # Ensure all referenced tables exist (one-time)
+    if not _DB_TABLES_ENSURED:
+        import importlib, pkgutil, app.models as _models_pkg
+        for _, mod_name, _ in pkgutil.iter_modules(_models_pkg.__path__):
+            importlib.import_module(f"app.models.{mod_name}")
+        Base.metadata.create_all(bind=engine)
+        _DB_TABLES_ENSURED = True
 
     db = SessionLocal()
     try:
