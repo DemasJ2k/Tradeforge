@@ -193,9 +193,9 @@ def train_tree_model(
     hyperparams = {}
     if model_type == "xgboost":
         hyperparams = {
-            "n_estimators": 100 if quick else 500,
-            "max_depth": 6,
-            "learning_rate": 0.05,
+            "n_estimators": 50 if quick else 200,
+            "max_depth": 5,
+            "learning_rate": 0.08,
             "subsample": 0.8,
             "colsample_bytree": 0.8,
             "min_child_weight": 5,
@@ -204,9 +204,9 @@ def train_tree_model(
         }
     elif model_type == "lightgbm":
         hyperparams = {
-            "n_estimators": 100 if quick else 500,
-            "max_depth": 6,
-            "learning_rate": 0.05,
+            "n_estimators": 50 if quick else 200,
+            "max_depth": 5,
+            "learning_rate": 0.08,
             "subsample": 0.8,
             "colsample_bytree": 0.8,
             "min_child_samples": 20,
@@ -490,8 +490,8 @@ def main():
             data = load_csv(str(csv_path))
             print(f"  Loaded {len(data):,} bars from {csv_path.name}")
 
-            # Cap data size to prevent OOM on M1 datasets
-            MAX_ROWS = 500_000
+            # Cap data size to prevent OOM on large datasets
+            MAX_ROWS = 200_000
             if len(data) > MAX_ROWS:
                 print(f"  Trimming to last {MAX_ROWS:,} bars (memory limit)")
                 data = data[-MAX_ROWS:]

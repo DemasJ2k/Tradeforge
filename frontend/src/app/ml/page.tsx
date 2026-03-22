@@ -157,6 +157,36 @@ export default function MLPage() {
   // Performance summary for charts
   const [perfSummary, setPerfSummary] = useState<ModelPerformance[]>([]);
 
+  // Quick-train from Databento
+  const [quickTraining, setQuickTraining] = useState<string | null>(null);
+
+  const handleQuickTrain = async (symbol: string, timeframe: string) => {
+    const key = `${symbol}_${timeframe}`;
+    setQuickTraining(key);
+    try {
+      const result = await api.post<{ name: string; model_id: number }>("/api/ml/train", {
+        name: `xgb_${symbol}_${timeframe}`,
+        level: 2,
+        model_type: "xgboost",
+        symbol,
+        timeframe,
+        target_type: "triple_barrier",
+        target_horizon: 10,
+        databento_file: `${symbol}_${timeframe}.csv`,
+        n_estimators: 300,
+        max_depth: 6,
+        learning_rate: 0.05,
+      });
+      toast.success(`Model trained: ${result.name}`);
+      loadModels();
+      loadPerfSummary();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Quick-train failed");
+    } finally {
+      setQuickTraining(null);
+    }
+  };
+
   // AI assist state
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -961,6 +991,72 @@ export default function MLPage() {
           </CardContent>
         </Card>
       )}
+      {/* Symbol × Timeframe Accuracy Heatmap */}
+      {perfSummary.length > 0 && (() => {
+        const heatSymbols = [...new Set(perfSummary.map(m => m.symbol))].sort();
+        const heatTfs = ["M1", "M5", "M15", "H1", "H4"].filter(tf => perfSummary.some(m => m.timeframe === tf));
+        const heatTypes = [...new Set(perfSummary.map(m => m.model_type))].sort();
+        const [heatFilter, setHeatFilter] = [tModelType, setTModelType]; // reuse existing state
+        const filteredPerf = heatFilter ? perfSummary.filter(m => m.model_type === heatFilter) : perfSummary;
+        const cellColor = (acc: number | null) => {
+          if (acc === null) return "bg-zinc-800/50 text-muted-foreground/40";
+          if (acc > 0.60) return "bg-green-500/40 text-green-300 font-semibold";
+          if (acc > 0.55) return "bg-green-500/20 text-green-400";
+          if (acc > 0.52) return "bg-emerald-500/10 text-emerald-400";
+          if (acc > 0.50) return "bg-yellow-500/15 text-yellow-400";
+          return "bg-red-500/15 text-red-400";
+        };
+        return (
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Signal className="h-4 w-4 text-purple-400" /> Accuracy Heatmap
+                </h3>
+                <div className="flex gap-1">
+                  {heatTypes.map(t => (
+                    <button key={t} onClick={() => setHeatFilter(t)}
+                      className={`px-2 py-0.5 rounded text-[10px] transition-colors ${heatFilter === t ? "bg-accent/20 text-accent border border-accent/40" : "text-muted-foreground hover:text-foreground border border-transparent"}`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-muted-foreground font-normal pb-2 pr-3">Symbol</th>
+                      {heatTfs.map(tf => (
+                        <th key={tf} className="text-center text-muted-foreground font-normal pb-2 px-2 min-w-[56px]">{tf}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {heatSymbols.map(sym => (
+                      <tr key={sym}>
+                        <td className="font-medium text-foreground py-1 pr-3">{sym}</td>
+                        {heatTfs.map(tf => {
+                          const best = filteredPerf
+                            .filter(m => m.symbol === sym && m.timeframe === tf)
+                            .sort((a, b) => (b.val_accuracy ?? 0) - (a.val_accuracy ?? 0))[0];
+                          const acc = best?.val_accuracy ?? null;
+                          return (
+                            <td key={tf} className={`text-center py-1 px-2 rounded cursor-pointer hover:ring-1 hover:ring-accent/40 transition-all ${cellColor(acc)}`}
+                              onClick={() => best && openDetail(best.id)}>
+                              {acc !== null ? `${(acc * 100).toFixed(1)}%` : "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
       </>
       )}
 
@@ -2296,13 +2392,26 @@ export default function MLPage() {
                               return (tfOrder[a.timeframe] || 99) - (tfOrder[b.timeframe] || 99);
                             })
                             .map(ds => (
-                            <div key={ds.filename} className="rounded-lg border border-card-border bg-background/50 p-3 hover:border-accent/30 transition-colors">
+                            <div key={ds.filename} className="rounded-lg border border-card-border bg-background/50 p-3 hover:border-accent/30 transition-colors group">
                               <div className="flex items-center justify-between mb-1">
                                 <Badge variant="secondary" className="text-[10px] bg-accent/10 text-accent">{ds.timeframe}</Badge>
                                 <span className="text-[10px] text-muted-foreground">{ds.size_mb} MB</span>
                               </div>
                               <div className="text-lg font-bold">{ds.row_count >= 1000000 ? `${(ds.row_count / 1000000).toFixed(1)}M` : ds.row_count >= 1000 ? `${(ds.row_count / 1000).toFixed(1)}K` : ds.row_count}</div>
-                              <div className="text-[10px] text-muted-foreground">bars</div>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[10px] text-muted-foreground">bars</span>
+                                <button
+                                  onClick={() => handleQuickTrain(ds.symbol, ds.timeframe)}
+                                  disabled={quickTraining === `${ds.symbol}_${ds.timeframe}`}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-accent hover:text-accent/80 flex items-center gap-0.5 disabled:opacity-50"
+                                >
+                                  {quickTraining === `${ds.symbol}_${ds.timeframe}` ? (
+                                    <><Loader2 className="h-3 w-3 animate-spin" /> Training...</>
+                                  ) : (
+                                    <><Zap className="h-3 w-3" /> Quick Train</>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
