@@ -252,7 +252,7 @@ def compute_htf_features(
     htf_macd_norm[mask_mh] = htf_macd_h[mask_mh] / htf_c[mask_mh]
 
     # Market structure direction
-    struct = compute_market_structure_features(htf_o, htf_h, htf_l, htf_c, lookback=3)
+    struct = compute_market_structure_features(htf_o, htf_h, htf_l, htf_c, swing_lookback=3)
     htf_struct_dir = struct["structure_direction"]
 
     # Map HTF values to M5 resolution (forward-fill)
