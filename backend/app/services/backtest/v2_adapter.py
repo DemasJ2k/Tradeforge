@@ -965,7 +965,7 @@ def run_rl_backtest(
     data_handler.add_symbol(
         symbol=symbol,
         bars=bars,
-        indicator_configs=[{"type": "atr", "period": 14}],
+        indicator_configs=[{"id": "atr_14", "type": "atr", "params": {"period": 14}}],
         point_value=point_value,
     )
 
@@ -1057,7 +1057,7 @@ def run_agent_backtest(
     data_handler.add_symbol(
         symbol=symbol,
         bars=bars,
-        indicator_configs=[{"type": "atr", "period": 14}],
+        indicator_configs=[{"id": "atr_14", "type": "atr", "params": {"period": 14}}],
         point_value=point_value,
     )
 

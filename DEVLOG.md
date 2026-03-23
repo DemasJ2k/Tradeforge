@@ -138,6 +138,8 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 **Fix backtest "Method Not Allowed" — frontend was POSTing to `/api/backtest/run-v3` (nonexistent), changed to `/api/backtest/run`**
 
+**Fix agent backtest KeyError: 'id' — indicator configs in `v2_adapter.py` were missing required `id` and `params` keys expected by `DataHandler.compute_indicators()`**
+
 **Wire up Backtest as top-level route, remove Strategy backtest mode**
 - `/backtest` now renders `BacktestPageContent` directly (was redirecting to `/ml?view=backtest`)
 - Added "Backtest" nav item with `BarChart3` icon to sidebar (between ML Lab and Settings)
