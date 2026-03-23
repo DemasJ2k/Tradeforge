@@ -124,7 +124,12 @@ export default function MLPage() {
             setRetrainRunning(null);
           }
         }, 3000);
-        setTimeout(() => { clearInterval(poll); setRetrainRunning(null); }, 600000);
+        setTimeout(() => {
+          clearInterval(poll);
+          setRetrainRunning(null);
+          toast.error("Training timed out after 10 minutes. Check ML Lab for status.");
+          setRetrainLog(prev => [...prev, "Polling stopped — 10 minute timeout reached. Training may still be running on server."]);
+        }, 600000);
       } else {
         toast.success(result.message || `${pipeline} retrain complete`);
         setRetrainRunning(null);
@@ -304,7 +309,11 @@ export default function MLPage() {
             setMetaTraining(false);
           }
         }, 3000);
-        setTimeout(() => { clearInterval(poll); setMetaTraining(false); }, 600000);
+        setTimeout(() => {
+          clearInterval(poll);
+          setMetaTraining(false);
+          toast.error("Meta-training timed out after 10 minutes. Check ML Lab for status.");
+        }, 600000);
       } else {
         setMetaTraining(false);
         loadModels();
@@ -889,7 +898,7 @@ export default function MLPage() {
         </div>
       )}
 
-      {view === "compare" && compareData && (
+      {view === "compare" && compareData && compareData.models?.length > 0 && (
         <Card className="bg-card-bg border-card-border">
           <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">

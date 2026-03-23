@@ -226,6 +226,18 @@ This was a major security and stability push — 12 commits addressing audit fin
   `datetime.fromtimestamp(ts, tz=timezone.utc)` (2 instances)
 - **Broker reconciler**: Widened trade query window from 5min/100 to 30min/200 to catch slow-closing trades
 
+**Audit agents, ML settings, and trading page logic**
+- **AgentWizard**: Added timeframe selector (was hardcoded to M5 only) — users can now pick M1/M5/M15/M30/H1/H4/D1
+- **AgentWizard**: Fixed deploy validation — paper mode no longer requires a broker to be selected
+- **AgentPanel**: Added loading spinner (Loader2) to Start/Pause/Resume buttons during action execution
+- **AgentPanel**: `loadAgents()` now called after editing an agent (was not refreshing the list)
+- **AgentPanel**: `loadPendingTrades()` now called after confirming/rejecting a trade (was relying solely on WebSocket)
+- **ML Page**: Added null safety on `compareData.models` in comparison view (prevented crash if API returns empty)
+- **ML Page**: Retrain/meta-training timeout (10 min) now shows toast error + log message instead of silently stopping
+- **ML Backend**: Added datasource filepath existence check before spawning training task (was crashing in background with FileNotFoundError)
+- **ML Backend**: LSTM model type now transparently updates to "ensemble" in DB after training redirects
+  (previously showed "lstm" in UI even though ensemble was actually trained)
+
 ---
 
 ## Summary of Major Changes

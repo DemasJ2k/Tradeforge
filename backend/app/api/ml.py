@@ -253,6 +253,8 @@ async def train_model(
     ds = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()
     if not ds:
         raise HTTPException(404, f"Data source {payload.datasource_id} not found")
+    if not ds.filepath or not os.path.exists(ds.filepath):
+        raise HTTPException(400, f"Data source file not found on disk: {ds.filepath}")
 
     # Load OHLCV data from CSV
     ohlcv_data = _load_csv_ohlcv(ds.filepath)
@@ -410,6 +412,12 @@ def _run_training(
         model_record.model_path = result["model_path"]
         model_record.status = "ready"
         model_record.trained_at = datetime.now(timezone.utc)
+        # Update model_type if training redirected (e.g. LSTM → ensemble)
+        meta = result.get("meta", {})
+        if isinstance(meta, dict) and model_record.model_type == "lstm":
+            if meta.get("sub_type") == "ensemble" or "ensemble" in str(meta.get("note", "")):
+                model_record.model_type = "ensemble"
+                logger.info("Model %d: LSTM redirected to ensemble, updated model_type", model_id)
         db.commit()
         logger.info("Background train complete: model %d → ready", model_id)
 
