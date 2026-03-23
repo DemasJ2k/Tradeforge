@@ -140,6 +140,19 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 **Fix agent backtest KeyError: 'id' — indicator configs in `v2_adapter.py` were missing required `id` and `params` keys expected by `DataHandler.compute_indicators()`**
 
+**Full platform audit — fix 7 bugs across all 6 pages**
+- **CRITICAL — ML retrain `user_id` vs `creator_id`**: `retrain_pipeline()` and `get_available_agents()` used
+  `MLModel.user_id` but the DB column is `creator_id` — both would crash. Fixed to `creator_id`
+- **CRITICAL — ML retrain never ran training**: `retrain_pipeline()` created a model record with
+  `status="training"` but never launched actual training. Added `run_in_executor` call with Optuna config.
+  Also added missing `GET /api/ml/retrain/status/{model_id}` endpoint that frontend polls for progress
+- **Portfolio**: `loadData()` called without `await` after agent action — UI showed stale data
+- **Backtest**: Polling loop `catch {}` silently swallowed 401/403 auth errors, causing 30-min hang.
+  Now detects auth errors and stops polling with user message
+- **Backtest**: Deleted dead `DeployAgentDialog.tsx` (references removed `Strategy` type, never imported)
+- **Settings**: DB backup filename was `flowrexalgo_backup_*` → `tradeforge_backup_*`
+- **Dashboard**: Standardized `get_current_user` import from `app.core.auth` (was `app.api.auth`)
+
 **Wire up Backtest as top-level route, remove Strategy backtest mode**
 - `/backtest` now renders `BacktestPageContent` directly (was redirecting to `/ml?view=backtest`)
 - Added "Backtest" nav item with `BarChart3` icon to sidebar (between ML Lab and Settings)
