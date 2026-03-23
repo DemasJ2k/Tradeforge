@@ -547,7 +547,7 @@ export default function ChatSidebar() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed right-4 bottom-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-black shadow-lg hover:scale-105 transition-transform"
+          className="fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-black shadow-lg hover:scale-105 transition-transform"
           title="Open AI Assistant (Ctrl+K)"
         >
           <MessageCircle className="h-6 w-6" />
@@ -556,10 +556,9 @@ export default function ChatSidebar() {
 
       {/* Sidebar panel */}
       <div
-        className={`fixed right-0 top-0 z-40 h-[100dvh] w-full sm:w-[380px] flex flex-col bg-sidebar-bg border-l border-card-border shadow-xl transition-transform duration-200 ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
-        style={{ height: "100dvh" /* dynamic viewport height — adjusts for mobile keyboard & browser chrome */ }}
+        className={`fixed z-40 flex flex-col bg-sidebar-bg border-card-border shadow-xl transition-transform duration-200
+          bottom-0 right-0 w-full h-[50dvh] border-t rounded-t-2xl ${open ? "translate-y-0" : "translate-y-full"}
+          sm:top-0 sm:bottom-auto sm:h-[100dvh] sm:w-[380px] sm:rounded-none sm:border-t-0 sm:border-l ${open ? "sm:translate-x-0 sm:translate-y-0" : "sm:translate-x-full sm:translate-y-0"}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-card-border px-4 py-3">

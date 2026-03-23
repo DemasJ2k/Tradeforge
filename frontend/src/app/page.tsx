@@ -204,8 +204,8 @@ export default function Dashboard() {
   const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos, broker_accounts: ba } = data;
   const connectedBrokerCount = (ba ?? []).filter((b) => b.connected).length;
 
-  // Show onboarding for new users (no user strategies and no data sources)
-  const isNewUser = s.user === 0 && data.data_sources === 0;
+  // Show onboarding for new users (no agents and no data sources)
+  const isNewUser = ag.total === 0 && data.data_sources === 0;
 
   return (
     <div className="space-y-6">
@@ -456,17 +456,16 @@ export default function Dashboard() {
           <CardContent className="p-5 space-y-4">
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Quick Overview</h3>
           <div className="space-y-3 text-sm">
-            <StatRow icon={<Zap className="h-3.5 w-3.5 text-accent" />} label="Strategies" value={`${s.user} user · ${s.system} system`} />
             <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Active Agents" value={`${ag.running} running · ${ag.paper} paper`} />
+            <StatRow icon={<Brain className="h-3.5 w-3.5 text-accent" />} label="ML Models" value={`${data.backtests.total > 0 ? data.backtests.total : 0} trained`} />
             <StatRow icon={<Database className="h-3.5 w-3.5 text-accent" />} label="Data Sources" value={`${data.data_sources} files`} />
-            <StatRow icon={<BarChart3 className="h-3.5 w-3.5 text-accent" />} label="Backtests" value={`${data.backtests.total} total`} />
           </div>
           <div className="pt-2 border-t border-card-border space-y-1.5">
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
               <Link href="/portfolio"><ArrowRight className="h-3 w-3" /> Portfolio</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
-              <Link href="/strategies?tab=backtest"><BarChart3 className="h-3 w-3" /> Run Backtest</Link>
+              <Link href="/ml"><Brain className="h-3 w-3" /> ML Lab</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-accent h-7 gap-1 w-full justify-start">
               <Link href="/trading"><ArrowRight className="h-3 w-3" /> Go to Trading</Link>

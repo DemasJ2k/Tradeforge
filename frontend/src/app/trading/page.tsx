@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 
 import AgentPanel from "@/components/AgentPanel";
 import CandlestickChart, { type ChartHandle, type CandleInput, type OverlayLine } from "@/components/CandlestickChart";
-import StrategyOverlayPanel from "@/components/StrategyOverlayPanel";
 import IndicatorDropdown, { type ActiveIndicator } from "@/components/IndicatorDropdown";
 import { getIndicatorById } from "@/lib/indicatorRegistry";
 import * as Calc from "@/lib/indicators";
@@ -29,7 +28,6 @@ import type {
   PlaceOrderRequest,
   BrokerListResponse,
   TradeHistory,
-  DataSource,
 } from "@/types";
 
 /* ── tiny helpers ─────────────────────────────────── */
@@ -178,18 +176,6 @@ export default function TradingPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
 
-  // ── Strategy Overlay datasource state (Phase 5A) ──
-  const [overlayDatasourceId, setOverlayDatasourceId] = useState<number | null>(null);
-  const [overlayDatasources, setOverlayDatasources] = useState<DataSource[]>([]);
-  useEffect(() => {
-    api.get<DataSource[] | { items: DataSource[] }>("/api/data/sources")
-      .then((data) => {
-        const arr = Array.isArray(data) ? data : (data as { items: DataSource[] }).items ?? [];
-        setOverlayDatasources(arr);
-        if (arr.length > 0) setOverlayDatasourceId(arr[0].id);
-      })
-      .catch(console.error);
-  }, []);
 
   // ── Indicator state (2 slots: each can be any overlay or oscillator) ──
   const [indicator1, setIndicator1] = useState<ActiveIndicator | null>(null);
@@ -1117,11 +1103,6 @@ export default function TradingPage() {
             overlayLines={overlayLines}
           />
         )}
-        {/* Strategy Overlay Panel */}
-        <StrategyOverlayPanel
-          chart={chartRef.current?.getChart() ?? null}
-          datasourceId={overlayDatasourceId}
-        />
         </div>
 
         {/* Oscillator pane (generic — renders any oscillator indicator) */}

@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Sparkles, BarChart3, ChevronRight, ChevronLeft, X,
-  Database, Layers, Rocket, TrendingUp,
+  Database, Layers, Rocket, TrendingUp, Brain, Bot, Shield,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -43,29 +43,29 @@ export default function WelcomeWizard({ onDismiss }: Props) {
     {
       title: 'Welcome to FlowrexAlgo',
       icon: <Sparkles className="w-10 h-10 text-accent" />,
-      description: 'Your AI-powered algorithmic trading platform. Build strategies, backtest them on historical data, and deploy live trading agents.',
+      description: 'Your AI-powered algorithmic trading platform. Deploy ML-powered trading agents — Scalping or Expert — on your favorite symbols.',
       highlights: [
-        { icon: <Layers className="w-4 h-4" />, text: 'Build strategies with visual editor or AI import' },
-        { icon: <BarChart3 className="w-4 h-4" />, text: 'Backtest with V3 engine + walk-forward validation' },
-        { icon: <Rocket className="w-4 h-4" />, text: 'Deploy agents for paper or live trading' },
-        { icon: <TrendingUp className="w-4 h-4" />, text: 'Track prop firm challenges with rule validation' },
+        { icon: <Bot className="w-4 h-4" />, text: 'Choose from Scalping Agent or Expert Agent' },
+        { icon: <Brain className="w-4 h-4" />, text: 'XGBoost + LightGBM + LSTM ML ensemble' },
+        { icon: <Shield className="w-4 h-4" />, text: 'Built-in risk management & prop firm support' },
+        { icon: <TrendingUp className="w-4 h-4" />, text: 'Paper, confirmation, or fully autonomous modes' },
       ],
     },
     {
-      title: 'Upload Market Data',
-      icon: <Database className="w-10 h-10 text-accent" />,
-      description: 'To run backtests, you need historical market data. Upload a CSV file with OHLCV bars, or connect a broker for live data.',
-      action: { label: 'Upload Data', onClick: () => { onDismiss(); router.push('/data'); } },
-      secondaryAction: { label: 'Connect Broker', onClick: () => { onDismiss(); router.push('/trading'); } },
-      tip: 'Supported: MT5 CSV, TradingView export, or any OHLCV CSV with datetime, open, high, low, close, volume columns.',
+      title: 'Connect Your Broker',
+      icon: <Rocket className="w-10 h-10 text-accent" />,
+      description: 'Connect your broker account to enable live trading, or start with paper trading to test the agents risk-free.',
+      action: { label: 'Connect Broker', onClick: () => { onDismiss(); router.push('/settings?tab=platform'); } },
+      secondaryAction: { label: 'Start with Paper', onClick: () => { onDismiss(); router.push('/trading'); } },
+      tip: 'Supported brokers: Oanda, cTrader, MT5 (via bridge), Interactive Brokers, Coinbase, and Tradovate.',
     },
     {
-      title: 'Create Your First Strategy',
-      icon: <Layers className="w-10 h-10 text-accent" />,
-      description: 'Build a strategy using the visual editor, import from PineScript, or start with one of our pre-built templates.',
-      action: { label: 'Use a Template', onClick: () => { onDismiss(); router.push('/strategies'); } },
-      secondaryAction: { label: 'AI Import', onClick: () => { onDismiss(); router.push('/strategies'); } },
-      tip: '5 templates available: SMA Crossover, RSI Mean Reversion, Bollinger Breakout, MACD+RSI, and ATR Trailing Momentum.',
+      title: 'Deploy Your First Agent',
+      icon: <Bot className="w-10 h-10 text-accent" />,
+      description: 'Go to the Trading page, click "New Agent", pick your symbol and agent type, configure risk, and deploy. Start with Paper mode for safety.',
+      action: { label: 'Create Agent', onClick: () => { onDismiss(); router.push('/trading'); } },
+      secondaryAction: { label: 'View ML Models', onClick: () => { onDismiss(); router.push('/ml'); } },
+      tip: 'Scalping Agent: fast M5 trades on XAUUSD/US30. Expert Agent: multi-timeframe with news & regime filters on XAUUSD/US30/BTCUSD.',
     },
   ];
 

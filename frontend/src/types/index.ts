@@ -347,6 +347,11 @@ export interface UserSettings {
   preferred_instruments: string;
   preferred_timeframes: string;
   default_broker: string;
+  default_agent_type: string;
+  default_trading_mode: string;
+  default_max_daily_loss: string;
+  default_max_drawdown: string;
+  default_max_open_positions: string;
   csv_retention_days: number;
   export_format: string;
   max_storage_mb: number;
@@ -850,8 +855,8 @@ export interface AgentRiskConfig {
   rl_enhanced?: boolean;
   rl_model_id?: number;
   rl_mode?: "filter" | "autonomous";
-  // Expert Agent config
-  agent_type?: "expert";
+  // Agent type
+  agent_type?: "expert" | "scalping";
   risk_per_trade?: number;
   news_filter_enabled?: boolean;
   news_window_minutes?: number;

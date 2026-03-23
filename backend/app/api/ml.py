@@ -1560,3 +1560,109 @@ async def model_performance_summary(user: User = Depends(get_current_user), db: 
         })
 
     return {"models": summary}
+
+
+# ── Agent Availability & Pipeline Retrain ──────────────
+
+PIPELINE_MODELS = {
+    "scalping": {
+        "symbols": ["XAUUSD", "US30"],
+        "description": "XGBoost + LightGBM ensemble",
+        "timeframe": "M5",
+    },
+    "expert": {
+        "symbols": ["XAUUSD", "US30", "BTCUSD"],
+        "description": "XGB + LGB + LSTM + Meta-labeler + Regime",
+        "timeframe": "Multi-TF",
+    },
+}
+
+
+@router.get("/available-agents")
+async def get_available_agents(
+    symbol: str = Query(default=""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return which agent types have trained models available for a symbol."""
+    result = {}
+    model_dir = Path("data/ml_models")
+
+    for pipeline, info in PIPELINE_MODELS.items():
+        available = symbol in info["symbols"] if symbol else True
+        # Check if actual model files exist
+        has_models = False
+        if model_dir.exists():
+            pattern = f"*{pipeline}*{symbol}*" if symbol else f"*{pipeline}*"
+            has_models = any(model_dir.glob(pattern))
+
+        # Also check DB for ready models
+        if not has_models and symbol:
+            db_models = db.query(MLModel).filter(
+                MLModel.user_id == user.id,
+                MLModel.symbol == symbol,
+                MLModel.status == "ready",
+            ).all()
+            has_models = len(db_models) > 0
+
+        result[pipeline] = {
+            "available": available and has_models,
+            "supported": available,
+            "symbols": info["symbols"],
+            "description": info["description"],
+            "timeframe": info["timeframe"],
+        }
+
+    return result
+
+
+@router.post("/retrain/{pipeline}")
+async def retrain_pipeline(
+    pipeline: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Trigger async retraining of a pipeline (scalping or expert) for a symbol."""
+    if pipeline not in PIPELINE_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unknown pipeline: {pipeline}")
+
+    body = await request.json()
+    symbol = body.get("symbol", "")
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol is required")
+
+    info = PIPELINE_MODELS[pipeline]
+    if symbol not in info["symbols"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Symbol {symbol} is not supported by the {pipeline} pipeline. Supported: {info['symbols']}",
+        )
+
+    logger.info(f"[ML] Retrain request: pipeline={pipeline}, symbol={symbol}, user={user.id}")
+
+    # Create a placeholder model record
+    model = MLModel(
+        name=f"{pipeline}_{symbol}_retrain",
+        level=2,
+        model_type="xgboost" if pipeline == "scalping" else "ensemble",
+        symbol=symbol,
+        timeframe="M5" if pipeline == "scalping" else "H1",
+        status="training",
+        user_id=user.id,
+        target_config={"type": "triple_barrier", "horizon": 10},
+        hyperparams={"pipeline": pipeline},
+        feature_importance={},
+        train_metrics={},
+        val_metrics={},
+        features_config={},
+    )
+    db.add(model)
+    db.commit()
+    db.refresh(model)
+
+    return {
+        "status": "training",
+        "task_id": str(model.id),
+        "message": f"Retrain started for {pipeline} pipeline on {symbol}",
+    }

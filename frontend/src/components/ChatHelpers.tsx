@@ -15,31 +15,31 @@ interface HelperButton {
  * Get context-specific helper buttons based on current page
  */
 function getHelperButtons(pathname: string): HelperButton[] {
-  // Strategies page helpers
-  if (pathname.includes("/strategies")) {
+  // Trading page helpers
+  if (pathname.includes("/trading")) {
     return [
       {
         icon: "💡",
-        label: "Suggest entry/exit rules",
-        prompt: "Based on my trading experience, suggest entry and exit rules that typically work well with trending markets. Consider using RSI and MACD indicators.",
+        label: "Explain agent types",
+        prompt: "Explain the difference between the Scalping Agent and the Expert Agent — what models do they use, and which is better for different scenarios?",
         color: "accent",
       },
       {
         icon: "📊",
-        label: "Explain indicator combination",
-        prompt: "Explain how to combine multiple indicators (like RSI, MACD, and Bollinger Bands) effectively to avoid false signals.",
+        label: "Help configure risk",
+        prompt: "What are the recommended risk settings for a prop firm challenge with a 5% daily loss limit and 10% max drawdown? I want to use the Scalping Agent.",
         color: "info",
       },
       {
         icon: "🚀",
-        label: "Generate from description",
-        prompt: "I want a scalping strategy for 5-minute charts with quick entries and exits. Can you help me define the rules?",
+        label: "Best agent for my symbol",
+        prompt: "Which agent type should I use for XAUUSD on a $10,000 account? What are the key differences in how they handle entries?",
         color: "accent",
       },
       {
         icon: "⚠️",
-        label: "Review for risks",
-        prompt: "I have a strategy with multiple indicators. Please identify potential weaknesses, over-optimization issues, and risk management gaps.",
+        label: "Understand confidence settings",
+        prompt: "What does the minimum confidence threshold mean for the ML agents? What happens if I set it too high or too low?",
         color: "danger",
       },
     ];

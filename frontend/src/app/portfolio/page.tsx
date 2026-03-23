@@ -428,7 +428,7 @@ export default function PortfolioPage() {
               <Bot className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
               <div className="text-sm text-muted-foreground">No agents deployed yet</div>
               <div className="text-xs text-muted-foreground mt-1">
-                Go to Strategies to deploy agents with validated strategies
+                Go to Trading to deploy ML-powered agents
               </div>
             </CardContent>
           </Card>
