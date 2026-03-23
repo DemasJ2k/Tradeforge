@@ -165,7 +165,7 @@ class CTraderAdapter(BrokerAdapter):
             "payload": payload,
         }
 
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self._pending_requests[msg_id] = future
 
         async with self._request_semaphore:
@@ -290,12 +290,16 @@ class CTraderAdapter(BrokerAdapter):
         return int(round(price * 100000))
 
     def _to_volume(self, lots: float) -> int:
-        """Convert lot size to cTrader volume (lots * 100 for most instruments)."""
-        return int(round(lots * 100))
+        """Convert lot size to cTrader volume.
+
+        cTrader Open API volume = number of units.
+        1 standard lot = 100,000 units, so 0.01 lots = 1,000 units.
+        """
+        return int(round(lots * 100_000))
 
     def _from_volume(self, volume: int) -> float:
-        """Convert cTrader volume to lot size."""
-        return volume / 100.0
+        """Convert cTrader volume (units) to lot size."""
+        return volume / 100_000.0
 
     # Common symbol aliases for broker-specific naming conventions
     _SYMBOL_ALIASES: dict[str, list[str]] = {
@@ -605,9 +609,15 @@ class CTraderAdapter(BrokerAdapter):
             "ctidTraderAccountId": self._account_id,
         })
         payload = resp.get("payload", {})
+        raw_positions = payload.get("position", [])
+        logger.info("cTrader reconcile: payloadType=%s, %d positions, %d orders, keys=%s",
+                     resp.get("payloadType"), len(raw_positions),
+                     len(payload.get("order", [])), list(payload.keys()))
+        if raw_positions:
+            logger.debug("cTrader first position raw: %s", raw_positions[0])
         positions: list[Position] = []
 
-        for pos in payload.get("position", []):
+        for pos in raw_positions:
             symbol_id = pos.get("tradeData", {}).get("symbolId", 0)
             sym_info = self._symbol_cache.get(symbol_id, {})
             symbol_name = sym_info.get("symbolName", str(symbol_id))
@@ -707,10 +717,15 @@ class CTraderAdapter(BrokerAdapter):
                     request.side.value, request.symbol, request.size,
                     request.stop_loss, request.take_profit)
 
+        logger.info("cTrader order payload: %s", {k: v for k, v in payload.items() if k != "ctidTraderAccountId"})
         resp = await self._send(PROTO_OA_NEW_ORDER_REQ, payload)
         exec_payload = resp.get("payload", {})
         order_data = exec_payload.get("order", {})
         position = exec_payload.get("position", {})
+        logger.info("cTrader order response: executionType=%s, orderId=%s, positionId=%s, keys=%s",
+                     exec_payload.get("executionType"), order_data.get("orderId"),
+                     position.get("positionId") if position else None,
+                     list(exec_payload.keys()))
 
         filled_price = 0.0
         if position and position.get("price"):

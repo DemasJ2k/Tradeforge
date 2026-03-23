@@ -92,7 +92,7 @@ You'll be asked to change your password on first login.
         msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
+        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
@@ -102,6 +102,12 @@ You'll be asked to change your password on first login.
         logger.info("Invitation email sent to %s for user %s", to_email, username)
         return True
 
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error("SMTP auth failed for invitation to %s: %s", to_email, e)
+        return False
+    except smtplib.SMTPConnectError as e:
+        logger.error("SMTP connect failed for invitation to %s: %s", to_email, e)
+        return False
     except Exception as e:
         logger.error("Failed to send invitation email to %s: %s", to_email, e)
         return False

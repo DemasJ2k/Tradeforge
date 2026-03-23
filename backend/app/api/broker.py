@@ -45,9 +45,9 @@ router = APIRouter(prefix="/api/broker", tags=["broker"])
 
 # ── Helpers ────────────────────────────────────────────
 
-def _get_adapter(broker: Optional[str] = None):
+def _get_adapter(broker: Optional[str] = None, user_id: Optional[int] = None):
     """Get broker adapter or raise 400."""
-    adapter = broker_manager.get_adapter(broker)
+    adapter = broker_manager.get_adapter(broker, user_id=user_id)
     if not adapter:
         raise HTTPException(
             status_code=400,
@@ -119,7 +119,7 @@ async def connect_broker(
     else:
         raise HTTPException(400, f"Unsupported broker: {payload.broker}")
 
-    success = await broker_manager.connect_broker(payload.broker, adapter)
+    success = await broker_manager.connect_broker(payload.broker, adapter, user_id=user.id)
 
     if not success:
         raise HTTPException(400, f"Failed to connect to {payload.broker}. Check credentials.")
@@ -141,20 +141,20 @@ async def disconnect_broker(
     user: User = Depends(get_current_user),
 ):
     """Disconnect a broker."""
-    await broker_manager.disconnect_broker(broker_name)
+    await broker_manager.disconnect_broker(broker_name, user_id=user.id)
     return {"status": "disconnected", "broker": broker_name}
 
 
 @router.get("/status")
 async def broker_status(user: User = Depends(get_current_user)):
-    """Get status of all connected brokers."""
-    status = await broker_manager.get_status()
+    """Get status of all connected brokers for the current user."""
+    status = await broker_manager.get_status(user_id=user.id)
     return BrokerListResponse(
         brokers={
             name: BrokerStatusResponse(**info)
             for name, info in status.items()
         },
-        default_broker=broker_manager.default_broker,
+        default_broker=broker_manager.get_default_broker_for_user(user.id),
     )
 
 
@@ -165,7 +165,7 @@ async def broker_debug(
     user: User = Depends(get_current_user),
 ):
     """Debug endpoint: internal state of a broker adapter."""
-    adapter = _get_adapter(broker_name)
+    adapter = _get_adapter(broker_name, user_id=user.id)
     info: dict = {"broker": broker_name, "connected": False}
     if not adapter:
         return info
@@ -217,7 +217,7 @@ async def get_account(
     user: User = Depends(get_current_user),
 ):
     """Get account info from broker."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     info = await adapter.get_account_info()
     return AccountInfoResponse(
         account_id=info.account_id,
@@ -244,8 +244,13 @@ async def get_positions(
     """Get all open positions with agent attribution."""
     from app.models.agent import AgentTrade, TradingAgent
 
-    adapter = _get_adapter(broker)
-    positions = await adapter.get_positions()
+    adapter = _get_adapter(broker, user_id=user.id)
+    try:
+        positions = await adapter.get_positions()
+    except Exception as e:
+        logger.error("get_positions failed for broker=%s: %s", broker or "default", e, exc_info=True)
+        raise HTTPException(502, f"Failed to fetch positions from broker: {e}")
+    logger.info("Broker positions: got %d positions from %s", len(positions), broker or "default")
 
     # Build agent lookup: broker_ticket -> (agent_name, agent_id, strategy)
     agent_map: dict[str, dict] = {}
@@ -308,7 +313,7 @@ async def close_position(
     db: Session = Depends(get_db),
 ):
     """Close a position (fully or partially)."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     order = await adapter.close_position(payload.position_id, payload.size)
 
     # Log trade to DB
@@ -362,7 +367,7 @@ async def place_order(
     db: Session = Depends(get_db),
 ):
     """Place a new order."""
-    adapter = _get_adapter(payload.broker)
+    adapter = _get_adapter(payload.broker, user_id=user.id)
 
     request = OrderRequest(
         symbol=payload.symbol,
@@ -433,7 +438,7 @@ async def modify_order(
     user: User = Depends(get_current_user),
 ):
     """Modify a pending order or position SL/TP."""
-    adapter = _get_adapter(payload.broker)
+    adapter = _get_adapter(payload.broker, user_id=user.id)
 
     request = OrderModifyRequest(
         order_id=payload.order_id,
@@ -465,7 +470,7 @@ async def cancel_order(
     user: User = Depends(get_current_user),
 ):
     """Cancel a pending order."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     success = await adapter.cancel_order(order_id)
 
     if not success:
@@ -480,7 +485,7 @@ async def get_open_orders(
     user: User = Depends(get_current_user),
 ):
     """Get all pending orders."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     orders = await adapter.get_open_orders()
 
     return [
@@ -509,7 +514,7 @@ async def get_symbols(
     user: User = Depends(get_current_user),
 ):
     """Get tradeable instruments from broker."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     try:
         symbols = await adapter.get_symbols()
     except (ConnectionError, TimeoutError):
@@ -556,7 +561,7 @@ async def get_price(
     user: User = Depends(get_current_user),
 ):
     """Get current price for a symbol."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     tick = await adapter.get_price(symbol)
 
     return PriceTickResponse(
@@ -577,7 +582,7 @@ async def get_candles(
     user: User = Depends(get_current_user),
 ):
     """Get historical candles for a symbol."""
-    adapter = _get_adapter(broker)
+    adapter = _get_adapter(broker, user_id=user.id)
     try:
         candles = await adapter.get_candles(symbol, timeframe, count)
     except (ConnectionError, TimeoutError) as e:

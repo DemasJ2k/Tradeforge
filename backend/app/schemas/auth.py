@@ -49,6 +49,8 @@ class InvitationResponse(BaseModel):
     username: str = ""
     status: str
     created_at: str
+    email_sent: bool = False
+    email_error: str = ""
 
     class Config:
         from_attributes = True

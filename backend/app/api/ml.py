@@ -137,6 +137,9 @@ async def get_model(
     m = db.query(MLModel).filter(MLModel.id == model_id).first()
     if not m:
         raise HTTPException(404, "Model not found")
+    # User isolation: only owner or system models
+    if m.creator_id is not None and m.creator_id != user.id:
+        raise HTTPException(404, "Model not found")
 
     return MLModelResponse(
         id=m.id,
@@ -907,6 +910,13 @@ async def get_predictions(
     db: Session = Depends(get_db),
 ):
     """Get prediction history for a model."""
+    # User isolation: verify model ownership
+    model = db.query(MLModel).filter(MLModel.id == model_id).first()
+    if not model:
+        raise HTTPException(404, "Model not found")
+    if model.creator_id is not None and model.creator_id != user.id:
+        raise HTTPException(404, "Model not found")
+
     preds = (
         db.query(MLPrediction)
         .filter(MLPrediction.model_id == model_id)

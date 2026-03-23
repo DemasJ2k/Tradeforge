@@ -90,7 +90,7 @@ class AgentRunner:
             raw_broker = agent.broker_name or ""
             if not raw_broker:
                 from app.services.broker.manager import broker_manager
-                raw_broker = broker_manager.default_broker or "mt5"
+                raw_broker = broker_manager.get_default_broker_for_user(agent.created_by) or "mt5"
                 # Persist resolved broker so it doesn't re-resolve next time
                 if raw_broker != "mt5":
                     agent.broker_name = raw_broker
@@ -418,7 +418,7 @@ class AgentRunner:
                     break
 
                 from app.services.broker.manager import broker_manager
-                adapter = broker_manager.get_adapter(self._broker_name)
+                adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
                 if not adapter or not await adapter.is_connected():
                     self._log("warn", f"Broker {self._broker_name} not connected — skipping poll")
                     continue
@@ -490,7 +490,7 @@ class AgentRunner:
             if not self._running:
                 return
             try:
-                adapter = broker_manager.get_adapter(self._broker_name)
+                adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
                 if adapter and await adapter.is_connected():
                     # MT5 adapter has a dedicated get_initial_bars(); others use get_candles()
                     if hasattr(adapter, "get_initial_bars"):
@@ -853,7 +853,7 @@ class AgentRunner:
         broker_adapter = None
         try:
             from app.services.broker.manager import broker_manager
-            broker_adapter = broker_manager.get_adapter(self._broker_name)
+            broker_adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
         except Exception:
             pass
 
@@ -1013,7 +1013,7 @@ class AgentRunner:
                     fill_info = f" fill={order_result.filled_price:.5f}" if order_result.filled_price else ""
                     # Log server type for debugging live vs demo execution
                     from app.services.broker.manager import broker_manager
-                    _adapter = broker_manager.get_adapter(self._broker_name)
+                    _adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
                     server_info = ""
                     if _adapter and hasattr(_adapter, "_server"):
                         server_info = f" server={_adapter._server}"
@@ -1097,7 +1097,7 @@ class AgentRunner:
 
         # Always use the agent's configured broker
         try:
-            adapter = broker_manager.get_adapter(self._broker_name)
+            adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
             if not adapter:
                 self._log("error",
                     f"Broker {self._broker_name} not registered — cannot execute order. "
@@ -1286,7 +1286,7 @@ class AgentRunner:
         # Try broker_manager first (works for Oanda, Coinbase, MT5 adapter, etc.)
         try:
             from app.services.broker.manager import broker_manager
-            adapter = broker_manager.get_adapter(self._broker_name)
+            adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
             if adapter and await adapter.is_connected():
                 candles = await adapter.get_candles(self._symbol, "D1", 15)
                 if candles:
@@ -1343,7 +1343,7 @@ class AgentRunner:
         # Try broker_manager first (works for Oanda, Coinbase, MT5 adapter, etc.)
         try:
             from app.services.broker.manager import broker_manager
-            adapter = broker_manager.get_adapter(self._broker_name)
+            adapter = broker_manager.get_adapter(self._broker_name, user_id=self._created_by)
             if adapter and await adapter.is_connected():
                 info = await adapter.get_account_info()
                 # AccountInfo is a dataclass — access .balance attribute directly

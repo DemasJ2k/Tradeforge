@@ -6,11 +6,12 @@ Handles WebSocket connections with JWT authentication.
 
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 
 from app.core.config import settings
 from app.core.websocket import manager
+from app.api.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @router.get("/api/ws/stats")
-async def ws_stats():
-    """Get WebSocket connection statistics (debug endpoint)."""
+async def ws_stats(user=Depends(get_current_user)):
+    """Get WebSocket connection statistics (admin/debug endpoint)."""
     return manager.stats()

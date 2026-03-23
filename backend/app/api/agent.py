@@ -248,7 +248,7 @@ def create_agent(
     broker_name = payload.broker_name
     if not broker_name:
         from app.services.broker.manager import broker_manager
-        broker_name = broker_manager.default_broker or ""
+        broker_name = broker_manager.get_default_broker_for_user(user.id) or ""
 
     agent = TradingAgent(
         name=payload.name,
@@ -504,7 +504,7 @@ async def confirm_trade(
     try:
         from app.services.broker.manager import broker_manager
         from app.services.broker.base import OrderRequest, OrderSide, OrderType
-        adapter = broker_manager.get_adapter(agent.broker_name)
+        adapter = broker_manager.get_adapter(agent.broker_name, user_id=user.id)
         if adapter and await adapter.is_connected():
             side = OrderSide.BUY if trade.direction == "long" else OrderSide.SELL
             order_req = OrderRequest(
