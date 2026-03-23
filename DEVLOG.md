@@ -251,6 +251,13 @@ This was a major security and stability push — 12 commits addressing audit fin
   when paper trades close. Previously, open position count stayed stale and portfolio circuit breaker never
   triggered because daily_pnl was never updated from actual trade results
 
+**Fix frontend security and data integrity issues from broad audit**
+- **useMarketData.ts**: `Number(data.bid) ?? 0` → `|| 0` — `Number()` returns `NaN` not `null`,
+  so `??` never triggered, allowing `NaN` to propagate to charts and P&L calculations
+- **api.ts**: `uploadFile()` had no retry guard on 401 — could infinite-recurse if refresh token
+  was immediately invalidated. Added `isRetry` parameter matching `request()` pattern
+- **useAuth.ts**: `logout()` now also clears `refresh_token` from localStorage (was only clearing `token`)
+
 **Audit dashboard and portfolio pages — fix data bugs, null safety, and UX**
 - **Portfolio backend** (`portfolio.py`): `broker-portfolios` endpoint now shows agents even when broker
   is disconnected — iterates union of connected adapters and agent broker names instead of only adapters

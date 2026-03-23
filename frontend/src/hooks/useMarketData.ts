@@ -51,8 +51,8 @@ export const useMarketData = create<MarketDataState>((set) => ({
       const data = msg.data as Record<string, unknown>;
       const tick: TickData = {
         symbol: (data.symbol as string) || symbol,
-        bid: Number(data.bid) ?? 0,
-        ask: Number(data.ask) ?? 0,
+        bid: Number(data.bid) || 0,
+        ask: Number(data.ask) || 0,
         spread: Number(data.spread) || 0,
         timestamp: Number(data.timestamp) || Date.now() / 1000,
       };
