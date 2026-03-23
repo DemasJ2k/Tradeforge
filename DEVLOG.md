@@ -136,6 +136,15 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 ### March 23 — Architecture Restructuring, Mobile, & Cleanup
 
+**Wire up Backtest as top-level route, remove Strategy backtest mode**
+- `/backtest` now renders `BacktestPageContent` directly (was redirecting to `/ml?view=backtest`)
+- Added "Backtest" nav item with `BarChart3` icon to sidebar (between ML Lab and Settings)
+- Removed Strategy mode from `BacktestConfigDialog` — only Scalping Agent and Expert Agent remain (2-column grid)
+- Removed ML Enhancement section (RL agent, ML signal filter, regime model) from config dialog
+- Removed strategy fetching, `StrategySettingsModal`, and `DeployAgentDialog` from `BacktestPageContent`
+- Removed backtest view and button from ML Lab page (`/ml?view=backtest` no longer exists)
+- Cleaned up unused imports (`Play` from ml/page, `Strategy` type from BacktestPageContent)
+
 **`8376334` — Add $10K XAUUSD H1 backtest runner and results**
 - Created standalone backtest script for XAUUSD on H1 timeframe
 - $10K starting capital with realistic spread/commission
