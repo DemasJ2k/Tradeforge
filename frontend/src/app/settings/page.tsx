@@ -40,7 +40,6 @@ const ENTITY_LABELS: Record<string, { label: string; icon: string }> = {
   backtest: { label: 'Backtest', icon: '📊' },
   agent: { label: 'Agent', icon: '🤖' },
   ml_model: { label: 'ML Model', icon: '🧠' },
-  knowledge: { label: 'Article', icon: '📚' },
   conversation: { label: 'Conversation', icon: '💬' },
 };
 

@@ -5,7 +5,7 @@ import {
   Search, ChevronRight, BookOpen, Key, Database, BarChart2,
   SlidersHorizontal, Brain, TrendingUp, LayoutDashboard, Settings,
   HelpCircle, Lightbulb, AlertTriangle, Info, CheckCircle2,
-  Eye, Bell, Newspaper, Star,
+  Eye, Bell,
 } from "lucide-react";
 
 /* ─── Types ───────────────────────────────────────── */
@@ -146,9 +146,6 @@ const GUIDE_SECTIONS: GuideSection[] = [
               "Optimize — find the best parameter settings using Bayesian or Genetic algorithms.",
               "ML Lab — train machine learning models to generate or enhance trading signals.",
               "Trading — live chart with real-time prices, place orders, manage positions, run Algo Agents.",
-              "Watchlist — create symbol watchlists and set price alerts.",
-              "News — economic calendar, news feed with sentiment analysis, and AI-powered analysis.",
-              "Documents (you are here) — learning materials, quizzes, and this user guide.",
               "Settings — account, appearance, AI config, broker connections, notifications, and more.",
             ]} />
             <Tip>Press <strong>Ctrl + K</strong> at any time to open the Command Palette and quickly jump to any page, switch themes, or search for features.</Tip>
@@ -748,118 +745,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   },
 
   /* ================================================================
-     SECTION 9 — WATCHLIST
-     ================================================================ */
-  {
-    id: "watchlist",
-    title: "Watchlist & Alerts",
-    icon: <Star className="h-4 w-4" />,
-    topics: [
-      {
-        id: "watchlists",
-        title: "Creating Watchlists",
-        content: (
-          <>
-            <H2>Creating Watchlists</H2>
-            <P>The <strong>Watchlist</strong> page lets you organise symbols into custom lists for quick reference.</P>
-            <Step n={1}>Go to the <strong>Watchlist</strong> page.</Step>
-            <Step n={2}>Click <strong>New Watchlist</strong>.</Step>
-            <Step n={3}>Enter a name (e.g. &ldquo;Gold &amp; Silver&rdquo;, &ldquo;Crypto Pairs&rdquo;).</Step>
-            <Step n={4}>Optionally add initial symbols as a comma-separated list (e.g. <Code>XAUUSD, XAGUSD</Code>).</Step>
-            <Step n={5}>Click <strong>Create</strong>.</Step>
-            <H3>Managing Symbols</H3>
-            <UL items={[
-              "Click the + button on a watchlist to add a new symbol.",
-              "Click the × next to a symbol to remove it.",
-              "Rename a watchlist by clicking the edit icon.",
-              "Delete a watchlist with the trash icon.",
-            ]} />
-          </>
-        ),
-      },
-      {
-        id: "price-alerts",
-        title: "Price Alerts",
-        content: (
-          <>
-            <H2>Price Alerts</H2>
-            <P>Set alerts to be notified when a symbol reaches a specific price level or moves by a certain percentage.</P>
-            <Step n={1}>On the <strong>Watchlist</strong> page, click <strong>New Alert</strong>.</Step>
-            <Step n={2}>Enter the <strong>Symbol</strong> (e.g. <Code>XAUUSD</Code>).</Step>
-            <Step n={3}>Select the <strong>Condition</strong>:</Step>
-            <UL items={[
-              "Price Above — triggers when price rises above a level.",
-              "Price Below — triggers when price drops below a level.",
-              "% Change — triggers when price moves by a percentage.",
-            ]} />
-            <Step n={4}>Enter the <strong>Threshold</strong> value.</Step>
-            <Step n={5}>Click <strong>Create Alert</strong>.</Step>
-            <P>Active alerts appear in a list showing the symbol, condition, threshold, and whether they have been triggered. You can delete alerts that are no longer needed.</P>
-            <Note>If you have Telegram notifications enabled in Settings, triggered alerts will also be sent to your Telegram.</Note>
-          </>
-        ),
-      },
-    ],
-  },
-
-  /* ================================================================
-     SECTION 10 — NEWS & EVENTS
-     ================================================================ */
-  {
-    id: "news",
-    title: "News & Events",
-    icon: <Newspaper className="h-4 w-4" />,
-    topics: [
-      {
-        id: "economic-calendar",
-        title: "Economic Calendar",
-        content: (
-          <>
-            <H2>Economic Calendar</H2>
-            <P>The economic calendar shows upcoming and past economic events that can move markets (e.g. Non-Farm Payrolls, CPI, interest rate decisions).</P>
-            <H3>Features</H3>
-            <UL items={[
-              "Impact Filters — filter events by High, Medium, or Low impact.",
-              "Country/Currency — see which country and currency each event affects.",
-              "Actual vs Estimate — compare the actual release with the market estimate and previous value.",
-              "Time Until — see how long until each upcoming event.",
-            ]} />
-            <Tip>High-impact events (marked in red) can cause sudden, large price moves. Consider pausing Algo Agents during these events or tightening stop-losses.</Tip>
-          </>
-        ),
-      },
-      {
-        id: "news-feed",
-        title: "News Feed & AI Analysis",
-        content: (
-          <>
-            <H2>News Feed &amp; AI Analysis</H2>
-            <P>The news feed aggregates financial headlines from multiple sources. Each article shows the headline, summary, source, time, and related symbols.</P>
-            <H3>Sentiment Analysis</H3>
-            <P>FlowrexAlgo automatically analyses the sentiment of news articles:</P>
-            <UL items={[
-              "Bullish (green) — positive sentiment likely to push prices up.",
-              "Bearish (red) — negative sentiment likely to push prices down.",
-              "Neutral (grey) — no strong directional bias.",
-            ]} />
-            <P>The Sentiment Panel shows aggregate bullish/bearish percentages for each symbol based on recent articles.</P>
-            <H3>AI Trading Analysis</H3>
-            <P>Click <strong>AI Analysis</strong> on any article to get an AI-powered breakdown including:</P>
-            <UL items={[
-              "Key Points — the most important facts from the article.",
-              "Impact Assessment — how this news may affect markets.",
-              "Affected Symbols — which instruments are likely impacted.",
-              "Recommendation — a suggested trading stance (bullish/bearish/neutral) with confidence level.",
-            ]} />
-            <Note>AI analysis requires an LLM provider to be configured in <strong>Settings → AI Settings</strong>.</Note>
-          </>
-        ),
-      },
-    ],
-  },
-
-  /* ================================================================
-     SECTION 11 — DASHBOARD
+     SECTION 9 — DASHBOARD
      ================================================================ */
   {
     id: "dashboard",
