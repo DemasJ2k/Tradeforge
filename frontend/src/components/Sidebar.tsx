@@ -7,7 +7,6 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { useEffect } from "react";
 import {
   LayoutDashboard,
-  FileCode2,
   Brain,
   TrendingUp,
   Settings,
@@ -33,7 +32,6 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
-  { name: "Strategies", href: "/strategies", icon: FileCode2 },
   { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -43,7 +41,7 @@ const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: "Home", href: "/", icon: LayoutDashboard },
   { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
-  { name: "Strategies", href: "/strategies", icon: FileCode2 },
+  { name: "ML Lab", href: "/ml", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

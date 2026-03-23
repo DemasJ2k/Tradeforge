@@ -26,11 +26,9 @@ const fmtBalance = (n: number, currency: string) => {
 const ROUTE_LABELS: Record<string, string> = {
   "/": "Dashboard",
   "/data": "Data Sources",
-  "/strategies": "Strategies",
-  "/backtest": "Backtest",
-  "/optimize": "Optimization",
   "/ml": "ML Lab",
   "/trading": "Trading",
+  "/portfolio": "Portfolio",
   "/knowledge": "Documents",
   "/settings": "Settings",
 };

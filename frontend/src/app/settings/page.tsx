@@ -774,7 +774,7 @@ const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'profile',       label: 'Profile',           icon: User },
   { id: 'appearance',    label: 'Appearance',         icon: Palette },
   { id: 'ai',            label: 'AI Settings',        icon: Bot },
-  { id: 'trading',       label: 'Trading',            icon: TrendingUp },
+  { id: 'trading',       label: 'Trading & Risk',      icon: TrendingUp },
   { id: 'data',          label: 'Data Management',    icon: HardDrive },
   { id: 'notifications', label: 'Notifications',      icon: Bell },
   { id: 'platform',      label: 'Platform',           icon: Cog },
@@ -2082,15 +2082,49 @@ export default function SettingsPage() {
           {/* ─── Trading Defaults ─── */}
           {tab === 'trading' && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-lg font-semibold text-foreground">Default Trading Parameters</h2>
-              <p className="text-sm text-muted-foreground">These defaults are pre-filled when creating new backtests or strategies.</p>
+              <h2 className="text-lg font-semibold text-foreground">Trading & Risk Defaults</h2>
+              <p className="text-sm text-muted-foreground">These defaults are pre-filled when deploying new agents or running backtests.</p>
 
+              {/* Agent Defaults */}
+              <h3 className="text-md font-semibold text-foreground">Agent Defaults</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Default Agent Type">
+                  <select value={s.default_agent_type || 'scalping'} onChange={e => set('default_agent_type', e.target.value)} className={selectCls}>
+                    <option value="scalping">Scalping Agent</option>
+                    <option value="expert">Expert Agent</option>
+                  </select>
+                </Field>
+                <Field label="Default Trading Mode">
+                  <select value={s.default_trading_mode || 'paper'} onChange={e => set('default_trading_mode', e.target.value)} className={selectCls}>
+                    <option value="paper">Paper Trading</option>
+                    <option value="confirmation">Confirmation Mode</option>
+                    <option value="auto">Auto Mode</option>
+                  </select>
+                </Field>
+              </div>
+
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Risk Parameters</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Risk Per Trade (%)">
+                  <input type="text" value={s.default_risk_pct} onChange={e => set('default_risk_pct', e.target.value)} className={inputCls} />
+                </Field>
+                <Field label="Max Daily Loss (%)">
+                  <input type="text" value={s.default_max_daily_loss || '4.0'} onChange={e => set('default_max_daily_loss', e.target.value)} className={inputCls} />
+                </Field>
+                <Field label="Max Drawdown (%)">
+                  <input type="text" value={s.default_max_drawdown || '8.0'} onChange={e => set('default_max_drawdown', e.target.value)} className={inputCls} />
+                </Field>
+                <Field label="Max Open Positions">
+                  <input type="text" value={s.default_max_open_positions || '3'} onChange={e => set('default_max_open_positions', e.target.value)} className={inputCls} />
+                </Field>
+              </div>
+
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">Backtest & Market Defaults</h3>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Initial Balance ($)">
                   <input type="text" value={s.default_balance} onChange={e => set('default_balance', e.target.value)} className={inputCls} />
-                </Field>
-                <Field label="Risk Per Trade (%)">
-                  <input type="text" value={s.default_risk_pct} onChange={e => set('default_risk_pct', e.target.value)} className={inputCls} />
                 </Field>
                 <Field label="Spread (points)">
                   <input type="text" value={s.default_spread} onChange={e => set('default_spread', e.target.value)} className={inputCls} />
@@ -2105,11 +2139,11 @@ export default function SettingsPage() {
 
               <Field label="Preferred Instruments (comma-separated)">
                 <input type="text" value={s.preferred_instruments} onChange={e => set('preferred_instruments', e.target.value)}
-                  placeholder="XAUUSD, EURUSD, BTCUSD" className={inputCls} />
+                  placeholder="XAUUSD, US30, BTCUSD" className={inputCls} />
               </Field>
               <Field label="Preferred Timeframes (comma-separated)">
                 <input type="text" value={s.preferred_timeframes} onChange={e => set('preferred_timeframes', e.target.value)}
-                  placeholder="M10, H1, H4, D1" className={inputCls} />
+                  placeholder="M5, H1, H4, D1" className={inputCls} />
               </Field>
 
               <hr className="border-card-border" />
