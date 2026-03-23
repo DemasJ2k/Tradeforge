@@ -200,6 +200,15 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 **Added `CLAUDE.md`** — Project-level workflow instructions for Claude Code sessions
 
+**Fix cTrader datetime comparison error + seed Databento data sources**
+- Fixed `TypeError: can't compare offset-naive and offset-aware datetimes` in `/api/broker/trades`
+- Root cause: SQLite strips timezone info from datetimes, so DB-retrieved trades had naive timestamps
+  while cTrader live trades had timezone-aware timestamps — sorting them together caused the crash
+- Added `_ensure_aware()` helper to normalize all sort_time and duration calculations to UTC
+- Added `seed_databento_sources()` to auto-register 25 pre-downloaded Databento CSV files
+  (XAUUSD, ES, NAS100, US30, BTCUSD × M1/M5/M15/H1/H4) as public datasources at startup
+- Idempotent — skips already-registered files, runs on every server start
+
 ---
 
 ## Summary of Major Changes

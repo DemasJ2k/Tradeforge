@@ -1202,6 +1202,21 @@ def _seed_all_strategies():
         db.close()
 
 
+def _seed_databento_sources():
+    """Register pre-downloaded Databento CSV files as public datasources."""
+    from app.core.database import SessionLocal
+    from app.services.demo_setup import seed_databento_sources
+
+    _log = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        seed_databento_sources(db)
+    except Exception as e:
+        _log.error("Failed to seed Databento sources: %s", e)
+    finally:
+        db.close()
+
+
 def _register_rl_models():
     """Auto-register pre-trained RL ONNX models into the database on startup.
 
@@ -1326,6 +1341,7 @@ def _register_rl_models():
 async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
+    _seed_databento_sources()
     _register_rl_models()
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     _recalculate_agent_pnl()
