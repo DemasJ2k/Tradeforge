@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { api } from "@/lib/api";
+import { api, API_BASE } from "@/lib/api";
 
 import AgentPanel from "@/components/AgentPanel";
 import CandlestickChart, { type ChartHandle, type CandleInput, type OverlayLine } from "@/components/CandlestickChart";
@@ -1439,11 +1439,46 @@ export default function TradingPage() {
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
               >
                 <option value="oanda">Oanda (Forex/CFDs)</option>
+                <option value="ctrader">cTrader (OAuth)</option>
                 <option value="coinbase">Coinbase (Crypto)</option>
                 <option value="mt5">MetaTrader 5</option>
                 <option value="tradovate">Tradovate (Futures)</option>
               </select>
             </div>
+
+            {/* ── cTrader fields (OAuth) ── */}
+            {cBroker === "ctrader" && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  cTrader uses OAuth to connect securely. Click below to authorize with your cTrader ID.
+                </p>
+                <Button
+                  onClick={async () => {
+                    setConnecting(true);
+                    setError("");
+                    try {
+                      const token = localStorage.getItem("token");
+                      const res = await fetch(`${API_BASE}/api/broker/ctrader/auth-url`, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      });
+                      const d = await res.json();
+                      if (!res.ok) throw new Error(d.detail || "Failed to get auth URL");
+                      window.location.href = d.auth_url;
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "OAuth failed");
+                      setConnecting(false);
+                    }
+                  }}
+                  disabled={connecting}
+                  className="w-full"
+                >
+                  {connecting ? "Redirecting to cTrader..." : "Connect with cTrader ID"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  You&apos;ll be redirected to cTrader to authorize, then back to select your trading account in Settings.
+                </p>
+              </div>
+            )}
 
             {/* ── Oanda fields ── */}
             {cBroker === "oanda" && (
@@ -1541,6 +1576,7 @@ export default function TradingPage() {
               </>
             )}
 
+            {cBroker !== "ctrader" && (
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline"
                 onClick={() => setShowConnect(false)}
@@ -1554,6 +1590,7 @@ export default function TradingPage() {
                 {connecting ? "Connecting..." : "Connect"}
               </Button>
             </div>
+            )}
         </DialogContent>
       </Dialog>
 
