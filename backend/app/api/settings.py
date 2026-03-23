@@ -343,7 +343,7 @@ async def get_broker_credentials(
 
     s = _get_or_create_settings(db, current_user)
     creds = _load_broker_creds(s)
-    status = await broker_manager.get_status()
+    status = await broker_manager.get_status(user_id=current_user.id)
 
     brokers = []
     for broker_name in ["mt5", "oanda", "coinbase", "tradovate", "ctrader"]:
@@ -464,7 +464,7 @@ async def connect_saved_broker(
     else:
         raise HTTPException(400, f"Unsupported broker: {broker_name}")
 
-    success = await broker_manager.connect_broker(broker_name, adapter)
+    success = await broker_manager.connect_broker(broker_name, adapter, user_id=current_user.id)
 
     # cTrader: if connect fails, try refreshing the OAuth token and retry
     if not success and broker_name == "ctrader" and entry.get("refresh_token"):
@@ -481,7 +481,7 @@ async def connect_saved_broker(
                 account_id=entry.get("account_id", ""),
                 server="demo" if entry.get("practice", True) else "live",
             )
-            success = await broker_manager.connect_broker(broker_name, adapter)
+            success = await broker_manager.connect_broker(broker_name, adapter, user_id=current_user.id)
             if success:
                 _logger.info("cTrader connected after token refresh")
         except Exception as refresh_err:
@@ -517,7 +517,7 @@ async def auto_connect_brokers(
         try:
             # Re-use the connect endpoint logic
             from app.services.broker.manager import broker_manager
-            status = await broker_manager.get_status()
+            status = await broker_manager.get_status(user_id=current_user.id)
             if broker_name in status and status[broker_name].get("connected"):
                 results[broker_name] = "already_connected"
                 continue
@@ -565,7 +565,7 @@ async def auto_connect_brokers(
             else:
                 continue
 
-            ok = await broker_manager.connect_broker(broker_name, adapter)
+            ok = await broker_manager.connect_broker(broker_name, adapter, user_id=current_user.id)
 
             # cTrader: if connect fails, try refreshing the OAuth token and retry
             if not ok and broker_name == "ctrader" and entry.get("refresh_token"):
@@ -581,7 +581,7 @@ async def auto_connect_brokers(
                         account_id=entry.get("account_id", ""),
                         server="demo" if entry.get("practice", True) else "live",
                     )
-                    ok = await broker_manager.connect_broker(broker_name, adapter)
+                    ok = await broker_manager.connect_broker(broker_name, adapter, user_id=current_user.id)
                     if ok:
                         _logger.info("cTrader auto-connected after token refresh")
                 except Exception as refresh_err:

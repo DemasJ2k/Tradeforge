@@ -272,16 +272,20 @@ def create_invitation(
     db.commit()
     db.refresh(invite)
 
-    # Send invitation email in a background thread so the API response isn't delayed
+    # Send invitation email synchronously so we can report success/failure
+    email_sent = False
+    email_error = ""
     try:
         from app.services.email import send_invitation_email
-        thread = threading.Thread(
-            target=send_invitation_email,
-            args=(payload.email, payload.username, payload.temp_password),
-            daemon=True,
-        )
-        thread.start()
+        email_sent = send_invitation_email(payload.email, payload.username, payload.temp_password)
+        if not email_sent:
+            from app.core.config import settings as app_settings
+            if not app_settings.SMTP_SERVER or not app_settings.SMTP_USERNAME:
+                email_error = "SMTP not configured. Set SMTP_SERVER, SMTP_USERNAME, and SMTP_PASSWORD in your .env file."
+            else:
+                email_error = "Email send failed. Check SMTP credentials and server logs."
     except Exception as e:
+        email_error = f"Email error: {str(e)[:200]}"
         logging.getLogger(__name__).warning("Could not send invitation email: %s", e)
 
     return InvitationResponse(
@@ -290,6 +294,8 @@ def create_invitation(
         username=invite.username,
         status=invite.status,
         created_at=str(invite.created_at),
+        email_sent=email_sent,
+        email_error=email_error,
     )
 
 

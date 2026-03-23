@@ -123,8 +123,7 @@ async def get_portfolio_summary(
     # ── Real broker equity ──
     total_equity_usd = 0.0
     total_balance_usd = 0.0
-    for bname in broker_manager.active_brokers:
-        adapter = broker_manager.get_adapter(bname)
+    for bname, adapter in broker_manager.get_user_adapters(user.id).items():
         if not adapter:
             continue
         try:
@@ -178,8 +177,7 @@ async def get_portfolio_summary(
 
     # Count open positions across brokers
     open_positions = 0
-    for bname in broker_manager.active_brokers:
-        adapter = broker_manager.get_adapter(bname)
+    for bname, adapter in broker_manager.get_user_adapters(user.id).items():
         if adapter:
             try:
                 pos = await adapter.get_positions()
@@ -363,8 +361,7 @@ async def get_broker_portfolios(
     combined_equity_usd = 0.0
     combined_daily_pnl = 0.0
 
-    for bname in broker_manager.active_brokers:
-        adapter = broker_manager.get_adapter(bname)
+    for bname, adapter in broker_manager.get_user_adapters(user.id).items():
         broker_data = {
             "broker": bname,
             "currency": "USD",

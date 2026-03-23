@@ -51,15 +51,15 @@ async def dashboard_summary(
     combined_open_orders = 0
     combined_margin_used = 0.0
 
-    for bname in broker_manager.active_brokers:
-        adapter = broker_manager.get_adapter(bname)
+    user_adapters = broker_manager.get_user_adapters(user.id)
+    for bname, adapter in user_adapters.items():
         if not adapter:
             continue
 
         broker_info = {
             "broker": bname,
             "connected": True,
-            "is_default": bname == broker_manager.default_broker,
+            "is_default": bname == broker_manager.get_default_broker_for_user(user.id),
             "currency": "USD",
             "balance": 0.0,
             "equity": 0.0,
@@ -127,7 +127,7 @@ async def dashboard_summary(
         broker_accounts.append(broker_info)
 
     broker_connected = len(broker_accounts) > 0
-    broker_name = broker_manager.default_broker
+    broker_name = broker_manager.get_default_broker_for_user(user.id)
 
     account = {
         "balance": round(combined_balance_usd, 2),
@@ -175,8 +175,7 @@ async def dashboard_summary(
 
     # ── Today's trades — PRIMARY: broker closed trades, FALLBACK: agent DB ──
     broker_closed_trades = []
-    for bname in broker_manager.active_brokers:
-        adapter = broker_manager.get_adapter(bname)
+    for bname, adapter in broker_manager.get_user_adapters(user.id).items():
         if not adapter:
             continue
         try:

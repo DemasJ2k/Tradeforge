@@ -1441,7 +1441,8 @@ export default function SettingsPage() {
                       });
                       const d = await r.json();
                       if (r.ok) {
-                        setInvMsg(`Invitation created for ${invUsername}`);
+                        const emailNote = d.email_sent ? ' Email sent!' : ` (Warning: email not sent${d.email_error ? ' — ' + d.email_error : ''})`;
+                        setInvMsg(`Invitation created for ${invUsername}.${emailNote}`);
                         setInvEmail(''); setInvUsername(''); setInvPassword('');
                         // Refresh invitations list
                         const lr = await fetch(`${API_BASE}/api/auth/invitations`, { headers: authHeaders() });
@@ -1452,7 +1453,7 @@ export default function SettingsPage() {
                       }
                     } catch { setInvMsg('Failed to create invitation'); }
                   }} disabled={!invEmail || !invUsername || !invPassword} className={btnPrimary}>Send Invitation</button>
-                  {invMsg && <p className={`text-sm ${invMsg.includes('created') ? 'text-green-400' : 'text-red-400'}`}>{invMsg}</p>}
+                  {invMsg && <p className={`text-sm ${invMsg.includes('created') && invMsg.includes('Email sent') ? 'text-green-400' : invMsg.includes('created') ? 'text-yellow-400' : 'text-red-400'}`}>{invMsg}</p>}
 
                   {invitations.length > 0 && (
                     <div className="bg-input-bg rounded-lg border border-card-border overflow-hidden">
