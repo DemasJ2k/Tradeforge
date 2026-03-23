@@ -209,6 +209,23 @@ This was a major security and stability push — 12 commits addressing audit fin
   (XAUUSD, ES, NAS100, US30, BTCUSD × M1/M5/M15/H1/H4) as public datasources at startup
 - Idempotent — skips already-registered files, runs on every server start
 
+**Full broker audit — fix critical bugs across all 5 broker adapters**
+- **Oanda**: Fixed `close_position()` missing `abs()` on units (negative size rejected by API);
+  Fixed `get_closed_trades()` using `pnl == 0` filter which excluded breakeven trades — now uses `tradesClosed`/`tradeReduced` fields
+- **Coinbase**: **CRITICAL** — BUY market orders used `quote_size` (spend $X) instead of `base_size` (buy X units),
+  meaning "buy 1 BTC" would spend $1 instead; Added W1 timeframe mapping
+- **cTrader**: Fixed PnL fallback formula `price_diff * lot_size * 100_000` → `price_diff * volume`
+  (volume is already in units); Added `stopTriggerMethod` to trailing stop payload
+- **Tradovate**: Fixed `get_open_orders()` returning raw `contractId` integer instead of symbol name
+- **Broker API** (`broker.py`): Added try/except error handling around `modify_order`, `cancel_order`,
+  `close_position` adapter calls (were bare calls that crashed as 500 instead of returning 400)
+- **Settings** (`settings.py`): Fixed Tradovate adapter missing `app_version` and `demo` params in both
+  `connect_saved_broker` and `auto_connect_brokers`; Fixed MT5 adapter not checking `MT5_BRIDGE_URL` env var
+  for Linux/Render deployments (should use `MT5RemoteAdapter`)
+- **Data sources** (`datasource.py`): Replaced deprecated `datetime.utcfromtimestamp()` with
+  `datetime.fromtimestamp(ts, tz=timezone.utc)` (2 instances)
+- **Broker reconciler**: Widened trade query window from 5min/100 to 30min/200 to catch slow-closing trades
+
 ---
 
 ## Summary of Major Changes

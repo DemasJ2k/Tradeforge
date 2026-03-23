@@ -1,7 +1,7 @@
 import csv
 import os
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -83,7 +83,7 @@ def _parse_datetime(value: str) -> datetime | None:
     # Try unix timestamp
     try:
         ts = float(value)
-        return datetime.utcfromtimestamp(ts)
+        return datetime.fromtimestamp(ts, tz=timezone.utc)
     except (ValueError, OSError):
         pass
     return None
@@ -435,7 +435,7 @@ async def fetch_from_broker(
             first_dt = None
             last_dt = None
             for r in raw:
-                dt = datetime.utcfromtimestamp(int(r['time']))
+                dt = datetime.fromtimestamp(int(r['time']), tz=timezone.utc)
                 if first_dt is None:
                     first_dt = dt
                 last_dt = dt

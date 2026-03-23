@@ -315,7 +315,11 @@ async def close_position(
 ):
     """Close a position (fully or partially)."""
     adapter = _get_adapter(broker, user_id=user.id)
-    order = await adapter.close_position(payload.position_id, payload.size)
+    try:
+        order = await adapter.close_position(payload.position_id, payload.size)
+    except Exception as e:
+        logger.error("close_position failed for broker=%s: %s", broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to close position: {e}")
 
     # Log trade to DB
     trade = Trade(
@@ -449,7 +453,11 @@ async def modify_order(
         trailing_stop_distance=payload.trailing_stop_distance,
     )
 
-    order = await adapter.modify_order(request)
+    try:
+        order = await adapter.modify_order(request)
+    except Exception as e:
+        logger.error("modify_order failed for broker=%s: %s", payload.broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to modify order: {e}")
 
     return OrderResponse(
         order_id=order.order_id,
@@ -472,7 +480,11 @@ async def cancel_order(
 ):
     """Cancel a pending order."""
     adapter = _get_adapter(broker, user_id=user.id)
-    success = await adapter.cancel_order(order_id)
+    try:
+        success = await adapter.cancel_order(order_id)
+    except Exception as e:
+        logger.error("cancel_order failed for broker=%s: %s", broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to cancel order: {e}")
 
     if not success:
         raise HTTPException(400, f"Failed to cancel order {order_id}")

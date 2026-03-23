@@ -106,8 +106,8 @@ class BrokerReconciler:
         closed_broker_trades = []
         try:
             closed_broker_trades = await adapter.get_closed_trades(
-                since=self._last_check - timedelta(minutes=5),
-                limit=100,
+                since=self._last_check - timedelta(minutes=30),
+                limit=200,
             )
         except Exception as e:
             logger.debug("[BrokerReconciler] get_closed_trades failed for %s: %s", broker_name, e)
