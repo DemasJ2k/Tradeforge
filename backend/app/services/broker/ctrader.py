@@ -137,6 +137,7 @@ class CTraderAdapter(BrokerAdapter):
         self._symbol_cache: dict[int, dict] = {}      # symbolId -> symbol info
         self._symbol_name_to_id: dict[str, int] = {}   # "XAUUSD" -> symbolId
         self._price_cache: dict[str, PriceTick] = {}    # symbol -> last tick
+        self._position_symbol: dict[str, int] = {}     # positionId -> symbolId
         self._spot_callbacks: list = []
 
         # Rate limiting
@@ -302,20 +303,37 @@ class CTraderAdapter(BrokerAdapter):
 
     @staticmethod
     def _to_price_int(price: float, digits: int) -> int:
-        """Convert float price to cTrader integer format (× 100000)."""
+        """Convert float price to cTrader integer format (× 100000).
+
+        Only used for fields that use integer encoding (spot/trendbar).
+        """
         return int(round(price * 100000))
 
-    def _to_volume(self, lots: float) -> int:
-        """Convert lot size to cTrader volume.
+    @staticmethod
+    def _is_buy_side(trade_side) -> bool:
+        """Check if tradeSide indicates a BUY.
 
-        cTrader Open API volume = number of units.
-        1 standard lot = 100,000 units, so 0.01 lots = 1,000 units.
+        cTrader JSON API may send tradeSide as string ("BUY"/"SELL")
+        or as integer enum (1=BUY, 2=SELL).
         """
-        return int(round(lots * 100_000))
+        return trade_side in ("BUY", 1)
 
-    def _from_volume(self, volume: int) -> float:
-        """Convert cTrader volume (units) to lot size."""
-        return volume / 100_000.0
+    def _to_volume(self, lots: float, lot_size: int = 100_000) -> int:
+        """Convert lot size to cTrader volume (centos of units).
+
+        cTrader Open API volume = units × 100 (centos).
+        lot_size comes from the symbol's lotSize field (e.g. 100000 for forex, 100 for gold).
+        """
+        return int(round(lots * lot_size * 100))
+
+    def _from_volume(self, volume: int, lot_size: int = 100_000) -> float:
+        """Convert cTrader volume (centos of units) to lot size.
+
+        lot_size comes from the symbol's lotSize field.
+        """
+        if lot_size <= 0:
+            lot_size = 100_000
+        return volume / (lot_size * 100)
 
     # Common symbol aliases for broker-specific naming conventions
     _SYMBOL_ALIASES: dict[str, list[str]] = {
@@ -657,14 +675,16 @@ class CTraderAdapter(BrokerAdapter):
             sym_info = self._symbol_cache.get(symbol_id, {})
             symbol_name = sym_info.get("symbolName", str(symbol_id))
             digits = sym_info.get("digits", 5)
+            lot_size = sym_info.get("lotSize", 100_000)
 
-            is_buy = pos.get("tradeData", {}).get("tradeSide", "BUY") == "BUY"
+            is_buy = self._is_buy_side(pos.get("tradeData", {}).get("tradeSide", 1))
             volume = pos.get("tradeData", {}).get("volume", 0)
-            entry_price = self._convert_price(pos.get("price", 0), digits)
+            # Position price/SL/TP are doubles in the cTrader API (not integer-encoded)
+            entry_price = round(float(pos.get("price", 0)), digits)
 
-            # SL/TP
-            sl = self._convert_price(pos.get("stopLoss", 0), digits) if pos.get("stopLoss") else None
-            tp = self._convert_price(pos.get("takeProfit", 0), digits) if pos.get("takeProfit") else None
+            # SL/TP — also doubles
+            sl = round(float(pos.get("stopLoss", 0)), digits) if pos.get("stopLoss") else None
+            tp = round(float(pos.get("takeProfit", 0)), digits) if pos.get("takeProfit") else None
 
             # Get current price from cache
             last_tick = self._price_cache.get(symbol_name)
@@ -673,21 +693,21 @@ class CTraderAdapter(BrokerAdapter):
             # Unrealized PnL — calculate from price difference
             swap = pos.get("swap", 0) / 100
             commission = pos.get("commission", 0) / 100
-            lot_size = self._from_volume(volume)
-            pip_value = 10 ** (-digits)
+            lots = self._from_volume(volume, lot_size)
             # moneyDigits tells us the precision of monetary values (e.g. 2 for cents)
             money_digits = pos.get("moneyDigits", 2)
 
             if entry_price > 0 and current_price > 0:
                 price_diff = (current_price - entry_price) if is_buy else (entry_price - current_price)
-                pips = price_diff / pip_value
                 # Use utpList if available (cTrader's own PnL in cents), else calculate
                 utp_list = pos.get("utpList", [])
                 if utp_list:
                     # Sum monetary unrealized from cTrader's own calculation
                     unrealized = sum(u.get("money", 0) for u in utp_list) / (10 ** money_digits)
                 else:
-                    unrealized = price_diff * volume  # volume is in units from cTrader
+                    # Fallback: price_diff × units (volume in centos, so divide by 100)
+                    units = volume / 100
+                    unrealized = price_diff * units
             else:
                 unrealized = 0.0
             unrealized += swap + commission
@@ -695,11 +715,14 @@ class CTraderAdapter(BrokerAdapter):
             open_ts = pos.get("tradeData", {}).get("openTimestamp", 0)
             open_time = datetime.fromtimestamp(open_ts / 1000, tz=timezone.utc) if open_ts else datetime.now(timezone.utc)
 
+            pos_id = str(pos.get("positionId", ""))
+            self._position_symbol[pos_id] = symbol_id
+
             positions.append(Position(
-                position_id=str(pos.get("positionId", "")),
+                position_id=pos_id,
                 symbol=symbol_name,
                 side=PositionSide.LONG if is_buy else PositionSide.SHORT,
-                size=self._from_volume(volume),
+                size=lots,
                 entry_price=entry_price,
                 current_price=current_price,
                 unrealized_pnl=unrealized,
@@ -717,7 +740,10 @@ class CTraderAdapter(BrokerAdapter):
             "positionId": int(position_id),
         }
         if size is not None:
-            payload["volume"] = self._to_volume(size)
+            # Look up lot_size from cached position → symbol mapping
+            symbol_id = self._position_symbol.get(position_id, 0)
+            lot_size = self._symbol_cache.get(symbol_id, {}).get("lotSize", 100_000)
+            payload["volume"] = self._to_volume(size, lot_size)
 
         resp = await self._send(PROTO_OA_CLOSE_POSITION_REQ, payload)
         exec_payload = resp.get("payload", {})
@@ -739,26 +765,27 @@ class CTraderAdapter(BrokerAdapter):
         symbol_id = await self._resolve_symbol_id(request.symbol)
         sym_info = self._symbol_cache.get(symbol_id, {})
         digits = sym_info.get("digits", 5)
+        lot_size = sym_info.get("lotSize", 100_000)
 
         payload: dict = {
             "ctidTraderAccountId": self._account_id,
             "symbolId": symbol_id,
             "orderType": _ORDER_TYPE_MAP.get(request.order_type, "MARKET"),
             "tradeSide": "BUY" if request.side == OrderSide.BUY else "SELL",
-            "volume": self._to_volume(request.size),
+            "volume": self._to_volume(request.size, lot_size),
         }
 
-        # Price for limit/stop orders
+        # Price for limit/stop orders (API expects doubles, not integer-encoded)
         if request.price and request.order_type != OrderType.MARKET:
             payload["limitPrice" if request.order_type == OrderType.LIMIT else "stopPrice"] = (
-                self._to_price_int(request.price, digits)
+                round(request.price, digits)
             )
 
-        # SL/TP
+        # SL/TP — doubles
         if request.stop_loss:
-            payload["stopLoss"] = self._to_price_int(request.stop_loss, digits)
+            payload["stopLoss"] = round(request.stop_loss, digits)
         if request.take_profit:
-            payload["takeProfit"] = self._to_price_int(request.take_profit, digits)
+            payload["takeProfit"] = round(request.take_profit, digits)
         if request.trailing_stop_distance:
             payload["trailingStopLoss"] = True
             payload["stopTriggerMethod"] = "TRADE"
@@ -782,9 +809,9 @@ class CTraderAdapter(BrokerAdapter):
 
         filled_price = 0.0
         if position and position.get("price"):
-            filled_price = self._convert_price(position["price"], digits)
+            filled_price = round(float(position["price"]), digits)
         elif order_data and order_data.get("executionPrice"):
-            filled_price = self._convert_price(order_data["executionPrice"], digits)
+            filled_price = round(float(order_data["executionPrice"]), digits)
 
         exec_type = exec_payload.get("executionType", "")
         error_code = exec_payload.get("errorCode", "")
@@ -846,9 +873,9 @@ class CTraderAdapter(BrokerAdapter):
             pass
 
         if request.stop_loss is not None:
-            payload["stopLoss"] = self._to_price_int(request.stop_loss, digits)
+            payload["stopLoss"] = round(request.stop_loss, digits)
         if request.take_profit is not None:
-            payload["takeProfit"] = self._to_price_int(request.take_profit, digits)
+            payload["takeProfit"] = round(request.take_profit, digits)
 
         try:
             await self._send(PROTO_OA_AMEND_POSITION_SLTP_REQ, payload)
@@ -869,11 +896,11 @@ class CTraderAdapter(BrokerAdapter):
                 "orderId": int(request.order_id),
             }
             if request.price is not None:
-                order_payload["limitPrice"] = self._to_price_int(request.price, digits)
+                order_payload["limitPrice"] = round(request.price, digits)
             if request.stop_loss is not None:
-                order_payload["stopLoss"] = self._to_price_int(request.stop_loss, digits)
+                order_payload["stopLoss"] = round(request.stop_loss, digits)
             if request.take_profit is not None:
-                order_payload["takeProfit"] = self._to_price_int(request.take_profit, digits)
+                order_payload["takeProfit"] = round(request.take_profit, digits)
 
             await self._send(PROTO_OA_AMEND_ORDER_REQ, order_payload)
             return Order(
@@ -910,10 +937,12 @@ class CTraderAdapter(BrokerAdapter):
             sym_info = self._symbol_cache.get(symbol_id, {})
             symbol_name = sym_info.get("symbolName", str(symbol_id))
             digits = sym_info.get("digits", 5)
+            lot_size = sym_info.get("lotSize", 100_000)
 
-            is_buy = o.get("tradeData", {}).get("tradeSide", "BUY") == "BUY"
+            is_buy = self._is_buy_side(o.get("tradeData", {}).get("tradeSide", 1))
             volume = o.get("tradeData", {}).get("volume", 0)
-            price = self._convert_price(o.get("limitPrice", o.get("stopPrice", 0)), digits)
+            # Order prices are doubles in the cTrader API
+            price = round(float(o.get("limitPrice", o.get("stopPrice", 0))), digits)
 
             order_type_str = o.get("orderType", "MARKET")
             otype_map = {
@@ -923,15 +952,15 @@ class CTraderAdapter(BrokerAdapter):
                 "STOP_LIMIT": OrderType.STOP_LIMIT,
             }
 
-            sl = self._convert_price(o.get("stopLoss", 0), digits) if o.get("stopLoss") else None
-            tp = self._convert_price(o.get("takeProfit", 0), digits) if o.get("takeProfit") else None
+            sl = round(float(o.get("stopLoss", 0)), digits) if o.get("stopLoss") else None
+            tp = round(float(o.get("takeProfit", 0)), digits) if o.get("takeProfit") else None
 
             orders.append(Order(
                 order_id=str(o.get("orderId", "")),
                 symbol=symbol_name,
                 side=OrderSide.BUY if is_buy else OrderSide.SELL,
                 order_type=otype_map.get(order_type_str, OrderType.MARKET),
-                size=self._from_volume(volume),
+                size=self._from_volume(volume, lot_size),
                 price=price if price > 0 else None,
                 stop_loss=sl if sl and sl > 0 else None,
                 take_profit=tp if tp and tp > 0 else None,
@@ -983,10 +1012,12 @@ class CTraderAdapter(BrokerAdapter):
             symbol_name = sym_info.get("symbolName", str(symbol_id))
             digits = sym_info.get("digits", 5)
 
-            is_buy = deal.get("tradeSide", "BUY") == "BUY"
+            is_buy = self._is_buy_side(deal.get("tradeSide", 1))
             volume = deal.get("volume", 0)
-            exec_price = self._convert_price(deal.get("executionPrice", 0), digits)
-            entry_price = self._convert_price(close_pnl.get("entryPrice", 0), digits)
+            lot_size = sym_info.get("lotSize", 100_000)
+            # Deal prices are doubles in the cTrader API
+            exec_price = round(float(deal.get("executionPrice", 0)), digits)
+            entry_price = round(float(close_pnl.get("entryPrice", 0)), digits)
 
             exec_ts = deal.get("executionTimestamp", 0)
             close_time = (datetime.fromtimestamp(exec_ts / 1000, tz=timezone.utc)
@@ -996,7 +1027,7 @@ class CTraderAdapter(BrokerAdapter):
                 trade_id=str(deal.get("dealId", "")),
                 symbol=symbol_name,
                 side="BUY" if is_buy else "SELL",
-                size=self._from_volume(volume),
+                size=self._from_volume(volume, lot_size),
                 entry_price=entry_price,
                 exit_price=exec_price,
                 pnl=pnl,
