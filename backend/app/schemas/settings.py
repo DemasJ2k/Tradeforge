@@ -42,6 +42,13 @@ class SettingsUpdate(BaseModel):
     # Broker
     default_broker: Optional[str] = None
 
+    # Agent defaults
+    default_agent_type: Optional[str] = None
+    default_trading_mode: Optional[str] = None
+    default_max_daily_loss: Optional[str] = None
+    default_max_drawdown: Optional[str] = None
+    default_max_open_positions: Optional[str] = None
+
     # Data management
     csv_retention_days: Optional[int] = None
     export_format: Optional[str] = None
@@ -105,6 +112,13 @@ class SettingsResponse(BaseModel):
 
     # Broker
     default_broker: str = ""
+
+    # Agent defaults
+    default_agent_type: str = "scalping"
+    default_trading_mode: str = "paper"
+    default_max_daily_loss: str = "4.0"
+    default_max_drawdown: str = "8.0"
+    default_max_open_positions: str = "3"
 
     # Data management
     csv_retention_days: int = 0
