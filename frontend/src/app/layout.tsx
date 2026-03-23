@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import AuthGate from "@/components/AuthGate";
@@ -21,6 +21,12 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: "FlowrexAlgo",
@@ -47,7 +53,7 @@ export default function RootLayout({
               <Sidebar />
               <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                 <TopBar />
-                <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-20 md:pb-6">
+                <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-16 md:pb-6">
                   <PageErrorBoundary>{children}</PageErrorBoundary>
                 </main>
               </div>

@@ -150,8 +150,9 @@ function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-fa-sidebar-bg border-t border-fa-card-border safe-area-bottom">
-      <div className="flex items-center justify-around h-14">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-fa-sidebar-bg border-t border-fa-card-border"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+      <div className="flex items-center justify-around h-12">
         {MOBILE_NAV_ITEMS.map((item) => {
           const isActive =
             item.href === "/"
@@ -208,7 +209,7 @@ export default function Sidebar() {
             onClick={() => setMobileOpen(false)}
           />
           {/* Drawer */}
-          <aside className="absolute left-0 top-0 h-full w-64 flex flex-col bg-fa-sidebar-bg border-r border-fa-card-border shadow-2xl animate-in slide-in-from-left duration-200">
+          <aside className="absolute left-0 top-0 h-full w-52 flex flex-col bg-fa-sidebar-bg border-r border-fa-card-border shadow-2xl animate-in slide-in-from-left duration-200">
             <SidebarContent isMobile />
           </aside>
         </div>
