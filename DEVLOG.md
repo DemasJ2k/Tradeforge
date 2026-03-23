@@ -251,6 +251,21 @@ This was a major security and stability push — 12 commits addressing audit fin
   when paper trades close. Previously, open position count stayed stale and portfolio circuit breaker never
   triggered because daily_pnl was never updated from actual trade results
 
+**Audit dashboard and portfolio pages — fix data bugs, null safety, and UX**
+- **Portfolio backend** (`portfolio.py`): `broker-portfolios` endpoint now shows agents even when broker
+  is disconnected — iterates union of connected adapters and agent broker names instead of only adapters
+- **Portfolio backend** (`portfolio.py`): Added input validation on settings endpoint — percentage fields
+  must be 0-100, max_concurrent_positions must be 1-100
+- **Portfolio frontend** (`portfolio/page.tsx`): Fixed equity curve Y-axis — `Math.min(...array, 0)` always
+  set minimum to 0 for positive equities. Fixed to `Math.min(...eqValues)` without extra 0 argument
+- **Portfolio frontend** (`portfolio/page.tsx`): Added null safety (`.?? 0`) on AgentCard daily_pnl,
+  total_pnl, win_rate, total_trades fields to prevent crashes when API returns null
+- **Portfolio frontend** (`portfolio/page.tsx`): Added Loader2 spinner and disabled state on Pause/Play
+  buttons during API calls
+- **Dashboard frontend** (`page.tsx`): Fixed "ML Models" Quick Overview stat that was showing backtest
+  count (`data.backtests.total`) — relabeled to "Backtests" since actual ML model data is in MLStatusWidget
+- **Dashboard frontend** (`page.tsx`): Removed unused imports (`Zap`, `Building2`, `AlertTriangle`)
+
 ---
 
 ## Summary of Major Changes

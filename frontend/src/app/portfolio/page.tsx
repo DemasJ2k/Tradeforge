@@ -13,7 +13,7 @@ import {
 import {
   TrendingDown, Shield, AlertTriangle,
   Pause, Play, Square, Bot, Activity, DollarSign, BarChart3,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Loader2,
 } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -101,6 +101,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [expandedBrokers, setExpandedBrokers] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [acting, setActing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -141,20 +142,26 @@ export default function PortfolioPage() {
 
   /* ─── Global Actions ─── */
   const handlePauseAll = async () => {
+    setActing(true);
     try {
       await api.post("/api/portfolio/pause-all", {});
-      loadData();
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to pause agents");
+    } finally {
+      setActing(false);
     }
   };
 
   const handleUnpause = async () => {
+    setActing(true);
     try {
       await api.post("/api/portfolio/unpause", {});
-      loadData();
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume portfolio");
+    } finally {
+      setActing(false);
     }
   };
 
@@ -222,16 +229,16 @@ export default function PortfolioPage() {
           </Badge>
           {hasAnyAgents && (
             isPaused ? (
-              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
-                <Play className="h-3.5 w-3.5" /> Play All
+              <Button size="sm" variant="outline" onClick={handleUnpause} disabled={acting} className="gap-1.5">
+                {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} Play All
               </Button>
             ) : hasRunningAgents ? (
-              <Button size="sm" variant="destructive" onClick={handlePauseAll} className="gap-1.5">
-                <Pause className="h-3.5 w-3.5" /> Pause All
+              <Button size="sm" variant="destructive" onClick={handlePauseAll} disabled={acting} className="gap-1.5">
+                {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />} Pause All
               </Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
-                <Play className="h-3.5 w-3.5" /> Play All
+              <Button size="sm" variant="outline" onClick={handleUnpause} disabled={acting} className="gap-1.5">
+                {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} Play All
               </Button>
             )
           )}
@@ -448,8 +455,9 @@ export default function PortfolioPage() {
           {equityCurve.length > 0 ? (
             <div className="h-48 sm:h-64 lg:h-80 flex items-end gap-[1px]">
               {(() => {
-                const maxEq = Math.max(...equityCurve.map(p => p.equity), 1);
-                const minEq = Math.min(...equityCurve.map(p => p.equity), 0);
+                const eqValues = equityCurve.map(p => p.equity);
+                const maxEq = Math.max(...eqValues, 1);
+                const minEq = Math.min(...eqValues);
                 const range = maxEq - minEq || 1;
                 return equityCurve.map((p, i) => (
                   <div
@@ -585,25 +593,25 @@ function AgentCard({
         <div className="grid grid-cols-4 gap-2 text-xs mb-3">
           <div>
             <div className="text-muted-foreground">Daily</div>
-            <div className={`font-medium ${agent.daily_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {agent.daily_pnl >= 0 ? "+" : ""}${agent.daily_pnl.toFixed(2)}
+            <div className={`font-medium ${(agent.daily_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {(agent.daily_pnl ?? 0) >= 0 ? "+" : ""}${(agent.daily_pnl ?? 0).toFixed(2)}
             </div>
           </div>
           <div>
             <div className="text-muted-foreground">Total</div>
-            <div className={`font-medium ${agent.total_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {agent.total_pnl >= 0 ? "+" : ""}${agent.total_pnl.toFixed(2)}
+            <div className={`font-medium ${(agent.total_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {(agent.total_pnl ?? 0) >= 0 ? "+" : ""}${(agent.total_pnl ?? 0).toFixed(2)}
             </div>
           </div>
           <div>
             <div className="text-muted-foreground">Win Rate</div>
             <div className="font-medium text-foreground">
-              {agent.win_rate > 0 ? `${agent.win_rate.toFixed(1)}%` : "\u2014"}
+              {(agent.win_rate ?? 0) > 0 ? `${agent.win_rate.toFixed(1)}%` : "\u2014"}
             </div>
           </div>
           <div>
             <div className="text-muted-foreground">Trades</div>
-            <div className="font-medium text-foreground">{agent.total_trades}</div>
+            <div className="font-medium text-foreground">{agent.total_trades ?? 0}</div>
           </div>
         </div>
 
