@@ -238,6 +238,19 @@ This was a major security and stability push — 12 commits addressing audit fin
 - **ML Backend**: LSTM model type now transparently updates to "ensemble" in DB after training redirects
   (previously showed "lstm" in UI even though ensemble was actually trained)
 
+**Fix critical agent engine bugs found in deep backend audit**
+- **CRITICAL — Trade confirmation direction flip** (`agent.py` line 509): `trade.direction == "long"` should
+  be `"BUY"` — DB stores "BUY"/"SELL", not "long"/"short". All confirmed trades were executing in the
+  **opposite direction** (BUY became SELL and vice versa)
+- **AttributeError fixes** (`engine.py`): `self._agent_id` → `self.agent_id` and `signal.symbol` → `self._symbol`
+  in prop firm block broadcast — was crashing with AttributeError when prop firm rules rejected a trade
+- **TradeMonitor dynamic symbol subscription**: Was hardcoded to 6 symbols — added `ensure_symbol_subscribed()`
+  so agents trading unlisted symbols (BTCUSD, ES, NQ, etc.) get proper SL/TP monitoring. Also expanded default
+  set to include BTCUSD, ETHUSD, ES, NQ
+- **Risk/Portfolio Manager trade close callbacks**: TradeMonitor now notifies RiskManager and PortfolioManager
+  when paper trades close. Previously, open position count stayed stale and portfolio circuit breaker never
+  triggered because daily_pnl was never updated from actual trade results
+
 ---
 
 ## Summary of Major Changes
