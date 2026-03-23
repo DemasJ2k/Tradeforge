@@ -89,8 +89,12 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
         code = store_otp(user, db)
         sent = send_otp_email(user, code)
         if not sent:
-            logging.getLogger(__name__).warning(
-                "2FA OTP email failed for user %s – allowing login anyway", user.username
+            logging.getLogger(__name__).error(
+                "2FA OTP email failed for user %s – blocking login", user.username
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Could not send 2FA verification email. Please try again or contact admin."
             )
 
     return Token(
