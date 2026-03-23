@@ -191,6 +191,15 @@ This was a major security and stability push — 12 commits addressing audit fin
 **`b85feb0` — Security hardening and frontend dead reference cleanup**
 - Final pass cleaning up dead imports and references to removed pages
 
+**`b09d47d` — Fix Portfolio Play/Pause toggle and Settings trading mode save**
+- Portfolio "Pause All" button now correctly toggles to "Play All" (was "Resume All")
+- Fixed toggle logic: Paused → Play All, Running → Pause All, All stopped → Play All
+- Fixed Settings "Save Trading Defaults" missing 5 fields from save payload:
+  `default_agent_type`, `default_trading_mode`, `default_max_daily_loss`, `default_max_drawdown`, `default_max_open_positions`
+- These fields were never sent to the backend, causing changes to revert on page refresh
+
+**Added `CLAUDE.md`** — Project-level workflow instructions for Claude Code sessions
+
 ---
 
 ## Summary of Major Changes
