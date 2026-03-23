@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
-import { Loader2, ArrowLeft, Brain, Trash2, Play, BarChart3, GitCompare, RefreshCw, Download, Upload, Database, Zap, Target, ChevronRight, Signal } from "lucide-react";
+import { Loader2, ArrowLeft, Brain, Trash2, BarChart3, GitCompare, RefreshCw, Download, Upload, Database, Zap, Target, ChevronRight, Signal } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,9 +61,9 @@ export default function MLPage() {
   const searchParams = useSearchParams();
 
   /* ── state ──────────────────────────────────── */
-  const [view, setView] = useState<"list" | "detail" | "compare" | "retrain" | "backtest" | "data">(() => {
+  const [view, setView] = useState<"list" | "detail" | "compare" | "retrain" | "data">(() => {
     const v = searchParams.get("view");
-    if (v === "backtest" || v === "retrain" || v === "data") return v;
+    if (v === "retrain" || v === "data") return v;
     return "list";
   });
   const [models, setModels] = useState<MLModelListItem[]>([]);
@@ -371,9 +371,6 @@ export default function MLPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setView("data"); setError(""); loadDabentoDatasets(); }} className="gap-1.5">
             <Database className="h-4 w-4" /> Data Sources
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setView("backtest")} className="gap-1.5">
-            <BarChart3 className="h-4 w-4" /> Backtest
           </Button>
           <Button size="sm" onClick={() => setView("retrain")} className="gap-1.5">
             <RefreshCw className="h-4 w-4" /> Retrain Pipelines
@@ -1072,51 +1069,6 @@ export default function MLPage() {
               </CardContent>
             </Card>
           )}
-        </div>
-      )}
-
-      {/* ── BACKTEST VIEW ───────────────────────── */}
-      {view === "backtest" && (
-        <div className="space-y-4">
-          <Card className="bg-card-bg border-card-border">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <BarChart3 className="h-5 w-5 text-accent" />
-                <div>
-                  <h3 className="text-sm font-semibold">Model Backtesting</h3>
-                  <p className="text-xs text-muted-foreground">Run backtests on trained ML models to validate performance before deploying agents.</p>
-                </div>
-              </div>
-              {models.filter(m => m.status === "ready").length === 0 ? (
-                <div className="text-center py-8">
-                  <Brain className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No trained models available for backtesting.</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setView("retrain")}>
-                    Train Models First
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {models.filter(m => m.status === "ready").map(m => (
-                    <div key={m.id} className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3 hover:border-accent/20 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-accent/15 flex items-center justify-center text-[10px] font-bold text-accent">
-                          {m.model_type.charAt(0).toUpperCase()}{m.model_type.charAt(1)}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{m.name}</div>
-                          <div className="text-xs text-muted-foreground">{m.model_type} · {m.symbol} · {m.timeframe} · Val: {pct(m.val_accuracy)}</div>
-                        </div>
-                      </div>
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openDetail(m.id)}>
-                        <Play className="h-3.5 w-3.5" /> View Details
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       )}
 

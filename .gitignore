@@ -17,6 +17,7 @@ env/
 *.log
 build_output.txt
 frontend_log.txt
+claude_logs.md
 
 # Project local data artifacts
 backend/data/ml_models/

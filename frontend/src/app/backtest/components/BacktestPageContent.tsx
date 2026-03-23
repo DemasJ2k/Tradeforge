@@ -10,38 +10,28 @@
  *  - BacktestConfigDialog (modal to configure and launch backtests)
  *  - BacktestDashboard (full results dashboard with tabs)
  *  - RunHistorySidebar (past runs with compare)
- *  - StrategySettingsModal (edit strategy settings inline)
- *  - DeployAgentDialog (deploy winning strategy as agent)
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type {
-  Strategy,
   DataSource,
   BacktestResponse,
   BacktestListItem,
 } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Play, History, Plus, Loader2, BarChart3, Settings, Rocket, Database, FlaskConical } from 'lucide-react';
+import { Play, History, Plus, Loader2, BarChart3, Database, FlaskConical } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/Skeletons';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import BacktestConfigDialog from './BacktestConfigDialog';
 import BacktestDashboard from './BacktestDashboard';
 import RunHistorySidebar from './RunHistorySidebar';
-import StrategySettingsModal from '@/components/StrategySettingsModal';
-import DeployAgentDialog from './DeployAgentDialog';
 import DataSourcesPanel from './DataSourcesPanel';
 import WalkForwardPanel from './WalkForwardPanel';
 
-interface BacktestPageContentProps {
-  defaultStrategyId?: number;
-}
-
-export default function BacktestPageContent({ defaultStrategyId }: BacktestPageContentProps = {}) {
+export default function BacktestPageContent() {
   const isMobile = useIsMobile();
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [datasources, setDatasources] = useState<DataSource[]>([]);
   const [history, setHistory] = useState<BacktestListItem[]>([]);
   const [result, setResult] = useState<BacktestResponse | null>(null);
@@ -50,31 +40,19 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
   const [loading, setLoading] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(!isMobile);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [deployOpen, setDeployOpen] = useState(false);
-  const [lastRunConfig, setLastRunConfig] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<'backtest' | 'datasources' | 'walkforward'>('backtest');
 
   // Load initial data
   useEffect(() => {
     Promise.all([
-      api.get<{ items: Strategy[] }>('/api/strategies').catch(() => ({ items: [] })),
       api.get<{ items: DataSource[] }>('/api/data/sources').catch(() => ({ items: [] })),
       api.get<BacktestListItem[] | { items: BacktestListItem[] }>('/api/backtest').catch(() => []),
-    ]).then(([strats, ds, hist]) => {
-      setStrategies(Array.isArray(strats) ? strats : (strats as { items: Strategy[] }).items || []);
+    ]).then(([ds, hist]) => {
       setDatasources(Array.isArray(ds) ? ds : (ds as { items: DataSource[] }).items || []);
       const histItems = Array.isArray(hist) ? hist : (hist as { items: BacktestListItem[] }).items || [];
       setHistory(histItems);
     }).catch(console.error).finally(() => setInitialLoading(false));
   }, []);
-
-  // Auto-open config dialog when defaultStrategyId is passed
-  useEffect(() => {
-    if (defaultStrategyId && !initialLoading && strategies.length > 0) {
-      setConfigOpen(true);
-    }
-  }, [defaultStrategyId, initialLoading, strategies.length]);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -111,7 +89,6 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
     setLoading(true);
     setConfigOpen(false);
     setCompareResult(null);
-    setLastRunConfig(config);
     try {
       const res = await api.post<{ id: number; status: string }>('/api/backtest/run-v3', {
         ...config,
@@ -221,22 +198,6 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
     } catch { /* ignore */ }
   }, [refreshHistory, result, compareResult]);
 
-  const activeStrategy = result
-    ? strategies.find(s => s.id === result.strategy_id) ?? null
-    : null;
-
-  const handleSettingsSaved = useCallback((updated: Strategy) => {
-    setStrategies(prev => prev.map(s => s.id === updated.id ? updated : s));
-    setSettingsOpen(false);
-    if (lastRunConfig && Number(lastRunConfig.strategy_id) === updated.id) {
-      if (confirm('Settings saved. Re-run the backtest with updated settings?')) {
-        handleRunBacktest(lastRunConfig as Parameters<typeof handleRunBacktest>[0]);
-      }
-    }
-  }, [lastRunConfig, handleRunBacktest]);
-
-  const hasSettings = activeStrategy && activeStrategy.settings_schema?.length > 0;
-  const isProfitable = result && result.stats?.net_profit > 0;
 
   if (initialLoading) return <PageSkeleton />;
 
@@ -298,30 +259,6 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
         </div>
         {activeTab === 'backtest' && (
           <div className="flex items-center gap-2">
-            {hasSettings && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSettingsOpen(true)}
-                className="gap-1.5"
-                title="Edit strategy settings and re-run"
-              >
-                <Settings className="w-4 h-4" />
-                {!isMobile && 'Edit Strategy'}
-              </Button>
-            )}
-            {isProfitable && activeStrategy && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDeployOpen(true)}
-                className="gap-1.5 border-green-500/40 text-green-400 hover:bg-green-500/10"
-                title="Deploy this strategy as a trading agent"
-              >
-                <Rocket className="w-4 h-4" />
-                {!isMobile && 'Deploy Agent'}
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -429,29 +366,9 @@ export default function BacktestPageContent({ defaultStrategyId }: BacktestPageC
       <BacktestConfigDialog
         open={configOpen}
         onOpenChange={setConfigOpen}
-        strategies={strategies}
         datasources={datasources}
-        defaultStrategyId={defaultStrategyId}
         onRun={handleRunBacktest}
       />
-
-      {settingsOpen && activeStrategy && (
-        <StrategySettingsModal
-          strategy={activeStrategy}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={handleSettingsSaved}
-        />
-      )}
-
-      {deployOpen && activeStrategy && result && (
-        <DeployAgentDialog
-          strategy={activeStrategy}
-          symbol={result.stats ? (history.find(h => h.id === result.id)?.symbol || '') : ''}
-          timeframe={history.find(h => h.id === result.id)?.timeframe || ''}
-          stats={result.stats}
-          onClose={() => setDeployOpen(false)}
-        />
-      )}
     </div>
     </ErrorBoundary>
   );

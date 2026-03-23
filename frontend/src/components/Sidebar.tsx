@@ -14,6 +14,7 @@ import {
   PanelLeft,
   X,
   PieChart,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Trading", href: "/trading", icon: TrendingUp },
   { name: "ML Lab", href: "/ml", icon: Brain },
+  { name: "Backtest", href: "/backtest", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

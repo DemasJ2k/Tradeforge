@@ -11,7 +11,7 @@ class Backtest(Base):
     __tablename__ = "backtests"
 
     id = Column(Integer, primary_key=True, index=True)
-    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=True)  # Nullable for agent backtests
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     symbol = Column(String(20), nullable=False)
     timeframe = Column(String(10), nullable=False)
