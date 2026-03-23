@@ -251,6 +251,25 @@ This was a major security and stability push — 12 commits addressing audit fin
   when paper trades close. Previously, open position count stayed stale and portfolio circuit breaker never
   triggered because daily_pnl was never updated from actual trade results
 
+**Fix cTrader adapter: wrong position side, entry price, size, and P&L**
+- **Root cause**: Three interrelated encoding bugs in `ctrader.py`:
+  1. **Price fields** (`price`, `stopLoss`, `takeProfit`) in positions/orders/deals are `double`
+     in the cTrader API (already human-readable floats like 4458.55), but the code applied
+     `_convert_price()` which divides by 100000, producing values like 0.04 instead of 4458.55
+  2. **tradeSide enum** comes as integer (1=BUY, 2=SELL) in JSON mode, but code compared against
+     string `"BUY"`, causing all BUY positions to display as SHORT
+  3. **Volume** is in "centos" (units × 100) and requires the symbol's `lotSize` for conversion
+     to lots. Code used a fixed 100000 divisor that only worked for forex pairs; for XAUUSD
+     (lotSize=100), 0.50 lots showed as 0.05
+- **P&L impact**: Wrong entry price + wrong side + wrong size cascaded into a P&L of -22M instead
+  of the actual -427
+- Fixed `_from_volume`/`_to_volume` to accept symbol `lotSize` parameter
+- Fixed `place_order`, `modify_order` to send SL/TP/price as doubles (not integer × 100000)
+- Added `_is_buy_side()` helper to handle both string and integer tradeSide values
+- Added `_position_symbol` cache for close_position volume conversion
+- Note: `_convert_price()` is still correctly used for spot events and trendbar (candle) data
+  which DO use integer encoding (uint64) in the cTrader API
+
 **Fix frontend security and data integrity issues from broad audit**
 - **useMarketData.ts**: `Number(data.bid) ?? 0` → `|| 0` — `Number()` returns `NaN` not `null`,
   so `??` never triggered, allowing `NaN` to propagate to charts and P&L calculations
