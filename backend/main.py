@@ -27,7 +27,6 @@ from app.api import settings as settings_api
 from app.api import llm as llm_api
 from app.api import optimization as optimization_api
 from app.api import broker as broker_api
-from app.api import knowledge as knowledge_api
 from app.api import ml as ml_api
 from app.api import market as market_api
 from app.api import websocket as ws_api
@@ -35,8 +34,6 @@ from app.api import agent as agent_api
 from app.api import dashboard as dashboard_api
 from app.api import recycle_bin as recycle_bin_api
 from app.api import optimization_phase as optimization_phase_api
-from app.api import news as news_api
-from app.api import watchlist as watchlist_api
 from app.api import webhook as webhook_api
 from app.api import telegram_webhook as telegram_webhook_api
 from app.api import prop_firm as prop_firm_api
@@ -580,15 +577,12 @@ app.include_router(llm_api.router)
 app.include_router(optimization_api.router)
 app.include_router(optimization_phase_api.router)
 app.include_router(broker_api.router)
-# app.include_router(knowledge_api.router)  # Removed in v2 — page deleted
 app.include_router(ml_api.router)
 app.include_router(market_api.router)
 app.include_router(ws_api.router)
 app.include_router(agent_api.router)
 app.include_router(dashboard_api.router)
 app.include_router(recycle_bin_api.router)
-# app.include_router(news_api.router)  # Removed in v2 — page deleted
-# app.include_router(watchlist_api.router)  # Removed in v2 — page deleted
 app.include_router(webhook_api.router)
 app.include_router(telegram_webhook_api.router)
 app.include_router(prop_firm_api.router)
