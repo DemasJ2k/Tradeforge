@@ -592,34 +592,58 @@ app.include_router(portfolio_api.router)
 
 
 def _seed_admin_user():
-    """Create or reset the default admin user."""
+    """Create admin user on first run only. Never resets existing passwords."""
     from app.core.database import SessionLocal
     from app.models.user import User
     from app.core.auth import hash_password
 
+    _log = logging.getLogger(__name__)
+    admin_user = os.environ.get("ADMIN_USERNAME", "FlowrexAdmin")
+    admin_pass = os.environ.get("ADMIN_PASSWORD", "")
+
+    if not admin_pass:
+        _log.warning(
+            "ADMIN_PASSWORD env var not set. "
+            "Set ADMIN_USERNAME and ADMIN_PASSWORD in your environment to create the admin account."
+        )
+        # Only skip if admin already exists; if no admin exists at all, generate a random password
+        db = SessionLocal()
+        try:
+            if db.query(User).filter(User.is_admin == True).first():
+                return  # Admin exists, nothing to do
+            # First-time bootstrap: generate a random password and log it
+            import secrets
+            admin_pass = secrets.token_urlsafe(16)
+            _log.warning(
+                "No admin user exists and ADMIN_PASSWORD not set. "
+                "Generated temporary admin password — check logs. "
+                "Change it immediately after first login."
+            )
+            _log.info(">>> Temporary admin credentials: %s / %s <<<", admin_user, admin_pass)
+        finally:
+            db.close()
+
+    admin_email = os.environ.get("ADMIN_EMAIL", "")
+
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.username == "FlowrexAdmin").first()
+        existing = db.query(User).filter(User.username == admin_user).first()
         if existing:
-            # Reset password to known value
-            existing.password_hash = hash_password("Flowrex2025!")
-            existing.must_change_password = False
-            db.commit()
-            logging.getLogger(__name__).info("Admin password reset to default")
+            _log.info("Admin user '%s' already exists — skipping password reset", admin_user)
             return
         admin = User(
-            username="FlowrexAdmin",
-            password_hash=hash_password("Flowrex2025!"),
-            email="",
+            username=admin_user,
+            password_hash=hash_password(admin_pass),
+            email=admin_email,
             is_admin=True,
             must_change_password=False,
         )
         db.add(admin)
         db.commit()
-        logging.getLogger(__name__).info("Default admin user 'FlowrexAdmin' created")
+        _log.info("Admin user '%s' created successfully", admin_user)
     except Exception as e:
         db.rollback()
-        logging.getLogger(__name__).error("Failed to seed admin user: %s", e)
+        _log.error("Failed to seed admin user: %s", e)
     finally:
         db.close()
 

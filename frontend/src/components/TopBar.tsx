@@ -29,7 +29,6 @@ const ROUTE_LABELS: Record<string, string> = {
   "/ml": "ML Lab",
   "/trading": "Trading",
   "/portfolio": "Portfolio",
-  "/knowledge": "Documents",
   "/settings": "Settings",
 };
 

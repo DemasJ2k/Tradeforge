@@ -135,36 +135,6 @@ function getHelperButtons(pathname: string): HelperButton[] {
     ];
   }
 
-  // Knowledge base page helpers
-  if (pathname.includes("/knowledge")) {
-    return [
-      {
-        icon: "📝",
-        label: "Generate article",
-        prompt: "Write an educational article about momentum trading strategies, including entry methods, risk management, and real-world examples.",
-        color: "accent",
-      },
-      {
-        icon: "📚",
-        label: "Create study guide",
-        prompt: "Create a study guide covering fundamental concepts: volatility, correlation, sharpe ratio, and their impact on portfolio design.",
-        color: "success",
-      },
-      {
-        icon: "❓",
-        label: "Create quiz",
-        prompt: "Create a quiz with 5 questions about technical indicators (RSI, MACD, Bollinger Bands) with explanations for each answer.",
-        color: "info",
-      },
-      {
-        icon: "💬",
-        label: "Q&A mode",
-        prompt: "I have questions about risk management in trading. Can you answer whatever questions I ask about position sizing, stop losses, and portfolio allocation?",
-        color: "accent",
-      },
-    ];
-  }
-
   // Data page helpers
   if (pathname.includes("/data")) {
     return [
