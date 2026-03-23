@@ -226,6 +226,13 @@ def train_expert_tree(
     X_clean = X[valid]
     y_clean = y[valid]
 
+    # Map triple-barrier targets to integer classes: 0.0→0 (SL), 0.5→1 (neutral), 1.0→2 (TP)
+    unique_vals = np.unique(y_clean)
+    if not np.array_equal(unique_vals.astype(int), unique_vals):
+        label_map = {v: i for i, v in enumerate(sorted(unique_vals))}
+        y_clean = np.array([label_map[v] for v in y_clean], dtype=np.int64)
+        print(f"    Mapped targets: {label_map}")
+
     if len(X_clean) < 500:
         print(f"    SKIP: Only {len(X_clean)} valid samples, need 500")
         return None
@@ -355,6 +362,10 @@ def train_expert_lstm(
     X_clean = X[valid]
     y_clean = y[valid]
 
+    # Convert to binary for BCE: TP (1.0) → 1, everything else → 0
+    y_clean = (y_clean == 1.0).astype(np.float32)
+    print(f"    Binary target: {y_clean.mean():.3f} positive rate")
+
     if len(X_clean) < 500:
         print(f"    SKIP: Only {len(X_clean)} valid samples")
         return None
@@ -414,10 +425,10 @@ def train_expert_lstm(
 
     train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
     val_ds = TensorDataset(torch.tensor(X_val), torch.tensor(y_val))
-    train_dl = DataLoader(train_ds, batch_size=64, shuffle=True)
-    val_dl = DataLoader(val_ds, batch_size=128)
+    train_dl = DataLoader(train_ds, batch_size=256, shuffle=True)
+    val_dl = DataLoader(val_ds, batch_size=512)
 
-    epochs = 10 if quick else 40
+    epochs = 5 if quick else 15
     best_val_acc = 0.0
     best_state = None
 
@@ -451,7 +462,7 @@ def train_expert_lstm(
             best_val_acc = val_acc
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
 
-        if (epoch + 1) % 10 == 0 or epoch == 0:
+        if (epoch + 1) % 5 == 0 or epoch == 0:
             print(f"      Epoch {epoch + 1}/{epochs}: loss={train_loss / len(train_dl):.4f}, val_acc={val_acc:.4f}")
 
     print(f"    Best val accuracy: {best_val_acc:.4f}")
@@ -547,7 +558,8 @@ def train_expert_meta_labeler(
     lgb_conf = np.max(lgb_model.predict_proba(X_clean), axis=1) if hasattr(lgb_model, "predict_proba") else np.full(len(X_clean), 0.5)
 
     # Ensemble direction: majority vote
-    ensemble_dir = np.where(xgb_pred + lgb_pred >= 1.0, 1.0, -1.0)
+    # Classes: 0=SL(bearish), 1=neutral, 2=TP(bullish)
+    ensemble_dir = np.where(xgb_pred + lgb_pred >= 3.0, 1.0, -1.0)  # both predict TP → bullish
     ensemble_conf = (xgb_conf * 0.5 + lgb_conf * 0.5)
     agreement = np.where(xgb_pred == lgb_pred, 1.0, 0.5)
 
@@ -564,6 +576,9 @@ def train_expert_meta_labeler(
             0.0,  # everything else → wrong
         ),
     )
+
+    # Ensure integer labels for XGBClassifier
+    meta_target = meta_target.astype(np.int64)
 
     # Split
     split = int(len(meta_features) * 0.8)
@@ -664,9 +679,10 @@ def train_symbol(symbol: str, quick: bool = False, skip_download: bool = False):
             csv_path = DATA_DIR / f"{BROKER_ALIAS.get(cme_sym, symbol)}_{tf}.csv"
         if csv_path.exists():
             data = load_csv(str(csv_path))
-            # Cap data size
-            if len(data) > 300_000:
-                data = data[-300_000:]
+            # Cap data size — 100K M5 bars ≈ 347 trading days, enough for training
+            # while keeping O(n²) feature loops tractable
+            if len(data) > 100_000:
+                data = data[-100_000:]
             timeframes[tf] = data
             print(f"  {tf}: {len(data):,} bars loaded")
         else:
