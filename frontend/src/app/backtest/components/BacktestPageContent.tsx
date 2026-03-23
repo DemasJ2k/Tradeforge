@@ -90,7 +90,7 @@ export default function BacktestPageContent() {
     setConfigOpen(false);
     setCompareResult(null);
     try {
-      const res = await api.post<{ id: number; status: string }>('/api/backtest/run-v3', {
+      const res = await api.post<{ id: number; status: string }>('/api/backtest/run', {
         ...config,
         engine_version: 'v3',
       });
