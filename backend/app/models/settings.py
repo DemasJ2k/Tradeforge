@@ -50,6 +50,13 @@ class UserSettings(Base):
     default_broker = Column(String(20), default="")
     broker_api_keys = Column(Text, default="")  # encrypted JSON blob
 
+    # --- Agent Defaults ---
+    default_agent_type = Column(String(20), default="scalping")       # scalping | expert
+    default_trading_mode = Column(String(20), default="paper")        # paper | confirmation | auto
+    default_max_daily_loss = Column(String(10), default="4.0")
+    default_max_drawdown = Column(String(10), default="8.0")
+    default_max_open_positions = Column(String(10), default="3")
+
     # --- Data Management ---
     csv_retention_days = Column(Integer, default=0)  # 0=keep forever
     export_format = Column(String(10), default="csv")  # csv, json

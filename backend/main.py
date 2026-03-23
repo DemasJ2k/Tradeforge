@@ -245,6 +245,92 @@ def _fix_boolean_columns():
 _fix_boolean_columns()
 
 
+def _fix_nullable_columns():
+    """Make columns nullable that were incorrectly created as NOT NULL.
+
+    The agent-centric flow creates agents without strategy_id, so the column
+    must be nullable. This migration is idempotent.
+    """
+    from sqlalchemy import text
+    _log = logging.getLogger(__name__)
+
+    if engine.dialect.name != "postgresql":
+        _log.info("Not PostgreSQL — skipping nullable fix")
+        return
+
+    fixes = [
+        ("trading_agents", "strategy_id"),
+        ("trades", "strategy_id"),
+    ]
+
+    for table, column in fixes:
+        try:
+            with engine.begin() as conn:
+                result = conn.execute(text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_name = :tbl AND column_name = :col"
+                ), {"tbl": table, "col": column})
+                row = result.fetchone()
+                if not row:
+                    _log.info("Column %s.%s does not exist, skipping", table, column)
+                    continue
+                if row[0].upper() == "YES":
+                    _log.info("Column %s.%s is already nullable ✓", table, column)
+                    continue
+                _log.warning("Column %s.%s is NOT NULL — fixing to nullable", table, column)
+                conn.execute(text(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL"
+                ))
+                _log.info("Fixed %s.%s → nullable ✓", table, column)
+        except Exception as exc:
+            _log.error("Failed to fix nullable %s.%s: %s", table, column, exc, exc_info=True)
+
+
+_fix_nullable_columns()
+
+
+def _add_agent_settings_columns():
+    """Add agent-centric default settings columns."""
+    from sqlalchemy import text, inspect as sa_inspect
+    _log = logging.getLogger(__name__)
+
+    migrations = [
+        ("user_settings", "default_agent_type", "VARCHAR(20) DEFAULT 'scalping'"),
+        ("user_settings", "default_trading_mode", "VARCHAR(20) DEFAULT 'paper'"),
+        ("user_settings", "default_max_daily_loss", "VARCHAR(10) DEFAULT '4.0'"),
+        ("user_settings", "default_max_drawdown", "VARCHAR(10) DEFAULT '8.0'"),
+        ("user_settings", "default_max_open_positions", "VARCHAR(10) DEFAULT '3'"),
+    ]
+
+    insp = sa_inspect(engine)
+    with engine.connect() as conn:
+        for table, column, coldef in migrations:
+            try:
+                existing = [c["name"] for c in insp.get_columns(table)]
+            except Exception:
+                existing = []
+            if column in existing:
+                continue
+            try:
+                is_pg = engine.dialect.name == "postgresql"
+                if is_pg:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {coldef}"
+                    ))
+                else:
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN {column} {coldef}"
+                    ))
+                conn.commit()
+                _log.info("Migration: added column %s.%s", table, column)
+            except Exception as exc:
+                conn.rollback()
+                _log.debug("Migration skipped %s.%s: %s", table, column, exc)
+
+
+_add_agent_settings_columns()
+
+
 def _create_indexes():
     """Create performance indexes on frequently queried columns (idempotent)."""
     from sqlalchemy import text
