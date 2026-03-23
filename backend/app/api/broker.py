@@ -245,7 +245,12 @@ async def get_positions(
     from app.models.agent import AgentTrade, TradingAgent
 
     adapter = _get_adapter(broker)
-    positions = await adapter.get_positions()
+    try:
+        positions = await adapter.get_positions()
+    except Exception as e:
+        logger.error("get_positions failed for broker=%s: %s", broker or "default", e, exc_info=True)
+        raise HTTPException(502, f"Failed to fetch positions from broker: {e}")
+    logger.info("Broker positions: got %d positions from %s", len(positions), broker or "default")
 
     # Build agent lookup: broker_ticket -> (agent_name, agent_id, strategy)
     agent_map: dict[str, dict] = {}

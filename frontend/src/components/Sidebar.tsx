@@ -36,14 +36,6 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-// Bottom nav shows on mobile — compact 5-item subset
-const MOBILE_NAV_ITEMS: NavItem[] = [
-  { name: "Home", href: "/", icon: LayoutDashboard },
-  { name: "Portfolio", href: "/portfolio", icon: PieChart },
-  { name: "Trading", href: "/trading", icon: TrendingUp },
-  { name: "ML Lab", href: "/ml", icon: Brain },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
 
 function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
@@ -145,41 +137,6 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
   );
 }
 
-/** Mobile bottom navigation bar */
-function BottomNav() {
-  const pathname = usePathname();
-
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-fa-sidebar-bg border-t border-fa-card-border"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-      <div className="flex items-center justify-around h-12">
-        {MOBILE_NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center justify-center gap-0.5 w-16 py-1 rounded-lg transition-colors ${
-                isActive
-                  ? "text-accent"
-                  : "text-muted-foreground"
-              }`}
-            >
-              <Icon className="h-5 w-5" strokeWidth={isActive ? 2 : 1.5} />
-              <span className="text-[10px] font-medium leading-none">{item.name}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
 export default function Sidebar() {
   const { open, mobileOpen, setMobileOpen } = useSidebar();
   const pathname = usePathname();
@@ -215,8 +172,6 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Mobile bottom nav — always visible on mobile */}
-      <BottomNav />
     </>
   );
 }

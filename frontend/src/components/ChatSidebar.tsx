@@ -547,7 +547,7 @@ export default function ChatSidebar() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-black shadow-lg hover:scale-105 transition-transform"
+          className="fixed right-4 bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-black shadow-lg hover:scale-105 transition-transform"
           title="Open AI Assistant (Ctrl+K)"
         >
           <MessageCircle className="h-6 w-6" />
