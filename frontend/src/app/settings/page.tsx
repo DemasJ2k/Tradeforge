@@ -2167,9 +2167,15 @@ export default function SettingsPage() {
 
               <div className="pt-2">
                 <button onClick={() => save({
+                  default_agent_type: s.default_agent_type,
+                  default_trading_mode: s.default_trading_mode,
+                  default_risk_pct: s.default_risk_pct,
+                  default_max_daily_loss: s.default_max_daily_loss,
+                  default_max_drawdown: s.default_max_drawdown,
+                  default_max_open_positions: s.default_max_open_positions,
                   default_balance: s.default_balance, default_spread: s.default_spread,
                   default_commission: s.default_commission, default_point_value: s.default_point_value,
-                  default_risk_pct: s.default_risk_pct, preferred_instruments: s.preferred_instruments,
+                  preferred_instruments: s.preferred_instruments,
                   preferred_timeframes: s.preferred_timeframes, default_broker: s.default_broker,
                 })} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Trading Defaults'}
