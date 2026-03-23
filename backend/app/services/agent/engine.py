@@ -255,6 +255,21 @@ class AgentRunner:
             open_count = trade_monitor.get_open_trade_count(self.agent_id)
             self._risk_manager.set_open_positions(open_count)
 
+            # Ensure TradeMonitor is subscribed to this symbol's tick channel
+            trade_monitor.ensure_symbol_subscribed(self._symbol)
+
+            # Register callback so risk/portfolio managers update on trade close
+            def _on_trade_close(agent_id: int, pnl: float):
+                self._risk_manager.set_open_positions(
+                    trade_monitor.get_open_trade_count(agent_id)
+                )
+                if self._portfolio_manager:
+                    try:
+                        self._portfolio_manager.on_trade_closed(agent_id, pnl)
+                    except Exception:
+                        pass
+            trade_monitor.register_close_callback(self.agent_id, _on_trade_close)
+
             # Update DB status
             agent.status = "running"
             db.commit()
@@ -269,6 +284,9 @@ class AgentRunner:
     async def stop(self):
         """Stop the agent loop."""
         self._running = False
+
+        # Unregister trade close callbacks
+        trade_monitor.unregister_close_callbacks(self.agent_id)
 
         if self._unsubscribe:
             self._unsubscribe()
@@ -811,12 +829,12 @@ class AgentRunner:
                         # Broadcast to frontend for toast notification
                         try:
                             await ws_manager.broadcast_to_channel(
-                                f"agent_{self._agent_id}",
+                                f"agent_{self.agent_id}",
                                 {
                                     "type": "prop_firm_block",
-                                    "agent_id": self._agent_id,
+                                    "agent_id": self.agent_id,
                                     "reason": breach,
-                                    "symbol": signal.symbol,
+                                    "symbol": self._symbol,
                                     "direction": signal.direction,
                                 },
                             )

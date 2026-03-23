@@ -89,7 +89,7 @@ async function request<T>(
   return res.json();
 }
 
-async function uploadFile<T>(path: string, file: File): Promise<T> {
+async function uploadFile<T>(path: string, file: File, isRetry = false): Promise<T> {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
@@ -107,8 +107,8 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
     body: form,
   });
 
-  // Handle 401 for uploads too
-  if (res.status === 401 && token) {
+  // Handle 401 for uploads too (single retry to prevent infinite recursion)
+  if (res.status === 401 && token && !isRetry) {
     if (!refreshPromise) {
       refreshPromise = tryRefreshToken().finally(() => {
         refreshPromise = null;
@@ -116,7 +116,7 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
     }
     const refreshed = await refreshPromise;
     if (refreshed) {
-      return uploadFile<T>(path, file);
+      return uploadFile<T>(path, file, true);
     }
     redirectToLogin();
     throw new Error("Session expired. Please log in again.");

@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Zap, Radio, Clock, Building2, AlertTriangle, Brain } from "lucide-react";
+import { Activity, TrendingUp, Wallet, Bot, Plus, ArrowRight, BarChart3, Database, Radio, Clock, Brain } from "lucide-react";
 import WelcomeWizard, { useOnboarding } from "@/components/Onboarding/WelcomeWizard";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { showToast } from "@/lib/toast";
@@ -454,7 +454,7 @@ export default function Dashboard() {
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Quick Overview</h3>
           <div className="space-y-3 text-sm">
             <StatRow icon={<Bot className="h-3.5 w-3.5 text-accent" />} label="Active Agents" value={`${ag.running} running · ${ag.paper} paper`} />
-            <StatRow icon={<Brain className="h-3.5 w-3.5 text-accent" />} label="ML Models" value={`${data.backtests.total > 0 ? data.backtests.total : 0} trained`} />
+            <StatRow icon={<Brain className="h-3.5 w-3.5 text-accent" />} label="Backtests" value={`${data.backtests.total > 0 ? data.backtests.total : 0} runs`} />
             <StatRow icon={<Database className="h-3.5 w-3.5 text-accent" />} label="Data Sources" value={`${data.data_sources} files`} />
           </div>
           <div className="pt-2 border-t border-card-border space-y-1.5">

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Play, Pause, Square, Pencil, Trash2, Plus, Check, X, Bot, ChevronDown, Zap, Brain } from "lucide-react";
+import { Play, Pause, Square, Pencil, Trash2, Plus, Check, X, Bot, ChevronDown, Zap, Brain, Loader2 } from "lucide-react";
 import AgentWizard from "@/components/AgentWizard";
 import type {
   Agent,
@@ -139,6 +139,7 @@ export default function AgentPanel() {
   const handleConfirm = async (trade: AgentTrade) => {
     try {
       await confirmTrade(trade.agent_id, trade.id);
+      loadPendingTrades();
     } catch (e) {
       setActionError((e as Error).message);
     }
@@ -147,6 +148,7 @@ export default function AgentPanel() {
   const handleReject = async (trade: AgentTrade) => {
     try {
       await rejectTrade(trade.agent_id, trade.id);
+      loadPendingTrades();
     } catch (e) {
       setActionError((e as Error).message);
     }
@@ -339,7 +341,7 @@ export default function AgentPanel() {
                               className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
                               title="Start agent"
                             >
-                              <Play className="w-3 h-3" />
+                              {actionLoading === agent.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
                             </Button>
                           )}
                           {agent.status === "running" && (
@@ -350,7 +352,7 @@ export default function AgentPanel() {
                                 className="border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 h-auto py-0.5 px-2"
                                 title="Pause agent"
                               >
-                                <Pause className="w-3 h-3" />
+                                {actionLoading === agent.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pause className="w-3 h-3" />}
                               </Button>
                               <Button variant="outline" size="sm"
                                 onClick={() => handleAction("stop", agent)}
@@ -370,7 +372,7 @@ export default function AgentPanel() {
                                 className="border-green-500/40 text-green-400 hover:bg-green-500/10 h-auto py-0.5 px-2"
                                 title="Resume agent"
                               >
-                                <Play className="w-3 h-3" />
+                                {actionLoading === agent.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
                               </Button>
                               <Button variant="outline" size="sm"
                                 onClick={() => handleAction("stop", agent)}
@@ -526,6 +528,7 @@ export default function AgentPanel() {
                     },
                   });
                   setEditMsg("\u2713 Agent updated successfully");
+                  loadAgents();
                   setTimeout(() => setEditAgent(null), 1200);
                 } catch (err: unknown) { setEditMsg(err instanceof Error ? err.message : "Save failed"); }
               }} className="flex-1">Save Changes</Button>

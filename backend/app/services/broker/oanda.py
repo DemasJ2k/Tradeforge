@@ -300,7 +300,7 @@ class OandaAdapter(BrokerAdapter):
             symbol=instrument,
             side=OrderSide.SELL if side == "LONG" else OrderSide.BUY,
             order_type=OrderType.MARKET,
-            size=float(related.get("units", 0)),
+            size=abs(float(related.get("units", 0))),
             status=OrderStatus.FILLED,
             filled_price=float(related.get("price", 0)),
             filled_time=self._parse_ts(related.get("time", "")),
@@ -659,12 +659,13 @@ class OandaAdapter(BrokerAdapter):
 
         closed_trades = []
         for txn in data.get("transactions", []):
-            # Only care about ORDER_FILL with realized P&L (closing trades)
+            # Only care about ORDER_FILL that closed/reduced positions
             if txn.get("type") != "ORDER_FILL":
                 continue
+            # Closing fills have tradesClosed or tradesReduced; opening fills don't
+            if not txn.get("tradesClosed") and not txn.get("tradeReduced"):
+                continue
             pnl = float(txn.get("pl", 0))
-            if pnl == 0:
-                continue  # opening trades have pl=0
 
             instrument = txn.get("instrument", "")
             units = float(txn.get("units", 0))

@@ -361,7 +361,13 @@ async def get_broker_portfolios(
     combined_equity_usd = 0.0
     combined_daily_pnl = 0.0
 
-    for bname, adapter in broker_manager.get_user_adapters(user.id).items():
+    # Collect all broker names: both connected adapters and brokers with agents
+    user_adapters = broker_manager.get_user_adapters(user.id)
+    all_broker_names = set(user_adapters.keys()) | set(broker_agent_map.keys())
+    all_broker_names.discard("unassigned")  # handled separately below
+
+    for bname in sorted(all_broker_names):
+        adapter = user_adapters.get(bname)
         broker_data = {
             "broker": bname,
             "currency": "USD",
@@ -647,7 +653,19 @@ def update_portfolio_settings(
     if not pm_db:
         raise HTTPException(404, "No portfolio manager found")
 
-    for field, value in req.model_dump(exclude_none=True).items():
+    # Validate percentage ranges
+    updates = req.model_dump(exclude_none=True)
+    for pct_field in ("max_daily_loss_pct", "max_total_drawdown_pct", "max_portfolio_risk_pct", "correlation_threshold"):
+        if pct_field in updates:
+            val = updates[pct_field]
+            if not isinstance(val, (int, float)) or val < 0 or val > 100:
+                raise HTTPException(400, f"{pct_field} must be between 0 and 100")
+    if "max_concurrent_positions" in updates:
+        val = updates["max_concurrent_positions"]
+        if not isinstance(val, int) or val < 1 or val > 100:
+            raise HTTPException(400, "max_concurrent_positions must be between 1 and 100")
+
+    for field, value in updates.items():
         setattr(pm_db, field, value)
 
     db.commit()

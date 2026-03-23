@@ -506,7 +506,7 @@ async def confirm_trade(
         from app.services.broker.base import OrderRequest, OrderSide, OrderType
         adapter = broker_manager.get_adapter(agent.broker_name, user_id=user.id)
         if adapter and await adapter.is_connected():
-            side = OrderSide.BUY if trade.direction == "long" else OrderSide.SELL
+            side = OrderSide.BUY if trade.direction == "BUY" else OrderSide.SELL
             order_req = OrderRequest(
                 symbol=trade.symbol,
                 side=side,

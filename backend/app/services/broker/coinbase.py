@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 _TF_MAP = {
     "M1": "ONE_MINUTE", "M5": "FIVE_MINUTE", "M15": "FIFTEEN_MINUTE",
     "M30": "THIRTY_MINUTE", "H1": "ONE_HOUR", "H2": "TWO_HOUR",
-    "H4": "SIX_HOUR", "D1": "ONE_DAY",
+    "H4": "SIX_HOUR",  # Coinbase has no 4h candle; 6h is closest
+    "D1": "ONE_DAY",
+    "W1": "ONE_DAY",   # Weekly not supported; use daily and aggregate
     "1m": "ONE_MINUTE", "5m": "FIVE_MINUTE", "15m": "FIFTEEN_MINUTE",
     "30m": "THIRTY_MINUTE", "1h": "ONE_HOUR", "4h": "SIX_HOUR",
     "1d": "ONE_DAY",
@@ -324,14 +326,9 @@ class CoinbaseAdapter(BrokerAdapter):
 
         order_config: dict = {}
         if request.order_type == OrderType.MARKET:
-            if request.side == OrderSide.BUY:
-                order_config["market_market_ioc"] = {
-                    "quote_size": str(request.size),
-                }
-            else:
-                order_config["market_market_ioc"] = {
-                    "base_size": str(request.size),
-                }
+            order_config["market_market_ioc"] = {
+                "base_size": str(request.size),
+            }
         elif request.order_type == OrderType.LIMIT:
             order_config["limit_limit_gtc"] = {
                 "base_size": str(request.size),

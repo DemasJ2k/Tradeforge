@@ -423,12 +423,21 @@ async def connect_saved_broker(
     from app.services.broker.manager import broker_manager
 
     if broker_name == "mt5":
-        from app.services.broker.mt5_bridge import MT5Adapter
-        adapter = MT5Adapter(
-            server=entry.get("server", ""),
-            login=int(entry.get("login", "0")),
-            password=entry.get("password", ""),
-        )
+        import os as _os
+        if _os.getenv("MT5_BRIDGE_URL"):
+            from app.services.broker.mt5_remote import MT5RemoteAdapter
+            adapter = MT5RemoteAdapter(
+                server=entry.get("server", ""),
+                login=int(entry.get("login", "0")),
+                password=entry.get("password", ""),
+            )
+        else:
+            from app.services.broker.mt5_bridge import MT5Adapter
+            adapter = MT5Adapter(
+                server=entry.get("server", ""),
+                login=int(entry.get("login", "0")),
+                password=entry.get("password", ""),
+            )
     elif broker_name == "oanda":
         from app.services.broker.oanda import OandaAdapter
         adapter = OandaAdapter(
@@ -448,8 +457,10 @@ async def connect_saved_broker(
             username=entry.get("username", ""),
             password=entry.get("password", ""),
             app_id=entry.get("app_id", ""),
+            app_version=entry.get("app_version", "1.0"),
             cid=entry.get("cid", ""),
             sec=entry.get("sec", ""),
+            demo=entry.get("practice", True),
         )
     elif broker_name == "ctrader":
         import os
@@ -524,12 +535,21 @@ async def auto_connect_brokers(
 
             # Build the adapter
             if broker_name == "mt5":
-                from app.services.broker.mt5_bridge import MT5Adapter
-                adapter = MT5Adapter(
-                    server=entry.get("server", ""),
-                    login=int(entry.get("login", "0")),
-                    password=entry.get("password", ""),
-                )
+                import os as _os_mt5
+                if _os_mt5.getenv("MT5_BRIDGE_URL"):
+                    from app.services.broker.mt5_remote import MT5RemoteAdapter
+                    adapter = MT5RemoteAdapter(
+                        server=entry.get("server", ""),
+                        login=int(entry.get("login", "0")),
+                        password=entry.get("password", ""),
+                    )
+                else:
+                    from app.services.broker.mt5_bridge import MT5Adapter
+                    adapter = MT5Adapter(
+                        server=entry.get("server", ""),
+                        login=int(entry.get("login", "0")),
+                        password=entry.get("password", ""),
+                    )
             elif broker_name == "oanda":
                 from app.services.broker.oanda import OandaAdapter
                 adapter = OandaAdapter(
@@ -549,8 +569,10 @@ async def auto_connect_brokers(
                     username=entry.get("username", ""),
                     password=entry.get("password", ""),
                     app_id=entry.get("app_id", ""),
+                    app_version=entry.get("app_version", "1.0"),
                     cid=entry.get("cid", ""),
                     sec=entry.get("sec", ""),
+                    demo=entry.get("practice", True),
                 )
             elif broker_name == "ctrader":
                 import os as _os

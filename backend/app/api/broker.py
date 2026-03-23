@@ -6,6 +6,7 @@ All endpoints are async to properly work with the async broker adapters.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -314,7 +315,11 @@ async def close_position(
 ):
     """Close a position (fully or partially)."""
     adapter = _get_adapter(broker, user_id=user.id)
-    order = await adapter.close_position(payload.position_id, payload.size)
+    try:
+        order = await adapter.close_position(payload.position_id, payload.size)
+    except Exception as e:
+        logger.error("close_position failed for broker=%s: %s", broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to close position: {e}")
 
     # Log trade to DB
     trade = Trade(
@@ -448,7 +453,11 @@ async def modify_order(
         trailing_stop_distance=payload.trailing_stop_distance,
     )
 
-    order = await adapter.modify_order(request)
+    try:
+        order = await adapter.modify_order(request)
+    except Exception as e:
+        logger.error("modify_order failed for broker=%s: %s", payload.broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to modify order: {e}")
 
     return OrderResponse(
         order_id=order.order_id,
@@ -471,7 +480,11 @@ async def cancel_order(
 ):
     """Cancel a pending order."""
     adapter = _get_adapter(broker, user_id=user.id)
-    success = await adapter.cancel_order(order_id)
+    try:
+        success = await adapter.cancel_order(order_id)
+    except Exception as e:
+        logger.error("cancel_order failed for broker=%s: %s", broker, e, exc_info=True)
+        raise HTTPException(400, f"Failed to cancel order: {e}")
 
     if not success:
         raise HTTPException(400, f"Failed to cancel order {order_id}")
@@ -631,6 +644,14 @@ async def get_trade_history(
     from sqlalchemy import or_
     from app.models.agent import AgentTrade, TradingAgent
 
+    def _ensure_aware(dt):
+        """Ensure datetime is timezone-aware (SQLite strips tzinfo)."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
     results: list[dict] = []
 
     # 0. Live broker closed trades (directly from broker API)
@@ -697,10 +718,10 @@ async def get_trade_history(
             "agent_id": meta.get("agent_id"),
             "strategy_id": t.strategy_id,
             "duration_seconds": (
-                (t.exit_time - t.entry_time).total_seconds()
+                (_ensure_aware(t.exit_time) - _ensure_aware(t.entry_time)).total_seconds()
                 if t.exit_time and t.entry_time else None
             ),
-            "sort_time": t.exit_time or t.entry_time or t.created_at,
+            "sort_time": _ensure_aware(t.exit_time or t.entry_time or t.created_at),
         })
 
     # 2. Agent trades (if requested)
@@ -723,8 +744,8 @@ async def get_trade_history(
         )
 
         for at, agent_name in agent_rows:
-            entry_t = at.opened_at or at.created_at
-            exit_t = at.closed_at
+            entry_t = _ensure_aware(at.opened_at or at.created_at)
+            exit_t = _ensure_aware(at.closed_at)
             results.append({
                 "id": at.id,
                 "source": "agent",
@@ -751,11 +772,15 @@ async def get_trade_history(
                     (exit_t - entry_t).total_seconds()
                     if exit_t and entry_t else None
                 ),
-                "sort_time": exit_t or entry_t or at.created_at,
+                "sort_time": exit_t or entry_t or _ensure_aware(at.created_at),
             })
 
     # Sort all results by time descending, then trim to limit
-    results.sort(key=lambda x: x.get("sort_time") or "", reverse=True)
+    _epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    results.sort(
+        key=lambda x: x.get("sort_time") or _epoch,
+        reverse=True,
+    )
     for r in results:
         r.pop("sort_time", None)
 

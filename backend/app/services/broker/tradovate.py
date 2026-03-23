@@ -437,9 +437,11 @@ class TradovateAdapter(BrokerAdapter):
             else:
                 otype = OrderType.MARKET
 
+            symbol = await self._get_contract_name(o.get("contractId"))
+
             orders.append(Order(
                 order_id=str(o.get("id", "")),
-                symbol=o.get("contractId", ""),
+                symbol=symbol,
                 side=side,
                 order_type=otype,
                 size=float(o.get("orderQty", 0)),

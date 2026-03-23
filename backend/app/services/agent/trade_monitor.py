@@ -36,6 +36,8 @@ class PaperTradeMonitor:
         # Cache latest prices per symbol: { "XAUUSD": { "bid": ..., "ask": ..., "last": ... } }
         self._prices: dict[str, dict] = {}
         self._unsubscribers: list = []
+        # Callbacks for trade close notifications: {agent_id: callable(pnl)}
+        self._on_close_callbacks: dict[int, list] = {}
 
     async def start(self):
         """Start the trade monitor background loop."""
@@ -59,6 +61,25 @@ class PaperTradeMonitor:
                 pass
             self._task = None
         logger.info("[TradeMonitor] Stopped")
+
+    def register_close_callback(self, agent_id: int, callback):
+        """Register a callback to be called when a trade for this agent closes.
+        Callback signature: callback(agent_id, pnl)"""
+        if agent_id not in self._on_close_callbacks:
+            self._on_close_callbacks[agent_id] = []
+        self._on_close_callbacks[agent_id].append(callback)
+
+    def unregister_close_callbacks(self, agent_id: int):
+        """Remove all close callbacks for an agent."""
+        self._on_close_callbacks.pop(agent_id, None)
+
+    def _notify_close(self, agent_id: int, pnl: float):
+        """Notify registered callbacks that a trade closed."""
+        for cb in self._on_close_callbacks.get(agent_id, []):
+            try:
+                cb(agent_id, pnl)
+            except Exception as e:
+                logger.warning("[TradeMonitor] Close callback error for agent %d: %s", agent_id, e)
 
     def update_price(self, symbol: str, bid: float, ask: float, last: float = 0.0):
         """Update latest price for a symbol (called from tick subscription)."""
@@ -84,12 +105,29 @@ class PaperTradeMonitor:
                     last = float(data.get("last", 0))
                     self.update_price(symbol, bid, ask, last)
 
-        # Subscribe to common symbols
-        for symbol in ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "GBPUSD"]:
+        # Subscribe to common symbols + track subscribed set for dynamic additions
+        self._subscribed_symbols: set[str] = set()
+        self._on_tick = on_tick
+        for symbol in ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "GBPUSD",
+                        "BTCUSD", "ETHUSD", "ES", "NQ"]:
             unsub = manager.subscribe_internal(f"ticks:{symbol}", on_tick)
             self._unsubscribers.append(unsub)
+            self._subscribed_symbols.add(symbol)
 
         logger.info("[TradeMonitor] Subscribed to tick channels for price updates")
+
+    def ensure_symbol_subscribed(self, symbol: str):
+        """Dynamically subscribe to ticks for a new symbol if not already subscribed."""
+        if symbol in self._subscribed_symbols:
+            return
+        try:
+            from app.core.websocket import manager
+            unsub = manager.subscribe_internal(f"ticks:{symbol}", self._on_tick)
+            self._unsubscribers.append(unsub)
+            self._subscribed_symbols.add(symbol)
+            logger.info("[TradeMonitor] Dynamically subscribed to ticks:%s", symbol)
+        except Exception as e:
+            logger.warning("[TradeMonitor] Failed to subscribe to ticks:%s: %s", symbol, e)
 
     async def _monitor_loop(self):
         """Main monitoring loop — checks open trades every 2 seconds."""
@@ -240,6 +278,9 @@ class PaperTradeMonitor:
 
         # Record RL performance metrics (if agent uses RL filter)
         self._record_rl_performance(db, trade, exit_result)
+
+        # Notify risk/portfolio managers of trade close
+        self._notify_close(trade.agent_id, exit_result["pnl"])
 
         # Broadcast via WebSocket
         self._broadcast_close(trade, exit_result)

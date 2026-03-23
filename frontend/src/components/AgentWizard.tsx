@@ -60,6 +60,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
   /* ── Step 2: Agent Type ── */
   const [agentType, setAgentType] = useState<"scalping" | "expert">("scalping");
   const [availability, setAvailability] = useState<AgentAvailability>(DEFAULT_AVAILABILITY);
+  const [timeframe, setTimeframe] = useState("M5");
 
   /* ── Step 3: Risk Config ── */
   const [sizeType, setSizeType] = useState("percent_risk");
@@ -176,7 +177,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
       case 0: return !!symbol;
       case 1: return isAgentAvailable(agentType);
       case 2: return true;
-      case 3: return !!agentName && !!broker;
+      case 3: return !!agentName && (mode === "paper" || !!broker);
       default: return false;
     }
   };
@@ -220,7 +221,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
         name: agentName,
         strategy_id: null,
         symbol,
-        timeframe: "M5",
+        timeframe,
         mode,
         broker_name: broker || activeBroker || "",
         risk_config: riskConfig,
@@ -449,6 +450,31 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
               </div>
             </button>
 
+            {/* Timeframe Selection */}
+            <div>
+              <Label className="block text-xs font-semibold text-foreground mb-2">Timeframe</Label>
+              <div className="flex flex-wrap gap-2">
+                {["M1", "M5", "M15", "M30", "H1", "H4", "D1"].map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      timeframe === tf
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-card-border text-muted-foreground hover:border-accent/40 hover:text-foreground"
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {agentType === "scalping"
+                  ? "M5 recommended for scalping. Shorter timeframes increase trade frequency."
+                  : "M5 primary with multi-timeframe analysis (H1, H4, D1)."}
+              </p>
+            </div>
+
             {!isAgentAvailable(agentType) && (
               <div className="flex items-center gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2 text-xs text-orange-400">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -606,8 +632,8 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
                   agentType === "scalping" ? "bg-amber-400" : "bg-emerald-400"
                 }`} />
                 {agentType === "scalping"
-                  ? "Timeframe: M5 · Ensemble: XGBoost + LightGBM"
-                  : "Timeframe: M5 · Ensemble: XGBoost + LightGBM + LSTM"}
+                  ? `Timeframe: ${timeframe} · Ensemble: XGBoost + LightGBM`
+                  : `Timeframe: ${timeframe} · Ensemble: XGBoost + LightGBM + LSTM`}
               </div>
             </div>
           </div>
@@ -704,7 +730,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
                   )}
                 </span>
                 <span className="text-muted-foreground">Timeframe</span>
-                <span className="font-medium text-foreground">M5</span>
+                <span className="font-medium text-foreground">{timeframe}</span>
                 <span className="text-muted-foreground">Risk / Trade</span>
                 <span className="font-medium text-foreground">
                   {sizeType === "percent_risk" ? `${riskPerTrade}%` : `${riskPerTrade} lots`}

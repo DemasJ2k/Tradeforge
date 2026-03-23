@@ -687,7 +687,7 @@ class CTraderAdapter(BrokerAdapter):
                     # Sum monetary unrealized from cTrader's own calculation
                     unrealized = sum(u.get("money", 0) for u in utp_list) / (10 ** money_digits)
                 else:
-                    unrealized = price_diff * lot_size * 100_000  # Approximate: units * price_diff
+                    unrealized = price_diff * volume  # volume is in units from cTrader
             else:
                 unrealized = 0.0
             unrealized += swap + commission
@@ -761,6 +761,7 @@ class CTraderAdapter(BrokerAdapter):
             payload["takeProfit"] = self._to_price_int(request.take_profit, digits)
         if request.trailing_stop_distance:
             payload["trailingStopLoss"] = True
+            payload["stopTriggerMethod"] = "TRADE"
 
         if request.comment:
             payload["comment"] = request.comment[:25]  # cTrader limits comment length
