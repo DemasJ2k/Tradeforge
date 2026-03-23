@@ -136,6 +136,8 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 ### March 23 — Architecture Restructuring, Mobile, & Cleanup
 
+**Fix backtest "Method Not Allowed" — frontend was POSTing to `/api/backtest/run-v3` (nonexistent), changed to `/api/backtest/run`**
+
 **Wire up Backtest as top-level route, remove Strategy backtest mode**
 - `/backtest` now renders `BacktestPageContent` directly (was redirecting to `/ml?view=backtest`)
 - Added "Backtest" nav item with `BarChart3` icon to sidebar (between ML Lab and Settings)
