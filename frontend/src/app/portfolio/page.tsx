@@ -221,13 +221,17 @@ export default function PortfolioPage() {
             {s?.mode || "balanced"}
           </Badge>
           {hasAnyAgents && (
-            isPaused || !hasRunningAgents ? (
-              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5" disabled={!isPaused && !hasRunningAgents}>
-                <Play className="h-3.5 w-3.5" /> Resume All
+            isPaused ? (
+              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
+                <Play className="h-3.5 w-3.5" /> Play All
               </Button>
-            ) : (
+            ) : hasRunningAgents ? (
               <Button size="sm" variant="destructive" onClick={handlePauseAll} className="gap-1.5">
                 <Pause className="h-3.5 w-3.5" /> Pause All
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={handleUnpause} className="gap-1.5">
+                <Play className="h-3.5 w-3.5" /> Play All
               </Button>
             )
           )}

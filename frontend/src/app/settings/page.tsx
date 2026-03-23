@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { UserSettings, StorageInfo, Invitation, BrokerCredentialMasked } from '@/types';
 import ChatHelpers from '@/components/ChatHelpers';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, Shield, type LucideIcon } from 'lucide-react';
+import { User, Palette, Bot, TrendingUp, HardDrive, Cog, ChevronDown, Bell, Shield, RotateCcw, type LucideIcon } from 'lucide-react';
 import { API_BASE } from "@/lib/api";
 
 function getToken() {
@@ -788,7 +789,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<TabId>('profile');
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<TabId>(() => {
+    const urlTab = searchParams.get('tab');
+    if (urlTab && TABS.some(t => t.id === urlTab)) return urlTab as TabId;
+    return 'profile';
+  });
   const [storage, setStorage] = useState<StorageInfo | null>(null);
 
   // Password change state
@@ -2161,9 +2167,15 @@ export default function SettingsPage() {
 
               <div className="pt-2">
                 <button onClick={() => save({
+                  default_agent_type: s.default_agent_type,
+                  default_trading_mode: s.default_trading_mode,
+                  default_risk_pct: s.default_risk_pct,
+                  default_max_daily_loss: s.default_max_daily_loss,
+                  default_max_drawdown: s.default_max_drawdown,
+                  default_max_open_positions: s.default_max_open_positions,
                   default_balance: s.default_balance, default_spread: s.default_spread,
                   default_commission: s.default_commission, default_point_value: s.default_point_value,
-                  default_risk_pct: s.default_risk_pct, preferred_instruments: s.preferred_instruments,
+                  preferred_instruments: s.preferred_instruments,
                   preferred_timeframes: s.preferred_timeframes, default_broker: s.default_broker,
                 })} disabled={saving} className={btnPrimary}>
                   {saving ? 'Saving...' : 'Save Trading Defaults'}
@@ -2783,6 +2795,22 @@ export default function SettingsPage() {
                   {saving ? 'Saving...' : 'Save Platform Settings'}
                 </button>
               </div>
+
+              <hr className="border-card-border" />
+              <h3 className="text-md font-semibold text-foreground">App Walkthrough</h3>
+              <p className="text-sm text-muted-foreground">
+                Re-launch the guided walkthrough that appears when you first sign up. It walks you through connecting a broker and deploying your first agent.
+              </p>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('flowrex_onboarding_completed');
+                  window.location.href = '/';
+                }}
+                className={`${btnSecondary} inline-flex items-center gap-2`}
+              >
+                <RotateCcw className="w-4 h-4" />
+                Restart Walkthrough
+              </button>
 
               <hr className="border-card-border" />
               <h3 className="text-md font-semibold text-foreground">Keyboard Shortcuts</h3>

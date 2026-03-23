@@ -204,13 +204,10 @@ export default function Dashboard() {
   const { account: a, today: t, strategies: s, agents: ag, recent_trades: trades, positions: pos, broker_accounts: ba } = data;
   const connectedBrokerCount = (ba ?? []).filter((b) => b.connected).length;
 
-  // Show onboarding for new users (no agents and no data sources)
-  const isNewUser = ag.total === 0 && data.data_sources === 0;
-
   return (
     <div className="space-y-6">
-      {/* Onboarding wizard for first-time users */}
-      {showOnboarding && isNewUser && (
+      {/* Onboarding wizard — shown for first-time users or when re-triggered from Settings */}
+      {showOnboarding && (
         <WelcomeWizard onDismiss={dismissOnboarding} />
       )}
       {/* ── Header Row ─────────────────────────────────── */}

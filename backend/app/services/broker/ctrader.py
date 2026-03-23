@@ -216,7 +216,23 @@ class CTraderAdapter(BrokerAdapter):
 
                 # Handle execution events (order fills, etc.)
                 if payload_type == PROTO_OA_EXECUTION_EVENT:
-                    logger.debug("cTrader execution event: %s", msg.get("payload", {}).get("executionType", "?"))
+                    exec_payload = msg.get("payload", {})
+                    exec_type = exec_payload.get("executionType", "?")
+                    order_info = exec_payload.get("order", {})
+                    position_info = exec_payload.get("position", {})
+                    logger.info(
+                        "cTrader execution event: type=%s, orderId=%s, positionId=%s, errorCode=%s",
+                        exec_type,
+                        order_info.get("orderId"),
+                        position_info.get("positionId") if position_info else None,
+                        exec_payload.get("errorCode", ""),
+                    )
+                    if exec_type in ("ORDER_REJECTED", "ORDER_CANCELLED", "ORDER_EXPIRED"):
+                        logger.warning(
+                            "cTrader %s: orderId=%s, reason=%s",
+                            exec_type, order_info.get("orderId"),
+                            exec_payload.get("reasonCode", exec_payload.get("errorCode", "unknown")),
+                        )
 
                 # Resolve pending request
                 if msg_id and msg_id in self._pending_requests:
@@ -587,19 +603,38 @@ class CTraderAdapter(BrokerAdapter):
         })
         trader = resp.get("payload", {}).get("trader", {})
 
-        balance = trader.get("balance", 0) / 100  # cTrader sends cents
+        money_digits = trader.get("moneyDigits", 2)
+        balance = trader.get("balance", 0) / (10 ** money_digits)
+
+        # Get positions and orders to calculate equity (single reconcile call)
+        total_unrealized = 0.0
+        open_position_count = 0
+        open_order_count = 0
+        try:
+            positions = await self.get_positions()
+            total_unrealized = sum(p.unrealized_pnl for p in positions)
+            open_position_count = len(positions)
+            # Orders come from the same reconcile, fetch separately
+            reconcile = await self._send(PROTO_OA_RECONCILE_REQ, {
+                "ctidTraderAccountId": self._account_id,
+            })
+            open_order_count = len(reconcile.get("payload", {}).get("order", []))
+        except Exception as e:
+            logger.debug("cTrader account info: failed to get positions/orders: %s", e)
+
+        equity = balance + total_unrealized
 
         return AccountInfo(
             account_id=str(self._account_id),
             broker="ctrader",
             currency=trader.get("depositAsset", {}).get("name", "USD"),
             balance=balance,
-            equity=balance,  # Equity needs positions calculation
-            unrealized_pnl=0.0,
+            equity=equity,
+            unrealized_pnl=total_unrealized,
             margin_used=0.0,
-            margin_available=balance,
-            open_positions=0,
-            open_orders=0,
+            margin_available=equity,
+            open_positions=open_position_count,
+            open_orders=open_order_count,
         )
 
     # ── Positions ──────────────────────────────────────
@@ -633,12 +668,29 @@ class CTraderAdapter(BrokerAdapter):
 
             # Get current price from cache
             last_tick = self._price_cache.get(symbol_name)
-            current_price = last_tick.bid if last_tick else entry_price
+            current_price = (last_tick.bid if not is_buy else last_tick.ask) if last_tick else entry_price
 
-            # Unrealized PnL
+            # Unrealized PnL — calculate from price difference
             swap = pos.get("swap", 0) / 100
             commission = pos.get("commission", 0) / 100
-            unrealized = pos.get("moneyDigits", 0)  # simplified
+            lot_size = self._from_volume(volume)
+            pip_value = 10 ** (-digits)
+            # moneyDigits tells us the precision of monetary values (e.g. 2 for cents)
+            money_digits = pos.get("moneyDigits", 2)
+
+            if entry_price > 0 and current_price > 0:
+                price_diff = (current_price - entry_price) if is_buy else (entry_price - current_price)
+                pips = price_diff / pip_value
+                # Use utpList if available (cTrader's own PnL in cents), else calculate
+                utp_list = pos.get("utpList", [])
+                if utp_list:
+                    # Sum monetary unrealized from cTrader's own calculation
+                    unrealized = sum(u.get("money", 0) for u in utp_list) / (10 ** money_digits)
+                else:
+                    unrealized = price_diff * lot_size * 100_000  # Approximate: units * price_diff
+            else:
+                unrealized = 0.0
+            unrealized += swap + commission
 
             open_ts = pos.get("tradeData", {}).get("openTimestamp", 0)
             open_time = datetime.fromtimestamp(open_ts / 1000, tz=timezone.utc) if open_ts else datetime.now(timezone.utc)
@@ -734,7 +786,29 @@ class CTraderAdapter(BrokerAdapter):
             filled_price = self._convert_price(order_data["executionPrice"], digits)
 
         exec_type = exec_payload.get("executionType", "")
-        status = OrderStatus.FILLED if exec_type == "ORDER_FILLED" else OrderStatus.PENDING
+        error_code = exec_payload.get("errorCode", "")
+
+        if exec_type == "ORDER_FILLED":
+            status = OrderStatus.FILLED
+        elif exec_type in ("ORDER_ACCEPTED", "ORDER_REPLACED"):
+            status = OrderStatus.PENDING
+        elif exec_type in ("ORDER_REJECTED", "ORDER_CANCEL_REJECTED"):
+            reason = exec_payload.get("reasonCode", error_code or "unknown")
+            logger.error("cTrader order REJECTED: exec_type=%s, reason=%s", exec_type, reason)
+            raise RuntimeError(f"Order rejected by cTrader: {reason}")
+        elif exec_type in ("ORDER_CANCELLED", "ORDER_EXPIRED"):
+            reason = exec_payload.get("reasonCode", error_code or "unknown")
+            logger.warning("cTrader order cancelled/expired: exec_type=%s, reason=%s", exec_type, reason)
+            raise RuntimeError(f"Order {exec_type.lower().replace('order_', '')}: {reason}")
+        elif exec_type == "ORDER_PARTIAL_FILL":
+            status = OrderStatus.PARTIALLY_FILLED
+        elif error_code:
+            logger.error("cTrader order error: errorCode=%s, exec_type=%s", error_code, exec_type)
+            raise RuntimeError(f"cTrader order error: {error_code}")
+        else:
+            # Unknown execution type — treat as pending but log
+            logger.warning("cTrader unknown executionType=%s, treating as PENDING", exec_type)
+            status = OrderStatus.PENDING
 
         return Order(
             order_id=str(order_data.get("orderId", exec_payload.get("orderId", "0"))),
@@ -898,8 +972,10 @@ class CTraderAdapter(BrokerAdapter):
             if not close_pnl:
                 continue
 
+            money_digits = close_pnl.get("moneyDigits", deal.get("moneyDigits", 2))
+            divisor = 10 ** money_digits
             pnl = (close_pnl.get("grossProfit", 0) + close_pnl.get("swap", 0)
-                   + close_pnl.get("commission", 0)) / 100.0
+                   + close_pnl.get("commission", 0)) / divisor
 
             symbol_id = deal.get("symbolId", 0)
             sym_info = self._symbol_cache.get(symbol_id, {})

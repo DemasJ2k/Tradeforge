@@ -621,16 +621,50 @@ async def get_candles(
 @router.get("/trades")
 async def get_trade_history(
     limit: int = Query(100, ge=1, le=500),
+    broker: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     include_agents: bool = Query(True),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get unified trade history — broker trades + agent trades merged."""
+    """Get unified trade history — broker trades + agent trades + live broker history merged."""
     from sqlalchemy import or_
     from app.models.agent import AgentTrade, TradingAgent
 
     results: list[dict] = []
+
+    # 0. Live broker closed trades (directly from broker API)
+    try:
+        adapter = _get_adapter(broker, user_id=user.id)
+        if hasattr(adapter, "get_closed_trades"):
+            live_trades = await adapter.get_closed_trades(limit=limit)
+            db_order_ids = set()  # Track to deduplicate against DB trades
+            for lt in live_trades:
+                results.append({
+                    "id": f"broker_{lt.trade_id}",
+                    "source": "broker_live",
+                    "broker": adapter.broker_name,
+                    "symbol": lt.symbol,
+                    "direction": lt.side,
+                    "entry_price": lt.entry_price,
+                    "exit_price": lt.exit_price,
+                    "entry_time": None,
+                    "exit_time": lt.close_time.isoformat() if lt.close_time else None,
+                    "lot_size": lt.size,
+                    "pnl": lt.pnl,
+                    "commission": 0.0,
+                    "status": "closed",
+                    "stop_loss": None,
+                    "take_profit": None,
+                    "exit_reason": None,
+                    "agent_name": None,
+                    "agent_id": None,
+                    "strategy_id": None,
+                    "duration_seconds": None,
+                    "sort_time": lt.close_time,
+                })
+    except Exception:
+        pass  # No connected broker or fetch failed — continue with DB trades
 
     # 1. Broker trades from Trade table
     q = db.query(Trade).filter(
