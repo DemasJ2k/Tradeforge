@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Play, Settings, Brain, Activity, Bot } from 'lucide-react';
+import { Play, Settings, Brain, Activity, Bot, Zap, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useEffect } from 'react';
 
@@ -55,6 +55,8 @@ interface Props {
   }) => void;
 }
 
+type BacktestMode = 'strategy' | 'scalping_agent' | 'expert_agent';
+
 export default function BacktestConfigDialog({
   open,
   onOpenChange,
@@ -63,6 +65,7 @@ export default function BacktestConfigDialog({
   defaultStrategyId,
   onRun,
 }: Props) {
+  const [backtestMode, setBacktestMode] = useState<BacktestMode>('strategy');
   const [strategyId, setStrategyId] = useState<string>(defaultStrategyId ? String(defaultStrategyId) : '');
   const [datasourceId, setDatasourceId] = useState<string>('');
   const [balance, setBalance] = useState(10000);
@@ -88,7 +91,9 @@ export default function BacktestConfigDialog({
       setStrategyId(String(defaultStrategyId));
     }
   }, [defaultStrategyId]);
-  const isRlMode = !!rlModelId;
+
+  const isAgentMode = backtestMode === 'scalping_agent' || backtestMode === 'expert_agent';
+  const isRlMode = !!rlModelId && !isAgentMode;
 
   // Load ML models
   useEffect(() => {
@@ -106,12 +111,12 @@ export default function BacktestConfigDialog({
   const selectedDs = datasources.find(d => d.id === Number(datasourceId));
   const autoPointValue = selectedDs?.point_value || pointValue;
 
-  const canRun = (strategyId || isRlMode) && datasourceId;
+  const canRun = (strategyId || isRlMode || isAgentMode) && datasourceId;
 
   const handleRun = () => {
     if (!canRun) return;
-    // Validate entry rules exist for non-RL strategies
-    if (!isRlMode && strategyId) {
+    // Validate entry rules exist for non-RL, non-agent strategies
+    if (!isRlMode && !isAgentMode && strategyId) {
       const selectedStrategy = strategies.find(s => String(s.id) === strategyId);
       if (selectedStrategy && (!selectedStrategy.entry_rules || selectedStrategy.entry_rules.length === 0)) {
         alert("This strategy has no entry rules defined. Please add at least one entry rule in the Strategy Editor before running a backtest.");
@@ -123,8 +128,9 @@ export default function BacktestConfigDialog({
     if (commission < 0) { alert("Commission cannot be negative"); return; }
     if (slippage < 0 || slippage > 10) { alert("Slippage must be between 0% and 10%"); return; }
     if (marginRate < 0 || marginRate > 1) { alert("Margin rate must be between 0 and 1"); return; }
+
     onRun({
-      strategy_id: Number(strategyId) || 0,
+      strategy_id: isAgentMode ? 0 : (Number(strategyId) || 0),
       datasource_id: Number(datasourceId),
       initial_balance: balance,
       spread_points: spread,
@@ -134,40 +140,100 @@ export default function BacktestConfigDialog({
       slippage_pct: slippage,
       margin_rate: marginRate,
       latency_ms: latencyMs,
-      ...(mlModelId ? { ml_model_id: Number(mlModelId) } : {}),
-      ...(regimeModelId ? { regime_model_id: Number(regimeModelId) } : {}),
-      ...(rlModelId ? { rl_model_id: Number(rlModelId), strategy_type: 'rl' } : {}),
-      ...(mlModelId ? { ml_threshold: mlThreshold } : {}),
+      // Agent mode
+      ...(isAgentMode ? { strategy_type: backtestMode } : {}),
+      // ML enhancement (only for strategy mode)
+      ...(!isAgentMode && mlModelId ? { ml_model_id: Number(mlModelId) } : {}),
+      ...(!isAgentMode && regimeModelId ? { regime_model_id: Number(regimeModelId) } : {}),
+      ...(!isAgentMode && rlModelId ? { rl_model_id: Number(rlModelId), strategy_type: 'rl' } : {}),
+      ...(!isAgentMode && mlModelId ? { ml_threshold: mlThreshold } : {}),
     });
   };
 
+  const modeLabel = backtestMode === 'scalping_agent'
+    ? 'Backtest Scalping Agent'
+    : backtestMode === 'expert_agent'
+    ? 'Backtest Expert Agent'
+    : isRlMode
+    ? 'Backtest RL Agent'
+    : 'Run Backtest';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-card-bg border-card-border">
+      <DialogContent className="max-w-lg bg-card-bg border-card-border max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configure Backtest</DialogTitle>
           <DialogDescription>
-            Select a strategy and data source to run a backtest with the V3 engine.
+            Select a strategy or agent type and a data source to run a backtest.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          {/* Strategy */}
+          {/* Backtest Mode Selector */}
           <div className="space-y-1.5">
-            <Label>Strategy</Label>
-            <Select value={strategyId} onValueChange={setStrategyId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select strategy..." />
-              </SelectTrigger>
-              <SelectContent>
-                {strategies.map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Backtest Mode</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setBacktestMode('strategy')}
+                className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs transition-colors ${
+                  backtestMode === 'strategy'
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-card-border text-muted-foreground hover:border-accent/50'
+                }`}
+              >
+                <Play className="w-4 h-4" />
+                Strategy
+              </button>
+              <button
+                onClick={() => setBacktestMode('scalping_agent')}
+                className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs transition-colors ${
+                  backtestMode === 'scalping_agent'
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-card-border text-muted-foreground hover:border-accent/50'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                Scalping Agent
+              </button>
+              <button
+                onClick={() => setBacktestMode('expert_agent')}
+                className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs transition-colors ${
+                  backtestMode === 'expert_agent'
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-card-border text-muted-foreground hover:border-accent/50'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                Expert Agent
+              </button>
+            </div>
+            {isAgentMode && (
+              <p className="text-[10px] text-muted-foreground">
+                {backtestMode === 'scalping_agent'
+                  ? 'XGBoost + LightGBM ensemble. Dual-model agreement, session filtering, ATR-based SL/TP.'
+                  : 'XGBoost + LightGBM + LSTM ensemble. Multi-timeframe, regime detection, meta-labeler.'}
+              </p>
+            )}
           </div>
+
+          {/* Strategy (only for strategy mode) */}
+          {!isAgentMode && (
+            <div className="space-y-1.5">
+              <Label>Strategy</Label>
+              <Select value={strategyId} onValueChange={setStrategyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select strategy..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {strategies.map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Data Source */}
           <div className="space-y-1.5">
@@ -287,104 +353,108 @@ export default function BacktestConfigDialog({
             </div>
           )}
 
-          {/* ML Enhancement Toggle */}
-          <button
-            onClick={() => setShowMl(!showMl)}
-            className="text-xs text-accent hover:underline flex items-center gap-1"
-          >
-            <Brain className="w-3 h-3" />
-            {showMl ? 'Hide' : 'Show'} ML Enhancement
-          </button>
+          {/* ML Enhancement Toggle (only for strategy mode) */}
+          {!isAgentMode && (
+            <>
+              <button
+                onClick={() => setShowMl(!showMl)}
+                className="text-xs text-accent hover:underline flex items-center gap-1"
+              >
+                <Brain className="w-3 h-3" />
+                {showMl ? 'Hide' : 'Show'} ML Enhancement
+              </button>
 
-          {showMl && (
-            <div className="space-y-3 pl-2 border-l-2 border-purple-500/30">
-              {/* RL Agent Mode */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1">
-                  <Bot className="w-3 h-3" /> RL Agent (replaces strategy)
-                </Label>
-                <Select value={rlModelId} onValueChange={v => { setRlModelId(v === '_none' ? '' : v); }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="None — use strategy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">None</SelectItem>
-                    {mlModels.filter(m => m.model_type === 'rl_ppo').map(m => (
-                      <SelectItem key={m.id} value={String(m.id)}>
-                        {m.name} (RL)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground">
-                  RL agent trades autonomously — strategy is ignored.
-                </p>
-              </div>
-
-              {!isRlMode && (
-                <>
-                  {/* ML Signal Filter */}
+              {showMl && (
+                <div className="space-y-3 pl-2 border-l-2 border-purple-500/30">
+                  {/* RL Agent Mode */}
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1">
-                      <Brain className="w-3 h-3" /> ML Signal Filter
+                      <Bot className="w-3 h-3" /> RL Agent (replaces strategy)
                     </Label>
-                    <Select value={mlModelId} onValueChange={v => setMlModelId(v === '_none' ? '' : v)}>
+                    <Select value={rlModelId} onValueChange={v => { setRlModelId(v === '_none' ? '' : v); }}>
                       <SelectTrigger>
-                        <SelectValue placeholder="None — no ML filter" />
+                        <SelectValue placeholder="None — use strategy" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="_none">None</SelectItem>
-                        {mlModels.filter(m => !['rl_ppo', 'hmm_regime', 'lstm', 'gru'].includes(m.model_type)).map(m => (
+                        {mlModels.filter(m => m.model_type === 'rl_ppo').map(m => (
                           <SelectItem key={m.id} value={String(m.id)}>
-                            {m.name} ({m.model_type})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {mlModelId && (
-                    <div className="space-y-1.5">
-                      <Label>ML Threshold</Label>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        value={mlThreshold}
-                        onChange={e => setMlThreshold(Number(e.target.value))}
-                      />
-                      <p className="text-[10px] text-muted-foreground">
-                        Signals below this confidence are filtered out.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Regime Model */}
-                  <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1">
-                      <Activity className="w-3 h-3" /> Regime Model
-                    </Label>
-                    <Select value={regimeModelId} onValueChange={v => setRegimeModelId(v === '_none' ? '' : v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="None — no regime filter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">None</SelectItem>
-                        {mlModels.filter(m => m.model_type === 'hmm_regime').map(m => (
-                          <SelectItem key={m.id} value={String(m.id)}>
-                            {m.name} (HMM)
+                            {m.name} (RL)
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <p className="text-[10px] text-muted-foreground">
-                      Filters counter-trend signals and adjusts confidence by regime.
+                      RL agent trades autonomously — strategy is ignored.
                     </p>
                   </div>
-                </>
+
+                  {!isRlMode && (
+                    <>
+                      {/* ML Signal Filter */}
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1">
+                          <Brain className="w-3 h-3" /> ML Signal Filter
+                        </Label>
+                        <Select value={mlModelId} onValueChange={v => setMlModelId(v === '_none' ? '' : v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="None — no ML filter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">None</SelectItem>
+                            {mlModels.filter(m => !['rl_ppo', 'hmm_regime', 'lstm', 'gru'].includes(m.model_type)).map(m => (
+                              <SelectItem key={m.id} value={String(m.id)}>
+                                {m.name} ({m.model_type})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {mlModelId && (
+                        <div className="space-y-1.5">
+                          <Label>ML Threshold</Label>
+                          <Input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            value={mlThreshold}
+                            onChange={e => setMlThreshold(Number(e.target.value))}
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            Signals below this confidence are filtered out.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Regime Model */}
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1">
+                          <Activity className="w-3 h-3" /> Regime Model
+                        </Label>
+                        <Select value={regimeModelId} onValueChange={v => setRegimeModelId(v === '_none' ? '' : v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="None — no regime filter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">None</SelectItem>
+                            {mlModels.filter(m => m.model_type === 'hmm_regime').map(m => (
+                              <SelectItem key={m.id} value={String(m.id)}>
+                                {m.name} (HMM)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground">
+                          Filters counter-trend signals and adjusts confidence by regime.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {/* Run Button */}
@@ -395,7 +465,7 @@ export default function BacktestConfigDialog({
             size="lg"
           >
             <Play className="w-4 h-4" />
-            {isRlMode ? 'Backtest RL Agent' : 'Run Backtest'}
+            {modeLabel}
           </Button>
         </div>
       </DialogContent>

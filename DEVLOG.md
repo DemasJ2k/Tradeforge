@@ -299,6 +299,35 @@ This was a major security and stability push — 12 commits addressing audit fin
   count (`data.backtests.total`) — relabeled to "Backtests" since actual ML model data is in MLStatusWidget
 - **Dashboard frontend** (`page.tsx`): Removed unused imports (`Zap`, `Building2`, `AlertTriangle`)
 
+**Agent Backtest Engine — backtest scalping/expert agent ML logic on historical data**
+- **New file**: `backend/app/services/backtest/v2/engine/agent_strategies.py`
+  - `ScalpingAgentStrategy`: V2 backtest strategy wrapping the live ScalpingAgent logic
+    - Loads XGBoost + LightGBM scalping models from disk (same `.joblib` files)
+    - Computes 80+ expert features via `compute_expert_features()`
+    - Dual-model agreement + min confidence threshold
+    - Session/kill-zone filtering from bar timestamps (not live UTC)
+    - ATR-based dynamic SL/TP, risk-based position sizing
+  - `ExpertAgentStrategy`: V2 backtest strategy wrapping the live ExpertAgent logic
+    - Loads full ensemble (XGBoost + LightGBM + LSTM) + meta-labeler + HMM regime detector
+    - Multi-timeframe features (M5 + H1 + H4 context via DataHandler HTF)
+    - Ensemble voting (min 2/3 agreement), regime risk adjustment, session awareness
+    - Symbol-specific SL/TP multipliers (XAUUSD, US30, BTCUSD)
+- **`v2_adapter.py`**: Added `run_agent_backtest()` function — builds DataHandler, configures
+  RunConfig, and runs the agent strategy through the V2 Runner
+- **`backtest.py` API**: Added routing for `strategy_type` = `"scalping_agent"` / `"expert_agent"`.
+  Agent backtests don't require a strategy_id — the agent's ML models drive all decisions
+- **`BacktestRequest` schema**: `strategy_id` now defaults to 0 (optional for agent backtests);
+  `strategy_type` documents new values: `"scalping_agent"`, `"expert_agent"`
+- **`BacktestResponse` schema**: Added `agent_stats` field for agent-specific filtering/signal stats
+- **`Backtest` model**: `strategy_id` column changed to `nullable=True` for agent backtests
+- **Frontend `BacktestConfigDialog.tsx`**: Added backtest mode selector (Strategy / Scalping Agent / Expert Agent)
+  with 3-column button grid. Agent modes hide the strategy dropdown and send `strategy_type` to backend
+
+**Claude Code session logging**
+- Created `claude_logs.md` at repo root (gitignored) — read at start of each session, updated at end
+- Updated `.claude/settings.local.json` SessionStart hook to include claude_logs.md reminder
+- Added `claude_logs.md` to `.gitignore`
+
 ---
 
 ## Summary of Major Changes
@@ -306,6 +335,7 @@ This was a major security and stability push — 12 commits addressing audit fin
 | Area | What Changed |
 |------|-------------|
 | **Architecture** | Strategy-first → Agent-centric. Strategies page removed entirely. |
+| **Backtest** | Agent backtest engine — run scalping/expert ML agents on historical data |
 | **ML** | Databento pipeline, master trainer, ExpertAgent v1, Optuna tuning |
 | **Security** | 16+ audit findings fixed, rate limiting, 2FA hardening, per-user isolation |
 | **Frontend** | Mobile layout, agent wizard, sidebar simplification |

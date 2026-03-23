@@ -250,17 +250,22 @@ def run_backtest(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Load strategy (user-owned OR system)
-    strategy = (
-        db.query(Strategy)
-        .filter(
-            Strategy.id == payload.strategy_id,
-            or_(Strategy.creator_id == current_user.id, Strategy.is_system == True),
+    # Agent-based backtests don't require a strategy
+    is_agent_backtest = getattr(payload, "strategy_type", "strategy") in ("scalping_agent", "expert_agent")
+
+    # Load strategy (user-owned OR system) — skip for agent backtests
+    strategy = None
+    if not is_agent_backtest:
+        strategy = (
+            db.query(Strategy)
+            .filter(
+                Strategy.id == payload.strategy_id,
+                or_(Strategy.creator_id == current_user.id, Strategy.is_system == True),
+            )
+            .first()
         )
-        .first()
-    )
-    if not strategy:
-        raise HTTPException(status_code=404, detail="Strategy not found")
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
 
     # Load datasource
     datasource = db.query(DataSource).filter(DataSource.id == payload.datasource_id).first()
@@ -278,8 +283,8 @@ def run_backtest(
         raise HTTPException(status_code=400, detail=f"Not enough data: {len(bars)} bars (need 50+)")
 
     # Route to appropriate backtest engine based on strategy type
-    strategy_type = getattr(strategy, "strategy_type", "builder") or "builder"
-    filters = strategy.filters or {}
+    strategy_type = getattr(strategy, "strategy_type", "builder") or "builder" if strategy else "builder"
+    filters = (strategy.filters or {}) if strategy else {}
     mss_config = filters.get("mss_config")
     gold_bt_config = filters.get("gold_bt_config")
     engine_version = getattr(payload, "engine_version", "v1") or "v1"
@@ -291,21 +296,21 @@ def run_backtest(
         from app.services.backtest.v2_adapter import (
             run_v2_backtest, run_unified_backtest, v2_result_to_api_response,
             run_v2_portfolio_backtest, v2_portfolio_result_to_api_response,
-            run_unified_backtest_with_ml, run_rl_backtest,
+            run_unified_backtest_with_ml, run_rl_backtest, run_agent_backtest,
         )
 
         # Build strategy config (same shape for all builder-type strategies)
         strategy_config = {
-            "indicators": strategy.indicators or [],
-            "entry_rules": strategy.entry_rules or [],
-            "exit_rules": strategy.exit_rules or [],
-            "risk_params": strategy.risk_params or {},
+            "indicators": (strategy.indicators or []) if strategy else [],
+            "entry_rules": (strategy.entry_rules or []) if strategy else [],
+            "exit_rules": (strategy.exit_rules or []) if strategy else [],
+            "risk_params": (strategy.risk_params or {}) if strategy else {},
             "filters": {k: v for k, v in filters.items()
                         if k not in ("mss_config", "gold_bt_config")},
             # Python strategy support — pass type, file path, and settings
-            "strategy_type": getattr(strategy, "strategy_type", "builder") or "builder",
-            "file_path": getattr(strategy, "file_path", "") or "",
-            "settings_values": _ensure_dict(getattr(strategy, "settings_values", {}) or {}),
+            "strategy_type": (getattr(strategy, "strategy_type", "builder") or "builder") if strategy else "builder",
+            "file_path": (getattr(strategy, "file_path", "") or "") if strategy else "",
+            "settings_values": _ensure_dict((getattr(strategy, "settings_values", {}) or {}) if strategy else {}),
         }
 
         # If MSS/Gold BT, merge their config into risk_params/filters
@@ -424,16 +429,39 @@ def run_backtest(
                 symbols=sym_names,
             )
 
-        # ── Single-symbol V2 (unified — handles builder, MSS, Gold BT, RL, ML) ─
+        # ── Single-symbol V2 (unified — handles builder, MSS, Gold BT, RL, ML, Agent) ─
         symbol = datasource.symbol or "ASSET"
         ml_filter_stats = None
         rl_action_stats = None
+        agent_backtest_stats = None
 
         # Phase 5: Check for RL agent backtest
         bt_strategy_type = getattr(payload, "strategy_type", "strategy") or "strategy"
         rl_model_id = getattr(payload, "rl_model_id", None)
 
-        if bt_strategy_type == "rl" and rl_model_id:
+        # Phase 6: Agent-based backtest (scalping_agent / expert_agent)
+        if bt_strategy_type in ("scalping_agent", "expert_agent"):
+            try:
+                from app.services.backtest.v2_adapter import run_agent_backtest
+                v2_result, agent_backtest_stats = run_agent_backtest(
+                    bars=bars,
+                    agent_type=bt_strategy_type,
+                    symbol=symbol,
+                    initial_balance=payload.initial_balance,
+                    spread_points=payload.spread_points,
+                    commission_per_lot=payload.commission_per_lot,
+                    point_value=payload.point_value,
+                    slippage_pct=payload.slippage_pct,
+                    commission_pct=payload.commission_pct,
+                    margin_rate=payload.margin_rate,
+                    bars_per_day=payload.bars_per_day,
+                    tick_mode=payload.tick_mode,
+                )
+            except Exception as e:
+                logger.exception("Agent backtest failed")
+                raise HTTPException(status_code=500, detail=f"Agent backtest error: {str(e)}")
+
+        elif bt_strategy_type == "rl" and rl_model_id:
             try:
                 from app.services.agent.rl_agent import RLInferenceAgent
                 from app.models.ml import MLModel
@@ -531,7 +559,7 @@ def run_backtest(
 
         # Save to DB
         bt = Backtest(
-            strategy_id=strategy.id,
+            strategy_id=strategy.id if strategy else None,
             datasource_id=payload.datasource_id,
             symbol=datasource.symbol or "UNKNOWN",
             timeframe=datasource.timeframe or "",
@@ -548,6 +576,7 @@ def run_backtest(
                 "elapsed_seconds": round(elapsed, 3),
                 **({"ml_filter_stats": ml_filter_stats} if ml_filter_stats else {}),
                 **({"rl_action_stats": rl_action_stats} if rl_action_stats else {}),
+                **({"agent_stats": agent_backtest_stats} if agent_backtest_stats else {}),
             },
             creator_id=current_user.id,
         )
@@ -570,7 +599,7 @@ def run_backtest(
 
         return BacktestResponse(
             id=bt.id,
-            strategy_id=bt.strategy_id,
+            strategy_id=bt.strategy_id or 0,
             datasource_id=payload.datasource_id,
             status="completed",
             stats=stats,
@@ -582,6 +611,7 @@ def run_backtest(
             elapsed_seconds=api_data["elapsed_seconds"],
             ml_filter_stats=ml_filter_stats,
             rl_action_stats=rl_action_stats,
+            agent_stats=agent_backtest_stats,
         )
 
     # V1 engine path removed — Phase 1C: all strategies route via V2 unified runner.

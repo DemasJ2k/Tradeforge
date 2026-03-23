@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class BacktestRequest(BaseModel):
-    strategy_id: int
+    strategy_id: int = 0  # Optional for agent-based backtests (scalping_agent, expert_agent)
     datasource_id: int
     initial_balance: float = Field(10000.0, gt=0, le=100_000_000)
     spread_points: float = Field(0.3, ge=0, le=1000)
@@ -25,7 +25,7 @@ class BacktestRequest(BaseModel):
     ml_model_id: Optional[int] = None            # ML model to filter strategy signals
     regime_model_id: Optional[int] = None         # HMM regime model for regime-conditional testing
     rl_model_id: Optional[int] = None             # RL agent model (replaces strategy)
-    strategy_type: str = "strategy"               # "strategy" or "rl"
+    strategy_type: str = "strategy"               # "strategy", "rl", "scalping_agent", "expert_agent"
     ml_threshold: float = Field(0.5, ge=0, le=1.0)
 
 
@@ -89,6 +89,7 @@ class BacktestResponse(BaseModel):
     # Phase 5 — ML-enhanced backtest results
     ml_filter_stats: Optional[dict[str, Any]] = None      # ML filter rate, regime breakdown
     rl_action_stats: Optional[dict[str, int]] = None      # RL action distribution
+    agent_stats: Optional[dict[str, Any]] = None          # Agent backtest stats (scalping/expert)
 
 
 # ── Walk-Forward Validation ──

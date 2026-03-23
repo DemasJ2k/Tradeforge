@@ -988,6 +988,98 @@ def run_rl_backtest(
     return result, action_stats
 
 
+def run_agent_backtest(
+    bars: list[Bar],
+    agent_type: str,
+    symbol: str,
+    initial_balance: float = 10_000.0,
+    spread_points: float = 0.0,
+    commission_per_lot: float = 0.0,
+    point_value: float = 1.0,
+    slippage_pct: float = 0.0,
+    commission_pct: float = 0.0,
+    margin_rate: float = 0.01,
+    bars_per_day: float = 1.0,
+    tick_mode: str = "ohlc_five",
+    lot_size: float = 0.01,
+    agent_config: dict | None = None,
+) -> tuple[RunResult, dict]:
+    """Run a V2 backtest using an agent strategy (scalping or expert).
+
+    Args:
+        agent_type: "scalping_agent" or "expert_agent"
+        agent_config: optional config overrides (min_confidence, risk_per_trade, etc.)
+
+    Returns:
+        (RunResult, agent_stats_dict)
+    """
+    from app.services.backtest.v2.engine.agent_strategies import (
+        ScalpingAgentStrategy,
+        ExpertAgentStrategy,
+    )
+    from app.services.backtest.v2.engine.instrument import get_instrument_spec
+
+    spec = get_instrument_spec(symbol)
+    if point_value == 1.0 and spec.contract_size != 100_000:
+        point_value = spec.point_value
+
+    cfg = agent_config or {}
+
+    if agent_type == "scalping_agent":
+        strategy = ScalpingAgentStrategy(
+            symbol=symbol,
+            model_dir=cfg.get("model_dir"),
+            risk_per_trade=cfg.get("risk_per_trade", 0.005),
+            min_confidence=cfg.get("min_confidence", 0.55),
+            session_filter=cfg.get("session_filter", True),
+            min_bars_between_trades=cfg.get("min_bars_between_trades", 3),
+            sl_mult=cfg.get("sl_mult", 1.5),
+            tp_mult=cfg.get("tp_mult", 2.5),
+            lot_size=lot_size,
+        )
+    elif agent_type == "expert_agent":
+        strategy = ExpertAgentStrategy(
+            symbol=symbol,
+            model_dir=cfg.get("model_dir"),
+            risk_per_trade=cfg.get("risk_per_trade", 0.005),
+            min_confidence=cfg.get("min_confidence", 0.55),
+            min_agreement=cfg.get("min_agreement", 2),
+            session_filter=cfg.get("session_filter", True),
+            regime_filter=cfg.get("regime_filter", True),
+            min_bars_between_trades=cfg.get("min_bars_between_trades", 3),
+            lot_size=lot_size,
+        )
+    else:
+        raise ValueError(f"Unknown agent_type: {agent_type}")
+
+    # Build DataHandler with ATR indicator (needed for SL/TP)
+    data_handler = DataHandler()
+    data_handler.add_symbol(
+        symbol=symbol,
+        bars=bars,
+        indicator_configs=[{"type": "atr", "period": 14}],
+        point_value=point_value,
+    )
+
+    config = RunConfig(
+        initial_cash=initial_balance,
+        commission_per_lot=commission_per_lot,
+        commission_pct=commission_pct,
+        spread=spread_points,
+        slippage_pct=slippage_pct,
+        point_values={symbol: point_value},
+        margin_rates={symbol: margin_rate},
+        risk=RiskConfig(max_positions=1, exclusive_orders=True),
+        tick_mode=TICK_MODE_MAP.get(tick_mode, TickMode.OHLC_FIVE),
+        bars_per_day=bars_per_day,
+    )
+
+    runner = Runner(data_handler=data_handler, strategy=strategy, config=config)
+    result = runner.run()
+    agent_stats = strategy.get_agent_stats()
+    return result, agent_stats
+
+
 def run_v2_portfolio_backtest(
     symbols_data: list[dict],
     strategy_config: dict,
