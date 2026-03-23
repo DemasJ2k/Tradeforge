@@ -117,7 +117,24 @@ class AgentRunner:
 
             # Check if this is an Expert Agent (ML-only, no traditional strategy)
             risk_config = agent.risk_config or {}
-            if risk_config.get("agent_type") == "expert":
+            if risk_config.get("agent_type") == "scalping":
+                from app.services.agent.scalping_agent import ScalpingAgent
+                self._expert_agent = ScalpingAgent(
+                    agent_id=self.agent_id,
+                    symbol=self._symbol,
+                    broker_name=self._broker_name,
+                    config=risk_config,
+                )
+                if self._expert_agent.load():
+                    self._strategy_type = "expert"
+                    self._evaluator = None
+                    logger.info("[Agent %d] Scalping Agent initialized for %s", self.agent_id, self._symbol)
+                else:
+                    logger.warning("[Agent %d] Scalping Agent failed to load — falling back to MSS", self.agent_id)
+                    self._expert_agent = None
+                    self._evaluator = MSSEvaluator(self._symbol)
+                    self._strategy_type = "mss"
+            elif risk_config.get("agent_type") == "expert":
                 from app.services.agent.expert_agent import ExpertAgent
                 self._expert_agent = ExpertAgent(
                     agent_id=self.agent_id,

@@ -101,6 +101,9 @@ export default function AgentPanel() {
   const [cMinAgreement, setCMinAgreement] = useState("2");
   const [cMinConfidence, setCMinConfidence] = useState("0.55");
 
+  // Scalping Agent mode (Optuna-tuned XGB+LGB ensemble)
+  const [cScalpingMode, setCScalpingMode] = useState(false);
+
   // Symbol combobox state for create form
   const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
   const [brokerSymbols, setBrokerSymbols] = useState<string[]>([]);
@@ -240,11 +243,25 @@ export default function AgentPanel() {
   );
 
   const handleCreate = async () => {
-    if (!cName || (!cExpertMode && !cStrategyId)) return;
+    if (!cName || (!cExpertMode && !cScalpingMode && !cStrategyId)) return;
     setCreating(true);
     setActionError("");
     try {
-      const riskConfig: Record<string, unknown> = cExpertMode
+      const riskConfig: Record<string, unknown> = cScalpingMode
+        ? {
+            // Scalping Agent config (Optuna-tuned XGB+LGB)
+            agent_type: "scalping",
+            risk_per_trade: 0.005,
+            position_size_type: "percent_risk",
+            position_size_value: 0.5,
+            max_daily_loss_pct: parseFloat(cMaxDailyLoss) || 4,
+            max_drawdown_pct: parseFloat(cMaxDrawdown) || 8,
+            max_open_positions: 2,
+            min_confidence: parseFloat(cMinConfidence) || 0.55,
+            session_filter: cSessionFilter,
+            min_bars_between_trades: 3,
+          }
+        : cExpertMode
         ? {
             // Expert Agent config
             agent_type: "expert",
@@ -277,9 +294,9 @@ export default function AgentPanel() {
 
       const data: AgentCreateRequest = {
         name: cName,
-        strategy_id: cExpertMode ? null : cStrategyId,
+        strategy_id: (cExpertMode || cScalpingMode) ? null : cStrategyId,
         symbol: cSymbol,
-        timeframe: cExpertMode ? "M5" : cTimeframe,
+        timeframe: (cExpertMode || cScalpingMode) ? "M5" : cTimeframe,
         mode: cMode,
         ml_model_id: cMlModelId,
         prop_firm_account_id: cPropFirmId,
@@ -296,6 +313,7 @@ export default function AgentPanel() {
       setCRlModelId(null);
       setCRlMode("filter");
       setCExpertMode(false);
+      setCScalpingMode(false);
     } catch (e) {
       setActionError((e as Error).message);
     } finally {
@@ -616,7 +634,87 @@ export default function AgentPanel() {
               />
             </div>
 
+            {/* Scalping Agent toggle */}
+            <div className="border-t border-card-border pt-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={cScalpingMode}
+                  onClick={() => {
+                    setCScalpingMode(!cScalpingMode);
+                    if (!cScalpingMode) {
+                      setCExpertMode(false);
+                      setCTimeframe("M5");
+                      setCMaxDailyLoss("4");
+                      setCMaxDrawdown("8");
+                      setCMaxOpenPositions("2");
+                      if (!["XAUUSD", "US30"].includes(cSymbol)) setCSymbol("XAUUSD");
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cScalpingMode ? "bg-amber-600" : "bg-zinc-600"}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${cScalpingMode ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+                <Label className="text-xs font-semibold text-foreground">
+                  Scalping Agent
+                  {cScalpingMode && <Badge className="ml-2 bg-amber-500/20 text-amber-400 text-[10px]">SCALP</Badge>}
+                </Label>
+              </div>
+              {cScalpingMode && (
+                <p className="text-[10px] text-muted-foreground mt-1.5 pl-12">
+                  Optuna-tuned XGBoost + LightGBM ensemble scalper. Symbol-locked to XAUUSD or US30 on M5. Walk-forward validated with ATR-based SL/TP.
+                </p>
+              )}
+            </div>
+
+            {/* Scalping Agent symbol selector */}
+            {cScalpingMode && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+                <Label className="block text-xs font-semibold text-amber-400">Scalping Configuration</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {["XAUUSD", "US30"].map((sym) => (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => { setCSymbol(sym); setCSymbolInput(sym); }}
+                      className={`rounded-lg border p-2 text-xs font-medium transition-colors ${
+                        cSymbol === sym
+                          ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                          : "border-card-border text-muted-foreground hover:border-amber-500/40"
+                      }`}
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Min Confidence</Label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0.5"
+                      max="0.9"
+                      value={cMinConfidence}
+                      onChange={(e) => setCMinConfidence(e.target.value)}
+                      className="w-full rounded border border-card-border bg-background px-2 py-1 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Session Filter</Label>
+                    <button type="button" role="switch" aria-checked={cSessionFilter}
+                      onClick={() => setCSessionFilter(!cSessionFilter)}
+                      className={`mt-1 relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${cSessionFilter ? "bg-amber-600" : "bg-zinc-600"}`}>
+                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${cSessionFilter ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Expert Agent toggle */}
+            {!cScalpingMode && (
             <div className="border-t border-card-border pt-3">
               <div className="flex items-center gap-3">
                 <button
@@ -647,6 +745,7 @@ export default function AgentPanel() {
                 </p>
               )}
             </div>
+            )}
 
             {/* Expert Agent Configuration */}
             {cExpertMode && (
@@ -1051,8 +1150,8 @@ export default function AgentPanel() {
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={creating || !cName || (!cExpertMode && !cStrategyId)}>
-                {creating ? "Creating..." : cExpertMode ? "Create Expert Agent" : "Create Agent"}
+              <Button onClick={handleCreate} disabled={creating || !cName || (!cExpertMode && !cScalpingMode && !cStrategyId)}>
+                {creating ? "Creating..." : cScalpingMode ? "Create Scalping Agent" : cExpertMode ? "Create Expert Agent" : "Create Agent"}
               </Button>
             </div>
         </DialogContent>
