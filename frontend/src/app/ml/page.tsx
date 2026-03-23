@@ -369,7 +369,7 @@ export default function MLPage() {
           }}>
             <Upload className="h-4 w-4" /> Upload Model
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { setView("data"); loadDabentoDatasets(); }} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => { setView("data"); setError(""); loadDabentoDatasets(); }} className="gap-1.5">
             <Database className="h-4 w-4" /> Data Sources
           </Button>
           <Button variant="outline" size="sm" onClick={() => setView("backtest")} className="gap-1.5">
@@ -1122,6 +1122,87 @@ export default function MLPage() {
 
       {view === "data" && (
         <div className="space-y-4">
+          {/* Uploaded / Broker Data Sources */}
+          <Card className="bg-card-bg border-card-border">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Database className="h-5 w-5 text-accent" /> Data Sources
+                </h3>
+                <Button variant="outline" size="sm" onClick={() => {
+                  api.get<{ items: DataSource[] }>("/api/data/sources")
+                    .then(r => setDataSources(r.items || []))
+                    .catch(console.error);
+                }} className="gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </Button>
+              </div>
+
+              {dataSources.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Upload className="h-10 w-10 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-base font-medium mb-2">No Data Sources</h3>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    Upload CSV files or fetch data from your broker to use as training data.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Sources</div>
+                      <div className="text-xl font-bold text-accent">{dataSources.length}</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Symbols</div>
+                      <div className="text-xl font-bold">{new Set(dataSources.map(d => d.symbol)).size}</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Bars</div>
+                      <div className="text-xl font-bold">{dataSources.reduce((s, d) => s + (d.row_count || 0), 0).toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg bg-background/50 border border-card-border p-3">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Size</div>
+                      <div className="text-xl font-bold">{dataSources.reduce((s, d) => s + (d.file_size_mb || 0), 0).toFixed(1)} MB</div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Symbol</TableHead>
+                          <TableHead>Timeframe</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead className="text-right">Bars</TableHead>
+                          <TableHead>Date Range</TableHead>
+                          <TableHead className="text-right">Size</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dataSources.map(ds => (
+                          <TableRow key={ds.id}>
+                            <TableCell className="font-medium">{ds.symbol}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-[10px]">{ds.timeframe}</Badge></TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {ds.source_type === "broker" ? ds.broker_name : ds.source_type || "upload"}
+                            </TableCell>
+                            <TableCell className="text-right">{(ds.row_count || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {ds.date_from ? new Date(ds.date_from).toLocaleDateString() : "—"} — {ds.date_to ? new Date(ds.date_to).toLocaleDateString() : "—"}
+                            </TableCell>
+                            <TableCell className="text-right text-xs">{(ds.file_size_mb || 0).toFixed(1)} MB</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Databento Datasets */}
           <Card className="bg-card-bg border-card-border">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">

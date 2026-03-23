@@ -251,6 +251,13 @@ This was a major security and stability push — 12 commits addressing audit fin
   when paper trades close. Previously, open position count stayed stale and portfolio circuit breaker never
   triggered because daily_pnl was never updated from actual trade results
 
+**Fix ML Lab Data Sources tab: uploaded/broker data sources not displayed**
+- The `view === "data"` section in `ml/page.tsx` only rendered the Databento Datasets card
+- The `dataSources` state was fetched from `/api/data/sources` but never rendered in the tab
+- Added a "Data Sources" card with summary stats (count, symbols, bars, size) and a table
+  showing symbol, timeframe, source type, bar count, date range, and file size
+- Also clears stale error banners when switching to the Data Sources tab
+
 **Fix cTrader adapter: wrong position side, entry price, size, and P&L**
 - **Root cause**: Three interrelated encoding bugs in `ctrader.py`:
   1. **Price fields** (`price`, `stopLoss`, `takeProfit`) in positions/orders/deals are `double`
