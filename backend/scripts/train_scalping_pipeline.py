@@ -62,9 +62,9 @@ SYMBOL_PARAMS = {
 
 # Grade thresholds
 GRADE_THRESHOLDS = {
-    "A": {"min_profit_factor": 1.5, "min_sharpe": 1.0, "min_win_rate": 0.52},
-    "B": {"min_profit_factor": 1.2, "min_sharpe": 0.5, "min_win_rate": 0.50},
-    "C": {"min_profit_factor": 1.0, "min_sharpe": 0.0, "min_win_rate": 0.48},
+    "A": {"min_profit_factor": 1.8, "min_sharpe": 1.5, "min_win_rate": 0.55},
+    "B": {"min_profit_factor": 1.4, "min_sharpe": 1.0, "min_win_rate": 0.52},
+    "C": {"min_profit_factor": 1.1, "min_sharpe": 0.5, "min_win_rate": 0.48},
 }
 
 N_WF_FOLDS = 5
@@ -265,7 +265,7 @@ def backtest_predictions(
             tr_vals.append(tr)
         atr[i] = np.mean(tr_vals)
 
-    for i in range(14, n - max_bars):
+    for i in range(14, n - 1):  # trade up to second-to-last bar (need >=1 bar to exit)
         pred = predictions[i]
         conf = confidences[i]
 
@@ -365,7 +365,7 @@ def _compute_metrics(trades: list[dict]) -> dict:
     pnl_arr = np.array(pnls)
     avg_pnl = np.mean(pnl_arr)
     std_pnl = np.std(pnl_arr) if len(pnl_arr) > 1 else 1.0
-    sharpe = (avg_pnl / std_pnl) * np.sqrt(252 * 12) if std_pnl > 1e-10 else 0  # annualized ~M5
+    sharpe = (avg_pnl / std_pnl) * np.sqrt(252) if std_pnl > 1e-10 else 0  # annualized daily-equivalent
 
     # Max drawdown
     equity = np.cumsum(pnl_arr)

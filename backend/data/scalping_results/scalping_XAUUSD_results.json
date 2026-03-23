@@ -1,118 +1,118 @@
 {
   "xgboost": {
     "aggregate": {
-      "avg_profit_factor": 2.169,
-      "avg_sharpe": 17.105,
-      "avg_win_rate": 0.5744,
-      "total_trades": 8513
+      "avg_profit_factor": 2.3742,
+      "avg_sharpe": 5.2028,
+      "avg_win_rate": 0.5925,
+      "total_trades": 26513
     },
     "aggregate_grade": "A",
     "folds": [
       {
         "fold": 1,
-        "train_size": 16466,
-        "val_size": 8233,
-        "val_accuracy": 0.465,
+        "train_size": 49800,
+        "val_size": 24900,
+        "val_accuracy": 0.5518,
         "best_params": {
-          "n_estimators": 393,
-          "max_depth": 5,
-          "learning_rate": 0.01307493742940754,
-          "subsample": 0.9694556618359886,
-          "colsample_bytree": 0.7904816666632324,
-          "min_child_weight": 19,
-          "reg_alpha": 0.012245497663573158,
-          "reg_lambda": 0.10452608538245316,
-          "gamma": 2.021706549456938
+          "n_estimators": 138,
+          "max_depth": 8,
+          "learning_rate": 0.04123648117958979,
+          "subsample": 0.6954978561540173,
+          "colsample_bytree": 0.8771391205886326,
+          "min_child_weight": 12,
+          "reg_alpha": 0.00777170725211547,
+          "reg_lambda": 0.016945250398596734,
+          "gamma": 3.487853638885892
         },
         "backtest": {
-          "n_trades": 1202,
-          "win_rate": 0.5641,
-          "profit_factor": 2.2869,
-          "sharpe": 19.3923,
-          "max_dd_pct": 0.0553,
-          "avg_pnl": 3.1206,
-          "total_pnl": 3750.98
+          "n_trades": 6526,
+          "win_rate": 0.5616,
+          "profit_factor": 1.9928,
+          "sharpe": 4.3624,
+          "max_dd_pct": 0.0286,
+          "avg_pnl": 1.1812,
+          "total_pnl": 7708.5
         },
         "grade": "A"
       },
       {
         "fold": 2,
-        "train_size": 24699,
-        "val_size": 8233,
-        "val_accuracy": 0.5486,
+        "train_size": 74700,
+        "val_size": 24900,
+        "val_accuracy": 0.539,
         "best_params": {
-          "n_estimators": 456,
-          "max_depth": 3,
-          "learning_rate": 0.0241740956468111,
-          "subsample": 0.7279422991818407,
-          "colsample_bytree": 0.5141398551170058,
-          "min_child_weight": 10,
-          "reg_alpha": 0.001662156604637168,
-          "reg_lambda": 0.012415608482714596,
-          "gamma": 4.2202777249160475
+          "n_estimators": 369,
+          "max_depth": 5,
+          "learning_rate": 0.05638403659065003,
+          "subsample": 0.87509238827657,
+          "colsample_bytree": 0.5978938053808449,
+          "min_child_weight": 13,
+          "reg_alpha": 0.006604866413515834,
+          "reg_lambda": 0.20388152004298712,
+          "gamma": 2.5995871334300973
         },
         "backtest": {
-          "n_trades": 2208,
-          "win_rate": 0.5652,
-          "profit_factor": 2.0825,
-          "sharpe": 17.1325,
-          "max_dd_pct": 0.0374,
-          "avg_pnl": 2.5348,
-          "total_pnl": 5596.94
+          "n_trades": 6210,
+          "win_rate": 0.6039,
+          "profit_factor": 2.5144,
+          "sharpe": 5.7956,
+          "max_dd_pct": 0.0149,
+          "avg_pnl": 2.7481,
+          "total_pnl": 17065.74
         },
         "grade": "A"
       },
       {
         "fold": 3,
-        "train_size": 32932,
-        "val_size": 8233,
-        "val_accuracy": 0.5409,
+        "train_size": 99600,
+        "val_size": 24900,
+        "val_accuracy": 0.5599,
         "best_params": {
-          "n_estimators": 234,
+          "n_estimators": 498,
           "max_depth": 6,
-          "learning_rate": 0.0464149937286252,
-          "subsample": 0.7945479192013281,
-          "colsample_bytree": 0.706675842551092,
-          "min_child_weight": 4,
-          "reg_alpha": 0.01189604486558871,
-          "reg_lambda": 2.2015256384892363,
-          "gamma": 0.028220727231405562
+          "learning_rate": 0.03181832946323926,
+          "subsample": 0.7473802809751933,
+          "colsample_bytree": 0.5957991012053319,
+          "min_child_weight": 19,
+          "reg_alpha": 0.48108661430875205,
+          "reg_lambda": 6.99304790796004,
+          "gamma": 0.04314898640197162
         },
         "backtest": {
-          "n_trades": 2817,
-          "win_rate": 0.5911,
-          "profit_factor": 2.2606,
-          "sharpe": 15.5735,
-          "max_dd_pct": 0.0621,
-          "avg_pnl": 5.3857,
-          "total_pnl": 15171.48
+          "n_trades": 6746,
+          "win_rate": 0.6109,
+          "profit_factor": 2.785,
+          "sharpe": 5.7966,
+          "max_dd_pct": 0.0116,
+          "avg_pnl": 3.0544,
+          "total_pnl": 20604.71
         },
         "grade": "A"
       },
       {
         "fold": 4,
-        "train_size": 41165,
-        "val_size": 8233,
-        "val_accuracy": 0.5528,
+        "train_size": 124500,
+        "val_size": 24900,
+        "val_accuracy": 0.5391,
         "best_params": {
-          "n_estimators": 140,
+          "n_estimators": 267,
           "max_depth": 4,
-          "learning_rate": 0.04988122513563502,
-          "subsample": 0.8216074723163186,
-          "colsample_bytree": 0.7599450985977414,
+          "learning_rate": 0.086891482918589,
+          "subsample": 0.7510636622120084,
+          "colsample_bytree": 0.7683635896757541,
           "min_child_weight": 9,
-          "reg_alpha": 2.2138271805164162,
-          "reg_lambda": 0.029092899347394913,
-          "gamma": 0.3744450913822439
+          "reg_alpha": 0.031097012918057342,
+          "reg_lambda": 0.01888894449122617,
+          "gamma": 3.5756518517880895
         },
         "backtest": {
-          "n_trades": 2286,
-          "win_rate": 0.577,
-          "profit_factor": 2.0459,
-          "sharpe": 16.3216,
-          "max_dd_pct": 0.056,
-          "avg_pnl": 4.6713,
-          "total_pnl": 10678.59
+          "n_trades": 7031,
+          "win_rate": 0.5935,
+          "profit_factor": 2.2044,
+          "sharpe": 4.8568,
+          "max_dd_pct": 0.0239,
+          "avg_pnl": 4.4889,
+          "total_pnl": 31561.64
         },
         "grade": "A"
       }
@@ -120,118 +120,118 @@
   },
   "lightgbm": {
     "aggregate": {
-      "avg_profit_factor": 2.1532,
-      "avg_sharpe": 17.2233,
-      "avg_win_rate": 0.5766,
-      "total_trades": 9505
+      "avg_profit_factor": 2.388,
+      "avg_sharpe": 5.2102,
+      "avg_win_rate": 0.5919,
+      "total_trades": 26351
     },
     "aggregate_grade": "A",
     "folds": [
       {
         "fold": 1,
-        "train_size": 16466,
-        "val_size": 8233,
-        "val_accuracy": 0.4644,
+        "train_size": 49800,
+        "val_size": 24900,
+        "val_accuracy": 0.55,
         "best_params": {
-          "n_estimators": 136,
+          "n_estimators": 470,
           "max_depth": 3,
-          "learning_rate": 0.10014438102597636,
-          "subsample": 0.8906533224585762,
-          "colsample_bytree": 0.5529124900341673,
-          "min_child_samples": 5,
-          "reg_alpha": 0.5714525945919957,
-          "reg_lambda": 3.410895388682158,
-          "num_leaves": 57
+          "learning_rate": 0.06472667354702347,
+          "subsample": 0.9631278606994074,
+          "colsample_bytree": 0.6112482457590104,
+          "min_child_samples": 15,
+          "reg_alpha": 5.874374684771781,
+          "reg_lambda": 0.21298048009321247,
+          "num_leaves": 46
         },
         "backtest": {
-          "n_trades": 1474,
-          "win_rate": 0.559,
-          "profit_factor": 2.155,
-          "sharpe": 18.0678,
-          "max_dd_pct": 0.0461,
-          "avg_pnl": 2.8344,
-          "total_pnl": 4177.97
+          "n_trades": 6734,
+          "win_rate": 0.5616,
+          "profit_factor": 1.9829,
+          "sharpe": 4.346,
+          "max_dd_pct": 0.023,
+          "avg_pnl": 1.1736,
+          "total_pnl": 7903.14
         },
         "grade": "A"
       },
       {
         "fold": 2,
-        "train_size": 24699,
-        "val_size": 8233,
-        "val_accuracy": 0.5552,
+        "train_size": 74700,
+        "val_size": 24900,
+        "val_accuracy": 0.5402,
         "best_params": {
-          "n_estimators": 215,
-          "max_depth": 4,
-          "learning_rate": 0.04180475675415131,
-          "subsample": 0.6315255756786561,
-          "colsample_bytree": 0.5825654742022912,
-          "min_child_samples": 43,
-          "reg_alpha": 0.023548185512031437,
-          "reg_lambda": 2.3859568657608734,
-          "num_leaves": 19
+          "n_estimators": 410,
+          "max_depth": 6,
+          "learning_rate": 0.019716178379591713,
+          "subsample": 0.6751640613438693,
+          "colsample_bytree": 0.8056540848992022,
+          "min_child_samples": 38,
+          "reg_alpha": 4.191755591271877,
+          "reg_lambda": 0.4914834670871273,
+          "num_leaves": 30
         },
         "backtest": {
-          "n_trades": 2420,
-          "win_rate": 0.581,
-          "profit_factor": 2.1986,
-          "sharpe": 18.3589,
-          "max_dd_pct": 0.0313,
-          "avg_pnl": 2.7193,
-          "total_pnl": 6580.82
+          "n_trades": 5608,
+          "win_rate": 0.605,
+          "profit_factor": 2.508,
+          "sharpe": 5.801,
+          "max_dd_pct": 0.0146,
+          "avg_pnl": 2.7031,
+          "total_pnl": 15158.95
         },
         "grade": "A"
       },
       {
         "fold": 3,
-        "train_size": 32932,
-        "val_size": 8233,
-        "val_accuracy": 0.5308,
+        "train_size": 99600,
+        "val_size": 24900,
+        "val_accuracy": 0.5547,
         "best_params": {
-          "n_estimators": 184,
-          "max_depth": 5,
-          "learning_rate": 0.0789093072835898,
-          "subsample": 0.7413164601304922,
-          "colsample_bytree": 0.7530045086617151,
-          "min_child_samples": 40,
-          "reg_alpha": 0.2040333476932945,
-          "reg_lambda": 0.06442593637954634,
-          "num_leaves": 34
+          "n_estimators": 378,
+          "max_depth": 4,
+          "learning_rate": 0.06571356610382223,
+          "subsample": 0.6745355685436739,
+          "colsample_bytree": 0.6535860505871128,
+          "min_child_samples": 21,
+          "reg_alpha": 0.05070336220052955,
+          "reg_lambda": 0.002190927482798612,
+          "num_leaves": 46
         },
         "backtest": {
-          "n_trades": 2995,
-          "win_rate": 0.5907,
-          "profit_factor": 2.2132,
-          "sharpe": 16.0283,
-          "max_dd_pct": 0.045,
-          "avg_pnl": 4.9836,
-          "total_pnl": 14925.99
+          "n_trades": 6755,
+          "win_rate": 0.6095,
+          "profit_factor": 2.867,
+          "sharpe": 5.8981,
+          "max_dd_pct": 0.0132,
+          "avg_pnl": 3.1711,
+          "total_pnl": 21421.04
         },
         "grade": "A"
       },
       {
         "fold": 4,
-        "train_size": 41165,
-        "val_size": 8233,
-        "val_accuracy": 0.5459,
+        "train_size": 124500,
+        "val_size": 24900,
+        "val_accuracy": 0.5426,
         "best_params": {
-          "n_estimators": 295,
-          "max_depth": 4,
-          "learning_rate": 0.034928643679114336,
-          "subsample": 0.732262234360439,
-          "colsample_bytree": 0.5666014865506913,
-          "min_child_samples": 31,
-          "reg_alpha": 0.002119120378901125,
-          "reg_lambda": 0.1919961931275471,
-          "num_leaves": 15
+          "n_estimators": 426,
+          "max_depth": 7,
+          "learning_rate": 0.03199989248436041,
+          "subsample": 0.7098833222610115,
+          "colsample_bytree": 0.5889112493454234,
+          "min_child_samples": 44,
+          "reg_alpha": 9.37484750985755,
+          "reg_lambda": 0.0027724439204395504,
+          "num_leaves": 25
         },
         "backtest": {
-          "n_trades": 2616,
-          "win_rate": 0.5757,
-          "profit_factor": 2.046,
-          "sharpe": 16.4382,
-          "max_dd_pct": 0.0521,
-          "avg_pnl": 4.5949,
-          "total_pnl": 12020.39
+          "n_trades": 7254,
+          "win_rate": 0.5915,
+          "profit_factor": 2.1939,
+          "sharpe": 4.7955,
+          "max_dd_pct": 0.0256,
+          "avg_pnl": 4.5099,
+          "total_pnl": 32715.04
         },
         "grade": "A"
       }
