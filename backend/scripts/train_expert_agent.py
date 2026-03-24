@@ -373,6 +373,13 @@ def train_expert_lstm(
     seq_len = 60
     n_features = X_clean.shape[1]
 
+    # Cap data to prevent OOM on large datasets (440K x 60 x 97 x 4 = 10GB+)
+    MAX_LSTM_SAMPLES = 150_000
+    if len(X_clean) > MAX_LSTM_SAMPLES:
+        print(f"    Capping LSTM data: {len(X_clean):,} → {MAX_LSTM_SAMPLES:,} (latest samples)")
+        X_clean = X_clean[-MAX_LSTM_SAMPLES:]
+        y_clean = y_clean[-MAX_LSTM_SAMPLES:]
+
     # Build sequences
     sequences = []
     targets = []

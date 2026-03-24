@@ -1,0 +1,314 @@
+{
+  "XAUUSD": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_XAUUSD_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.6059906191637084
+      },
+      "val_metrics": {
+        "accuracy": 0.5194972570398841
+      },
+      "feature_importance": {
+        "session_ny": "0.068013705",
+        "session_asian": "0.043835387",
+        "time_hour_sin": "0.04149838",
+        "bos_bullish": "0.036778994",
+        "session_london": "0.030542579",
+        "kill_zone_ny_open": "0.030368371",
+        "time_hour_cos": "0.029119367",
+        "parkinson_vol_20": "0.024714846",
+        "bos_bearish": "0.024483414",
+        "swing_high_dist": "0.02198571",
+        "kill_zone_london_close": "0.02172834",
+        "swing_low_dist": "0.021082962",
+        "session_dead": "0.02037078",
+        "smc_bullish_confluence": "0.020204974",
+        "atr_14_norm": "0.017852152"
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_XAUUSD_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.5989250531057981
+      },
+      "val_metrics": {
+        "accuracy": 0.5202157871326087
+      },
+      "feature_importance": {
+        "h4_atr_norm": "1142",
+        "swing_low_dist": "995",
+        "swing_high_dist": "993",
+        "time_hour_cos": "970",
+        "time_hour_sin": "952",
+        "h4_adx_14": "901",
+        "h1_atr_norm": "890",
+        "atr_14_norm": "872",
+        "h1_adx_14": "712",
+        "adx_14": "710",
+        "h4_macd_hist": "668",
+        "h4_trend_ema50": "657",
+        "regime_atr_ratio": "614",
+        "h4_trend_ema20": "571",
+        "h1_macd_hist": "566"
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_XAUUSD_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7758103241296519
+      },
+      "val_metrics": {
+        "accuracy": 0.7758103241296519
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_XAUUSD_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6590080264602313
+      },
+      "val_metrics": {
+        "accuracy": 0.6067017187696028
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_52037.joblib",
+      "n_bars": 440541,
+      "n_states": 4,
+      "regime_stats": {
+        "volatile": {
+          "return_mean": -9.774682720651685e-05,
+          "vol_mean": 0.0030563596071056963,
+          "count": 22211,
+          "pct": 5.0
+        },
+        "trending_down": {
+          "return_mean": -1.4251476010626005e-05,
+          "vol_mean": 0.0006489479311668579,
+          "count": 140011,
+          "pct": 31.8
+        },
+        "trending_up": {
+          "return_mean": 0.003170786329939261,
+          "vol_mean": 0.0016450288327226757,
+          "count": 624,
+          "pct": 0.1
+        },
+        "ranging": {
+          "return_mean": 1.1778545846722919e-05,
+          "vol_mean": 0.00029441117601016647,
+          "count": 277695,
+          "pct": 63.0
+        }
+      },
+      "log_likelihood": 8822904.466569563
+    }
+  },
+  "US30": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.5976236002656347
+      },
+      "val_metrics": {
+        "accuracy": 0.5245368568091782
+      },
+      "feature_importance": {
+        "kill_zone_london_close": "0.062851876",
+        "kill_zone_ny_open": "0.0603599",
+        "bos_bullish": "0.05284118",
+        "bos_bearish": "0.04030276",
+        "session_dead": "0.039144285",
+        "time_hour_cos": "0.037020195",
+        "session_asian": "0.027530374",
+        "volume_ratio_20": "0.02664819",
+        "swing_low_dist": "0.021856228",
+        "time_hour_sin": "0.020529779",
+        "parkinson_vol_20": "0.018765572",
+        "swing_high_dist": "0.01800055",
+        "smc_bullish_confluence": "0.017968373",
+        "smc_bearish_confluence": "0.01661856",
+        "session_london": "0.016363895"
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.5894541894707916
+      },
+      "val_metrics": {
+        "accuracy": 0.5234491286725137
+      },
+      "feature_importance": {
+        "h4_atr_norm": "1080",
+        "swing_low_dist": "1033",
+        "swing_high_dist": "1005",
+        "time_hour_sin": "959",
+        "time_hour_cos": "940",
+        "adx_14": "827",
+        "h1_atr_norm": "773",
+        "h1_adx_14": "757",
+        "h4_adx_14": "703",
+        "regime_atr_ratio": "684",
+        "atr_14_norm": "680",
+        "h4_macd_hist": "628",
+        "h1_macd_hist": "569",
+        "h4_rsi_14": "549",
+        "volatility_20": "537"
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7013805522208884
+      },
+      "val_metrics": {
+        "accuracy": 0.7013805522208884
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.660130756371797
+      },
+      "val_metrics": {
+        "accuracy": 0.6007694245345668
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_55194.joblib",
+      "n_bars": 438838,
+      "n_states": 4,
+      "regime_stats": {
+        "volatile": {
+          "return_mean": -3.4691277126943894e-05,
+          "vol_mean": 0.002808837422366038,
+          "count": 21209,
+          "pct": 4.8
+        },
+        "trending_down": {
+          "return_mean": -2.251140638146791e-05,
+          "vol_mean": 0.0008216978796010707,
+          "count": 80762,
+          "pct": 18.4
+        },
+        "trending_up": {
+          "return_mean": 9.754080610485006e-06,
+          "vol_mean": 0.00017566150639364406,
+          "count": 169378,
+          "pct": 38.6
+        },
+        "ranging": {
+          "return_mean": 8.234623814544472e-06,
+          "vol_mean": 0.00037348751992580183,
+          "count": 167489,
+          "pct": 38.2
+        }
+      },
+      "log_likelihood": 8941327.063045712
+    }
+  },
+  "ES": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.5963062421533384
+      },
+      "val_metrics": {
+        "accuracy": 0.5148939577661351
+      },
+      "feature_importance": {
+        "kill_zone_ny_open": "0.066842064",
+        "bos_bullish": "0.054499533",
+        "kill_zone_london_close": "0.046004325",
+        "bos_bearish": "0.041134022",
+        "time_hour_cos": "0.039922915",
+        "session_dead": "0.03387859",
+        "volume_ratio_20": "0.031603053",
+        "session_asian": "0.031403176",
+        "swing_low_dist": "0.022333466",
+        "time_hour_sin": "0.021310495",
+        "session_london": "0.01817568",
+        "swing_high_dist": "0.01740264",
+        "structure_direction": "0.015231831",
+        "parkinson_vol_20": "0.014855593",
+        "time_dow_sin": "0.014000196"
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.5883015749089858
+      },
+      "val_metrics": {
+        "accuracy": 0.5130293532224485
+      },
+      "feature_importance": {
+        "h4_atr_norm": "1033",
+        "swing_low_dist": "1027",
+        "swing_high_dist": "1009",
+        "time_hour_sin": "924",
+        "time_hour_cos": "903",
+        "adx_14": "817",
+        "h4_adx_14": "816",
+        "h1_adx_14": "784",
+        "h1_atr_norm": "773",
+        "h4_macd_hist": "680",
+        "regime_atr_ratio": "645",
+        "h4_bb_position": "627",
+        "atr_14_norm": "619",
+        "h1_macd_hist": "603",
+        "parkinson_vol_20": "601"
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7145524876617314
+      },
+      "val_metrics": {
+        "accuracy": 0.7145524876617314
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.657678217524473
+      },
+      "val_metrics": {
+        "accuracy": 0.596570500354618
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_58521.joblib",
+      "n_bars": 439237,
+      "n_states": 4,
+      "regime_stats": {
+        "volatile": {
+          "return_mean": -4.3434460011414565e-05,
+          "vol_mean": 0.002989963544903114,
+          "count": 18417,
+          "pct": 4.2
+        },
+        "trending_down": {
+          "return_mean": -2.2495269656817482e-05,
+          "vol_mean": 0.0008649173543470606,
+          "count": 83551,
+          "pct": 19.0
+        },
+        "trending_up": {
+          "return_mean": 1.2528086276678235e-05,
+          "vol_mean": 0.00018530284148405722,
+          "count": 168248,
+          "pct": 38.3
+        },
+        "ranging": {
+          "return_mean": 7.604387510233671e-06,
+          "vol_mean": 0.0003947602807522656,
+          "count": 169021,
+          "pct": 38.5
+        }
+      },
+      "log_likelihood": 8930116.374368679
+    }
+  }
+}

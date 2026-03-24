@@ -19,7 +19,19 @@
 - Section 2: Expert models for XAUUSD, US30, ES (full ensemble: XGB + LGB + LSTM + Meta + Regime)
 - Section 3: Expert models for NAS100, BTCUSD
 - Section 4: OOS validation across all symbols on 2022-2026 data
-- Training running in background (~1-2 hours)
+
+**LSTM OOM fix (`train_expert_agent.py`)**
+- LSTM was OOM-killing when training on 440K samples (440K × 60 timesteps × 97 features × 4 bytes = 10GB+)
+- Fixed by capping LSTM input to 150K most recent samples before sequence building
+- All LSTM models now train successfully within memory limits
+
+**Training results (partial — Sections 1-2 complete, Section 3 in progress)**
+- Section 1: BTCUSD scalping upgraded from Grade B → Grade A (WR 61%, PF 2.49-2.50, Sharpe 5.80-5.81)
+- Section 2: Expert XAUUSD/US30/ES all 5 model types trained (XGB, LGB, LSTM, Meta, HMM Regime)
+  - LSTM val_acc: XAUUSD 0.776, US30 0.701, ES 0.715
+  - Meta val_acc: XAUUSD 0.607, US30 0.601, ES 0.597
+- Section 3: NAS100 expert complete, BTCUSD expert still pending (process timed out)
+- Section 4: OOS validation not yet run
 
 ---
 
