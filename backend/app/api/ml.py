@@ -1584,12 +1584,12 @@ async def model_performance_summary(user: User = Depends(get_current_user), db: 
 
 PIPELINE_MODELS = {
     "scalping": {
-        "symbols": ["XAUUSD", "US30"],
+        "symbols": ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"],
         "description": "XGBoost + LightGBM ensemble",
         "timeframe": "M5",
     },
     "expert": {
-        "symbols": ["XAUUSD", "US30", "BTCUSD"],
+        "symbols": ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"],
         "description": "XGB + LGB + LSTM + Meta-labeler + Regime",
         "timeframe": "Multi-TF",
     },

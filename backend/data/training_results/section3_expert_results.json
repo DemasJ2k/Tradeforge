@@ -1,0 +1,88 @@
+{
+  "NAS100": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.586435070306038
+      },
+      "val_metrics": {
+        "accuracy": 0.5010276204321018
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.5886031531192821
+      },
+      "val_metrics": {
+        "accuracy": 0.5027820943405684
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7055223955459698
+      },
+      "val_metrics": {
+        "accuracy": 0.7055223955459698
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6692984434919919
+      },
+      "val_metrics": {
+        "accuracy": 0.5797283071833175
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_10656.joblib",
+      "train_metrics": {},
+      "val_metrics": {}
+    }
+  },
+  "BTCUSD": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.6710285298471884
+      },
+      "val_metrics": {
+        "accuracy": 0.45360566066141417
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.6641156249215868
+      },
+      "val_metrics": {
+        "accuracy": 0.4531038289757615
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.6268139593271403
+      },
+      "val_metrics": {
+        "accuracy": 0.6268139593271403
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.714977542468572
+      },
+      "val_metrics": {
+        "accuracy": 0.5310884729261806
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_11049.joblib",
+      "train_metrics": {},
+      "val_metrics": {}
+    }
+  }
+}
