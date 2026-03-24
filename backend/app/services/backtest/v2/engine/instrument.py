@@ -145,6 +145,10 @@ _register(
                    pip_value_per_lot=0.10, point_value=0.10,
                    margin_rate=0.005, digits=2,
                    description="Nasdaq 100 Index"),
+    InstrumentSpec("ES", contract_size=1, pip_size=0.25,
+                   pip_value_per_lot=12.50, point_value=50.0,
+                   margin_rate=0.05, digits=2,
+                   description="E-mini S&P 500 Futures"),
 )
 
 # --- Crypto ---

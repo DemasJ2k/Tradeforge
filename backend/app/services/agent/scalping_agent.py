@@ -213,7 +213,7 @@ class ScalpingAgent:
 
         try:
             from app.services.agent.instrument_specs import calc_lot_size
-            lot_size = calc_lot_size(self.symbol, risk_amount, sl_dist)
+            lot_size = calc_lot_size(self.symbol, risk_amount, sl_dist, broker_name=self.broker_name)
         except Exception:
             lot_size = 0.01
 

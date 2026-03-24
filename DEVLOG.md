@@ -134,6 +134,33 @@ This was a major security and stability push — 12 commits addressing audit fin
 
 ---
 
+### March 24 — Broker Error Fixes & Agent Backtesting
+
+**Fix Oanda 502 Bad Gateway — exponential backoff retry**
+- Oanda API returns intermittent 502/503/504 errors, causing agent polling to fail
+- Added retry with exponential backoff (up to 4 attempts, 1s→2s→4s) in `oanda.py:_get()`
+- Also handles `ConnectError` and `ReadTimeout` with same retry pattern
+
+**Fix cTrader INVALID_REQUEST — broker-aware lot sizing + volume validation**
+- **Root cause**: `calc_lot_size()` in both `expert_agent.py` and `scalping_agent.py` defaulted to
+  `broker_name="oanda"` even when running on cTrader, producing wrong volume units
+- **Fix 1**: Both agents now pass `broker_name=self.broker_name` to `calc_lot_size()`
+- **Fix 2**: Added volume validation in `ctrader.py:place_order()` — clamps to `minVolume`/`maxVolume`
+  and aligns to `stepVolume` before sending to API
+
+**Add missing ES instrument spec**
+- E-mini S&P 500 was falling back to generic Forex spec (100k contract, pip 0.0001) — completely wrong
+- Added proper spec: pip_size=0.25, point_value=50.0, margin=5%
+
+**Agent Walk-Forward Backtest Script (`agent_backtest_all.py`)**
+- New script for backtesting both agent types on all 5 symbols using Databento historical M5 data
+- $10K starting balance with dynamic position sizing (0.5% risk per trade of current equity)
+- Walk-forward validation: 3-fold expanding window, each tested OOS
+- Vectorized feature computation + batch model prediction (computes features once for all bars)
+- Realistic costs: per-symbol spreads, commissions, slippage
+
+---
+
 ### March 23–24 — Architecture Restructuring, Mobile, & Cleanup
 
 **Fix backtest "Method Not Allowed" — frontend was POSTing to `/api/backtest/run-v3` (nonexistent), changed to `/api/backtest/run`**

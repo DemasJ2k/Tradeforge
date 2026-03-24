@@ -284,7 +284,7 @@ class ExpertAgent:
 
         # Calculate lot size
         from app.services.agent.instrument_specs import calc_lot_size
-        lot_size = calc_lot_size(self.symbol, risk_amount, sl_distance)
+        lot_size = calc_lot_size(self.symbol, risk_amount, sl_distance, broker_name=self.broker_name)
 
         if lot_size <= 0:
             return None

@@ -767,12 +767,28 @@ class CTraderAdapter(BrokerAdapter):
         digits = sym_info.get("digits", 5)
         lot_size = sym_info.get("lotSize", 100_000)
 
+        volume = self._to_volume(request.size, lot_size)
+
+        # Validate volume against symbol constraints
+        min_vol = sym_info.get("minVolume", 100)
+        step_vol = sym_info.get("stepVolume", 100)
+        max_vol = sym_info.get("maxVolume", 10_000_000)
+
+        if volume < min_vol:
+            logger.warning("cTrader volume %d < minVolume %d for %s — clamping up", volume, min_vol, request.symbol)
+            volume = min_vol
+        if volume > max_vol:
+            logger.warning("cTrader volume %d > maxVolume %d for %s — clamping down", volume, max_vol, request.symbol)
+            volume = max_vol
+        if step_vol > 0 and volume % step_vol != 0:
+            volume = max(min_vol, (volume // step_vol) * step_vol)
+
         payload: dict = {
             "ctidTraderAccountId": self._account_id,
             "symbolId": symbol_id,
             "orderType": _ORDER_TYPE_MAP.get(request.order_type, "MARKET"),
             "tradeSide": "BUY" if request.side == OrderSide.BUY else "SELL",
-            "volume": self._to_volume(request.size, lot_size),
+            "volume": volume,
         }
 
         # Price for limit/stop orders (API expects doubles, not integer-encoded)
