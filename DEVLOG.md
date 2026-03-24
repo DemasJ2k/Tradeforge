@@ -1,5 +1,28 @@
 # Tradeforge Development Log
 
+## March 24 (continued) — News Filter + Enhanced Retrain
+
+**Add news avoidance to ScalpingAgent**
+- ScalpingAgent now checks for high-impact news before entering trades (matching ExpertAgent behavior)
+- Added `news_filter_enabled` (default: True) and `news_window_minutes` (default: 15) config options
+- Added `_check_news_filter()` async method with 5-minute result caching
+- Both agent types now avoid trading during FOMC, NFP, CPI, and other high-impact events
+
+**Add ES + NAS100 news keywords**
+- Added ES and NAS100 to `HIGH_IMPACT_KEYWORDS` in `newsapi_provider.py`
+- Added ES query mapping: "s&p 500 OR wall street OR stock market OR economy"
+
+**Enhanced retrain pipeline (`enhanced_retrain.py`)**
+- New script for retraining on 2020-2026 data with 2022-2026 OOS validation
+- Date-range filtering on CSV data (was using last-N-bars without date awareness)
+- Section 1: BTCUSD scalping only (Grade B → aiming for Grade A). Grade A models (XAUUSD, US30, ES, NAS100) kept as-is
+- Section 2: Expert models for XAUUSD, US30, ES (full ensemble: XGB + LGB + LSTM + Meta + Regime)
+- Section 3: Expert models for NAS100, BTCUSD
+- Section 4: OOS validation across all symbols on 2022-2026 data
+- Training running in background (~1-2 hours)
+
+---
+
 ## March 19–23, 2026
 
 ---
