@@ -119,15 +119,35 @@ class OandaAdapter(BrokerAdapter):
             "Accept-Datetime-Format": "RFC3339",
         }
 
-    async def _get(self, path: str, params: dict | None = None) -> dict:
+    async def _get(self, path: str, params: dict | None = None, _retries: int = 4) -> dict:
         assert self._client, "Not connected"
-        r = await self._client.get(
-            f"{self._base_url}/v3{path}",
-            params=params,
-            headers=self._headers(),
-        )
-        r.raise_for_status()
-        return r.json()
+        last_exc: Exception | None = None
+        for attempt in range(_retries):
+            try:
+                r = await self._client.get(
+                    f"{self._base_url}/v3{path}",
+                    params=params,
+                    headers=self._headers(),
+                )
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (502, 503, 504) and attempt < _retries - 1:
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    logger.warning("[Oanda] %d on %s — retry %d in %ds", e.response.status_code, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+            except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                if attempt < _retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("[Oanda] %s on %s — retry %d in %ds", type(e).__name__, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+        raise last_exc  # type: ignore[misc]
 
     async def _post(self, path: str, body: dict) -> dict:
         assert self._client, "Not connected"

@@ -1584,12 +1584,12 @@ async def model_performance_summary(user: User = Depends(get_current_user), db: 
 
 PIPELINE_MODELS = {
     "scalping": {
-        "symbols": ["XAUUSD", "US30"],
+        "symbols": ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"],
         "description": "XGBoost + LightGBM ensemble",
         "timeframe": "M5",
     },
     "expert": {
-        "symbols": ["XAUUSD", "US30", "BTCUSD"],
+        "symbols": ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"],
         "description": "XGB + LGB + LSTM + Meta-labeler + Regime",
         "timeframe": "Multi-TF",
     },
@@ -1617,7 +1617,7 @@ async def get_available_agents(
         # Also check DB for ready models
         if not has_models and symbol:
             db_models = db.query(MLModel).filter(
-                MLModel.user_id == user.id,
+                MLModel.creator_id == user.id,
                 MLModel.symbol == symbol,
                 MLModel.status == "ready",
             ).all()
@@ -1660,27 +1660,89 @@ async def retrain_pipeline(
     logger.info(f"[ML] Retrain request: pipeline={pipeline}, symbol={symbol}, user={user.id}")
 
     # Create a placeholder model record
+    timeframe = "M5" if pipeline == "scalping" else "H1"
+    model_type = "xgboost" if pipeline == "scalping" else "ensemble"
+
+    # Find datasource for this symbol/timeframe
+    ds = db.query(DataSource).filter(
+        DataSource.symbol == symbol,
+        DataSource.timeframe == timeframe,
+    ).first()
+    if not ds:
+        ds = db.query(DataSource).filter(DataSource.symbol == symbol).first()
+    if not ds or not ds.filepath:
+        raise HTTPException(404, f"No data source found for {symbol}/{timeframe}")
+
+    try:
+        ohlcv_data = _load_csv_ohlcv(ds.filepath)
+    except FileNotFoundError:
+        raise HTTPException(404, f"CSV file not found: {ds.filepath}")
+
+    if len(ohlcv_data) < 200:
+        raise HTTPException(400, f"Need 200+ bars for training, got {len(ohlcv_data)}")
+
+    features_config = {"selected": _ALL_FEATURES}
+    target_config = {"type": "triple_barrier", "horizon": 10}
+
     model = MLModel(
         name=f"{pipeline}_{symbol}_retrain",
         level=2,
-        model_type="xgboost" if pipeline == "scalping" else "ensemble",
+        model_type=model_type,
         symbol=symbol,
-        timeframe="M5" if pipeline == "scalping" else "H1",
+        timeframe=timeframe,
         status="training",
-        user_id=user.id,
-        target_config={"type": "triple_barrier", "horizon": 10},
+        creator_id=user.id,
+        target_config=target_config,
         hyperparams={"pipeline": pipeline},
         feature_importance={},
         train_metrics={},
         val_metrics={},
-        features_config={},
+        features_config=features_config,
     )
     db.add(model)
     db.commit()
     db.refresh(model)
 
+    # Launch training in background thread
+    asyncio.get_event_loop().run_in_executor(
+        _train_pool,
+        _run_training,
+        model.id, ohlcv_data, 2, model_type, "ensemble",
+        20, 64, features_config, target_config, {"pipeline": pipeline},
+        {"n_trials": 50, "timeout": 600, "cv_method": "walk_forward", "n_folds": 5},
+    )
+
     return {
         "status": "training",
         "task_id": str(model.id),
         "message": f"Retrain started for {pipeline} pipeline on {symbol}",
+    }
+
+
+@router.get("/retrain/status/{model_id}")
+async def retrain_status(
+    model_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Check status of a retrain/training task."""
+    model = db.query(MLModel).filter(MLModel.id == model_id).first()
+    if not model:
+        raise HTTPException(404, "Model not found")
+
+    log = []
+    if model.status == "training":
+        log.append(f"Training {model.model_type} for {model.symbol}...")
+    elif model.status == "ready":
+        log.append(f"Training complete — {model.model_type} for {model.symbol}")
+        if model.val_metrics:
+            acc = model.val_metrics.get("accuracy") or model.val_metrics.get("val_accuracy")
+            if acc:
+                log.append(f"Validation accuracy: {acc:.4f}")
+    elif model.status == "failed":
+        log.append(f"Training failed: {model.error_message or 'Unknown error'}")
+
+    return {
+        "status": model.status,
+        "log": log,
     }

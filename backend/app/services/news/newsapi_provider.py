@@ -35,6 +35,18 @@ HIGH_IMPACT_KEYWORDS = {
         "wall street", "stock market", "earnings", "recession",
         "trade war", "tariff", "fiscal policy", "debt ceiling",
     ],
+    "ES": [
+        "federal reserve", "fomc", "interest rate", "nonfarm payroll", "nfp",
+        "cpi", "inflation", "gdp", "unemployment", "s&p 500", "s&p500",
+        "wall street", "stock market", "earnings", "recession",
+        "trade war", "tariff", "fiscal policy", "debt ceiling",
+    ],
+    "NAS100": [
+        "federal reserve", "fomc", "interest rate", "nonfarm payroll", "nfp",
+        "cpi", "inflation", "gdp", "nasdaq", "tech stocks", "technology",
+        "wall street", "earnings", "recession", "semiconductor",
+        "trade war", "tariff", "fiscal policy", "debt ceiling",
+    ],
     "BTCUSD": [
         "bitcoin", "crypto", "cryptocurrency", "sec", "regulation",
         "etf", "halving", "blockchain", "binance", "coinbase",
@@ -279,6 +291,7 @@ def _symbol_to_query(symbol: str) -> str:
         "XAUUSD": "gold OR bullion OR precious metals OR federal reserve",
         "XAGUSD": "silver OR precious metals",
         "US30": "dow jones OR wall street OR stock market OR economy",
+        "ES": "s&p 500 OR wall street OR stock market OR economy",
         "NAS100": "nasdaq OR tech stocks OR technology sector",
         "US100": "nasdaq OR tech stocks OR technology sector",
         "BTCUSD": "bitcoin OR cryptocurrency OR crypto",

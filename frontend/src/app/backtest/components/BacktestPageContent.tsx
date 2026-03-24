@@ -130,8 +130,14 @@ export default function BacktestPageContent() {
                 setLoading(false);
                 return;
               }
-            } catch {
-              // network blip — keep polling
+            } catch (pollErr: unknown) {
+              // Stop polling on auth errors; keep going on transient network blips
+              const msg = pollErr instanceof Error ? pollErr.message : '';
+              if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized')) {
+                alert('Session expired — please log in again.');
+                setLoading(false);
+                return;
+              }
             }
           }
           alert('Backtest timed out after 30 minutes');

@@ -1,0 +1,88 @@
+{
+  "US30": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.6009725041983106
+      },
+      "val_metrics": {
+        "accuracy": 0.5116547195348138
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.594957014311853
+      },
+      "val_metrics": {
+        "accuracy": 0.5170183969121259
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7089331393890755
+      },
+      "val_metrics": {
+        "accuracy": 0.7089331393890755
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_US30_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6611524676040805
+      },
+      "val_metrics": {
+        "accuracy": 0.5973231740939395
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_9664.joblib",
+      "train_metrics": {},
+      "val_metrics": {}
+    }
+  },
+  "ES": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.5931022382635286
+      },
+      "val_metrics": {
+        "accuracy": 0.5090982004110481
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.5896307993082187
+      },
+      "val_metrics": {
+        "accuracy": 0.5115043360569452
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7139990971560415
+      },
+      "val_metrics": {
+        "accuracy": 0.7139990971560415
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_ES_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6643732611474547
+      },
+      "val_metrics": {
+        "accuracy": 0.5891022106371246
+      }
+    },
+    "regime": {
+      "model_path": "data/ml_models/regime_10098.joblib",
+      "train_metrics": {},
+      "val_metrics": {}
+    }
+  }
+}

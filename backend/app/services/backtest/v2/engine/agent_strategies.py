@@ -471,8 +471,8 @@ class ExpertAgentStrategy(StrategyBase):
         self._regime_detector = None
 
         # Symbol-specific SL/TP multipliers
-        self._sl_mults = {"XAUUSD": 1.5, "US30": 1.5, "BTCUSD": 2.0}
-        self._tp_mults = {"XAUUSD": 2.5, "US30": 2.0, "BTCUSD": 3.0}
+        self._sl_mults = {"XAUUSD": 1.5, "US30": 1.5, "BTCUSD": 2.0, "ES": 1.5, "NAS100": 1.5}
+        self._tp_mults = {"XAUUSD": 2.5, "US30": 2.0, "BTCUSD": 3.0, "ES": 2.0, "NAS100": 2.0}
 
         # State
         self._last_trade_bar = -100

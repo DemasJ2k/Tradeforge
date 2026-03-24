@@ -173,7 +173,7 @@ export default function PortfolioPage() {
         action === "pause" ? `/api/agents/${agentId}/pause` :
         `/api/agents/${agentId}/stop`;
       await api.post(endpoint, {});
-      loadData();
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} agent`);
     }

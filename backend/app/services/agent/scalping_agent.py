@@ -51,6 +51,12 @@ class ScalpingAgent:
         self.min_confidence = config.get("min_confidence", 0.55)
         self.session_filter = config.get("session_filter", True)
         self.min_bars_between_trades = config.get("min_bars_between_trades", 3)
+        self.news_filter_enabled = config.get("news_filter_enabled", True)
+        self.news_window_minutes = config.get("news_window_minutes", 15)
+
+        # News cache
+        self._news_cache: dict = {}
+        self._news_cache_time = 0.0
 
         # Models
         self._xgb = None
@@ -141,6 +147,13 @@ class ScalpingAgent:
             logger.info("[Scalp %d] Daily loss limit hit", self.agent_id)
             return None
 
+        # News filter — avoid trading during high-impact events
+        if self.news_filter_enabled:
+            news_ok = await self._check_news_filter()
+            if not news_ok:
+                logger.info("[Scalp %d] Trade blocked by news filter", self.agent_id)
+                return None
+
         # Fetch H1 context
         await self._fetch_htf(broker_adapter)
 
@@ -213,7 +226,7 @@ class ScalpingAgent:
 
         try:
             from app.services.agent.instrument_specs import calc_lot_size
-            lot_size = calc_lot_size(self.symbol, risk_amount, sl_dist)
+            lot_size = calc_lot_size(self.symbol, risk_amount, sl_dist, broker_name=self.broker_name)
         except Exception:
             lot_size = 0.01
 
@@ -289,6 +302,33 @@ class ScalpingAgent:
             except Exception as e:
                 logger.warning("[Scalp %d] HTF fetch failed: %s", self.agent_id, e)
 
+    async def _check_news_filter(self) -> bool:
+        """Check if it's safe to trade (no high-impact news imminent)."""
+        import time as _time
+        now = _time.time()
+
+        # Cache news check for 5 minutes
+        if now - self._news_cache_time < 300 and self._news_cache:
+            return self._news_cache.get("should_trade", True)
+
+        try:
+            from app.services.news.newsapi_provider import check_high_impact_news
+            result = await check_high_impact_news(
+                self.symbol,
+                window_minutes=self.news_window_minutes,
+            )
+            self._news_cache = result
+            self._news_cache_time = now
+
+            if not result["should_trade"]:
+                logger.info("[Scalp %d] News filter: %s", self.agent_id, result["reason"])
+
+            return result["should_trade"]
+
+        except Exception as e:
+            logger.warning("[Scalp %d] News check failed: %s", self.agent_id, e)
+            return True  # Fail open
+
     def get_status(self) -> dict:
         """Return agent status for UI."""
         return {
@@ -304,5 +344,6 @@ class ScalpingAgent:
                 "risk_per_trade": self.risk_per_trade,
                 "min_confidence": self.min_confidence,
                 "session_filter": self.session_filter,
+                "news_filter_enabled": self.news_filter_enabled,
             },
         }
