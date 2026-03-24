@@ -489,9 +489,12 @@ def run_symbol_agent(symbol, agent_type, m5_data, h1_data, h4_data, params, n_fo
         return {"error": "no_models"}
 
     # Compute features once for all data
+    # Scalping models trained with M5+H1 only (88 features)
+    # Expert models trained with M5+H1+H4 (97 features)
+    use_h4 = h4_data if agent_type == "expert" else None
     print(f"    Computing features ({len(m5_data):,} bars)...", end=" ", flush=True)
     t0 = time.time()
-    feat_names, X = compute_all_features(m5_data, h1_data, h4_data)
+    feat_names, X = compute_all_features(m5_data, h1_data, use_h4)
     print(f"{len(feat_names)} features ({time.time() - t0:.1f}s)")
 
     # Price arrays aligned with features

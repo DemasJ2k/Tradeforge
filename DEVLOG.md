@@ -159,6 +159,12 @@ This was a major security and stability push — 12 commits addressing audit fin
 - Vectorized feature computation + batch model prediction (computes features once for all bars)
 - Realistic costs: per-symbol spreads, commissions, slippage
 
+**Agent Walk-Forward Backtest Results (150K M5 bars, $10K, 3-fold OOS)**
+- Fixed feature shape mismatch: scalping models use 88 features (M5+H1), expert models use 97 (M5+H1+H4)
+- **Scalping Agent**: XAUUSD FAIL, US30 FAIL, ES MARGINAL, NAS100 FAIL, BTCUSD MARGINAL (+$161K)
+- **Expert Agent**: XAUUSD PASS (+$33.8K, PF 1.19), US30 MARGINAL (+$38.9K), ES PASS (+$167K, PF 1.61, Sharpe 12.80), NAS100 PASS (+$131.8K, PF 1.51, Sharpe 11.41), BTCUSD MARGINAL (+$805K, PF 1.93)
+- Expert agents profitable on all 5 symbols; ES and NAS100 standout with <6% max drawdown
+
 ---
 
 ### March 23–24 — Architecture Restructuring, Mobile, & Cleanup
