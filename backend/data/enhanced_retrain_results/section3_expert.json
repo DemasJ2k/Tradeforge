@@ -1,0 +1,210 @@
+{
+  "NAS100": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.5933374336675582
+      },
+      "val_metrics": {
+        "accuracy": 0.505892987916514
+      },
+      "feature_importance": {
+        "kill_zone_ny_open": "0.08254036",
+        "bos_bullish": "0.050372444",
+        "session_london": "0.044088025",
+        "bos_bearish": "0.04158241",
+        "kill_zone_london_close": "0.039981976",
+        "time_hour_cos": "0.039661486",
+        "session_dead": "0.032843962",
+        "session_asian": "0.03220619",
+        "volume_ratio_20": "0.029031767",
+        "time_hour_sin": "0.026223699",
+        "swing_low_dist": "0.01911477",
+        "swing_high_dist": "0.016053312",
+        "time_dow_sin": "0.015876627",
+        "smc_bearish_confluence": "0.015835242",
+        "session_ny": "0.013836909"
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.58555061290461
+      },
+      "val_metrics": {
+        "accuracy": 0.5037417612596119
+      },
+      "feature_importance": {
+        "swing_low_dist": "1102",
+        "time_hour_sin": "1002",
+        "h4_atr_norm": "973",
+        "swing_high_dist": "972",
+        "time_hour_cos": "878",
+        "h1_atr_norm": "829",
+        "regime_atr_ratio": "764",
+        "h4_adx_14": "753",
+        "h4_trend_ema50": "719",
+        "h4_macd_hist": "686",
+        "h1_adx_14": "656",
+        "atr_14_norm": "645",
+        "adx_14": "629",
+        "h1_macd_hist": "609",
+        "h4_rsi_14": "549"
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.7166866746698679
+      },
+      "val_metrics": {
+        "accuracy": 0.7166866746698679
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_NAS100_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6598343655686353
+      },
+      "val_metrics": {
+        "accuracy": 0.5937957707799341
+      }
+    },
+    "regime": {
+      "model_path": "/home/user/Tradeforge/backend/data/ml_models/regime_67417.joblib",
+      "n_bars": 439105,
+      "n_states": 4,
+      "regime_stats": {
+        "volatile": {
+          "return_mean": -3.681771431942172e-05,
+          "vol_mean": 0.0037175153773512286,
+          "count": 16772,
+          "pct": 3.8
+        },
+        "trending_down": {
+          "return_mean": -3.5277150472010294e-05,
+          "vol_mean": 0.0011045944176501339,
+          "count": 83096,
+          "pct": 18.9
+        },
+        "trending_up": {
+          "return_mean": 1.4722897408025259e-05,
+          "vol_mean": 0.00024034674020745024,
+          "count": 179089,
+          "pct": 40.8
+        },
+        "ranging": {
+          "return_mean": 1.2036526634453116e-05,
+          "vol_mean": 0.0005084931486741556,
+          "count": 160148,
+          "pct": 36.5
+        }
+      },
+      "log_likelihood": 8692895.25627734
+    }
+  },
+  "BTCUSD": {
+    "xgboost": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_xgboost.joblib",
+      "train_metrics": {
+        "accuracy": 0.6547454676431744
+      },
+      "val_metrics": {
+        "accuracy": 0.5492550215509479
+      },
+      "feature_importance": {
+        "atr_7_norm": "0.070955195",
+        "atr_14_norm": "0.0631401",
+        "bos_bullish": "0.0355892",
+        "swing_high_dist": "0.031004649",
+        "fvg_bearish_active": "0.025281299",
+        "return_1": "0.023428172",
+        "swing_low_dist": "0.023089655",
+        "kill_zone_ny_open": "0.01981837",
+        "h4_atr_norm": "0.0170676",
+        "volatility_20": "0.01693858",
+        "liq_sweep_bullish": "0.016412824",
+        "bos_bearish": "0.015181279",
+        "adx_14": "0.014336792",
+        "smc_bearish_confluence": "0.014327719",
+        "liq_sweep_bearish": "0.013991593"
+      }
+    },
+    "lightgbm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_lightgbm.joblib",
+      "train_metrics": {
+        "accuracy": 0.6442039860727579
+      },
+      "val_metrics": {
+        "accuracy": 0.5481744726320971
+      },
+      "feature_importance": {
+        "h4_atr_norm": "1518",
+        "h1_atr_norm": "1236",
+        "h4_adx_14": "1086",
+        "h1_adx_14": "1028",
+        "atr_14_norm": "880",
+        "h4_macd_hist": "849",
+        "h4_trend_slope": "770",
+        "h4_trend_ema50": "766",
+        "h4_bb_position": "747",
+        "swing_low_dist": "737",
+        "h1_macd_hist": "732",
+        "swing_high_dist": "724",
+        "time_hour_cos": "714",
+        "h4_rsi_14": "702",
+        "adx_14": "640"
+      }
+    },
+    "lstm": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_lstm.onnx",
+      "train_metrics": {
+        "best_val_accuracy": 0.5825997065492864
+      },
+      "val_metrics": {
+        "accuracy": 0.5825997065492864
+      }
+    },
+    "meta": {
+      "model_path": "/home/user/Tradeforge/backend/scripts/../data/ml_models/expert_BTCUSD_M5_meta.joblib",
+      "train_metrics": {
+        "accuracy": 0.6982590947292592
+      },
+      "val_metrics": {
+        "accuracy": 0.6164651643034662
+      }
+    },
+    "regime": {
+      "model_path": "/home/user/Tradeforge/backend/data/ml_models/regime_70618.joblib",
+      "n_bars": 418512,
+      "n_states": 4,
+      "regime_stats": {
+        "volatile": {
+          "return_mean": -1.0355939397227178e-05,
+          "vol_mean": 0.006986061065804503,
+          "count": 61585,
+          "pct": 14.7
+        },
+        "trending_down": {
+          "return_mean": -9.26370456699992e-06,
+          "vol_mean": 0.0032562991637829475,
+          "count": 123961,
+          "pct": 29.6
+        },
+        "trending_up": {
+          "return_mean": 1.866470517875993e-05,
+          "vol_mean": 0.001079813899649392,
+          "count": 142212,
+          "pct": 34.0
+        },
+        "ranging": {
+          "return_mean": 1.5673442087781727e-05,
+          "vol_mean": 0.001209090321388319,
+          "count": 90754,
+          "pct": 21.7
+        }
+      },
+      "log_likelihood": 6520110.943913704
+    }
+  }
+}

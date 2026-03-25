@@ -25,13 +25,32 @@
 - Fixed by capping LSTM input to 150K most recent samples before sequence building
 - All LSTM models now train successfully within memory limits
 
-**Training results (partial — Sections 1-2 complete, Section 3 in progress)**
+**Training results (ALL SECTIONS COMPLETE)**
 - Section 1: BTCUSD scalping upgraded from Grade B → Grade A (WR 61%, PF 2.49-2.50, Sharpe 5.80-5.81)
 - Section 2: Expert XAUUSD/US30/ES all 5 model types trained (XGB, LGB, LSTM, Meta, HMM Regime)
   - LSTM val_acc: XAUUSD 0.776, US30 0.701, ES 0.715
   - Meta val_acc: XAUUSD 0.607, US30 0.601, ES 0.597
-- Section 3: NAS100 expert complete, BTCUSD expert still pending (process timed out)
-- Section 4: OOS validation not yet run
+- Section 3: Expert NAS100/BTCUSD all 5 model types trained
+  - BTCUSD: XGB train=0.644, LGB val=0.548, LSTM epoch15 val_acc=0.536, Meta val=0.617
+  - NAS100: XGB train=0.595, LGB val=0.504, LSTM epoch15 val_acc=0.638, Meta val=0.594
+- Section 4: OOS validation on 2022-2026 — ALL 10/10 PASS
+
+**OOS Validation Results (2022-2026, 5-fold walk-forward)**
+
+| Symbol | Model    | OOS PF | Sharpe | WR     | Trades |
+|--------|----------|--------|--------|--------|--------|
+| XAUUSD | XGBoost  | 1.66   | 2.86   | 51.13% | 59,963 |
+| XAUUSD | LightGBM | 1.68   | 2.91   | 51.33% | 61,622 |
+| US30   | XGBoost  | 2.49   | 4.43   | 60.56% | 59,919 |
+| US30   | LightGBM | 2.47   | 4.37   | 60.41% | 61,998 |
+| ES     | XGBoost  | 2.66   | 4.90   | 61.41% | 57,882 |
+| ES     | LightGBM | 2.60   | 4.79   | 61.25% | 60,095 |
+| NAS100 | XGBoost  | 2.28   | 4.72   | 61.01% | 53,578 |
+| NAS100 | LightGBM | 2.25   | 4.60   | 60.66% | 55,543 |
+| BTCUSD | XGBoost  | 2.60   | 6.06   | 61.83% | 73,709 |
+| BTCUSD | LightGBM | 2.55   | 5.95   | 61.50% | 75,924 |
+
+All symbols achieve PF > 1.5 and Sharpe > 2.5 on true OOS data. BTCUSD expert models show the strongest performance (Sharpe ~6.0).
 
 ---
 

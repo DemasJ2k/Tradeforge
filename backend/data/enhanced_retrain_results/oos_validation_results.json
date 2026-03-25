@@ -1,0 +1,682 @@
+{
+  "XAUUSD_xgboost": {
+    "symbol": "XAUUSD",
+    "model_type": "xgboost",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5286,
+        "val_bt": {
+          "n_trades": 12179,
+          "win_rate": 0.4997,
+          "pf": 1.3913,
+          "sharpe": 2.1227,
+          "total_pnl": 4647.85
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.533,
+        "val_bt": {
+          "n_trades": 11695,
+          "win_rate": 0.5121,
+          "pf": 1.4574,
+          "sharpe": 2.3574,
+          "total_pnl": 4795.3
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5419,
+        "val_bt": {
+          "n_trades": 12971,
+          "win_rate": 0.4979,
+          "pf": 1.6191,
+          "sharpe": 2.4588,
+          "total_pnl": 6252.97
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5335,
+        "val_bt": {
+          "n_trades": 11688,
+          "win_rate": 0.5033,
+          "pf": 1.7239,
+          "sharpe": 3.0309,
+          "total_pnl": 9735.48
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5359,
+        "val_bt": {
+          "n_trades": 11430,
+          "win_rate": 0.5436,
+          "pf": 2.0912,
+          "sharpe": 4.3211,
+          "total_pnl": 19793.78
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 1.6566,
+      "avg_sharpe": 2.8582,
+      "avg_wr": 0.5113,
+      "total_trades": 59963,
+      "verdict": "PASS"
+    }
+  },
+  "XAUUSD_lightgbm": {
+    "symbol": "XAUUSD",
+    "model_type": "lightgbm",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.528,
+        "val_bt": {
+          "n_trades": 12460,
+          "win_rate": 0.5022,
+          "pf": 1.4015,
+          "sharpe": 2.1647,
+          "total_pnl": 4866.48
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5319,
+        "val_bt": {
+          "n_trades": 11897,
+          "win_rate": 0.5137,
+          "pf": 1.4728,
+          "sharpe": 2.4176,
+          "total_pnl": 5054.61
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5397,
+        "val_bt": {
+          "n_trades": 13465,
+          "win_rate": 0.5017,
+          "pf": 1.6392,
+          "sharpe": 2.5103,
+          "total_pnl": 6609.9
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5329,
+        "val_bt": {
+          "n_trades": 11988,
+          "win_rate": 0.5011,
+          "pf": 1.7449,
+          "sharpe": 3.0709,
+          "total_pnl": 10253.54
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.536,
+        "val_bt": {
+          "n_trades": 11812,
+          "win_rate": 0.5477,
+          "pf": 2.1291,
+          "sharpe": 4.4082,
+          "total_pnl": 21148.67
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 1.6775,
+      "avg_sharpe": 2.9143,
+      "avg_wr": 0.5133,
+      "total_trades": 61622,
+      "verdict": "PASS"
+    }
+  },
+  "US30_xgboost": {
+    "symbol": "US30",
+    "model_type": "xgboost",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5175,
+        "val_bt": {
+          "n_trades": 10971,
+          "win_rate": 0.5997,
+          "pf": 1.8252,
+          "sharpe": 3.9793,
+          "total_pnl": 157615.04
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5075,
+        "val_bt": {
+          "n_trades": 11852,
+          "win_rate": 0.5855,
+          "pf": 1.7836,
+          "sharpe": 3.4997,
+          "total_pnl": 132499.39
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.518,
+        "val_bt": {
+          "n_trades": 12743,
+          "win_rate": 0.59,
+          "pf": 2.4513,
+          "sharpe": 4.1835,
+          "total_pnl": 181896.39
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5342,
+        "val_bt": {
+          "n_trades": 12409,
+          "win_rate": 0.6204,
+          "pf": 3.466,
+          "sharpe": 5.322,
+          "total_pnl": 335493.68
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5306,
+        "val_bt": {
+          "n_trades": 11944,
+          "win_rate": 0.6326,
+          "pf": 2.9354,
+          "sharpe": 5.1701,
+          "total_pnl": 318304.68
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.4923,
+      "avg_sharpe": 4.4309,
+      "avg_wr": 0.6056,
+      "total_trades": 59919,
+      "verdict": "PASS"
+    }
+  },
+  "US30_lightgbm": {
+    "symbol": "US30",
+    "model_type": "lightgbm",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5171,
+        "val_bt": {
+          "n_trades": 11424,
+          "win_rate": 0.5961,
+          "pf": 1.7902,
+          "sharpe": 3.8299,
+          "total_pnl": 159199.64
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5073,
+        "val_bt": {
+          "n_trades": 12216,
+          "win_rate": 0.5864,
+          "pf": 1.805,
+          "sharpe": 3.5542,
+          "total_pnl": 139679.93
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.519,
+        "val_bt": {
+          "n_trades": 13123,
+          "win_rate": 0.5903,
+          "pf": 2.4809,
+          "sharpe": 4.1612,
+          "total_pnl": 189463.61
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5337,
+        "val_bt": {
+          "n_trades": 12945,
+          "win_rate": 0.6148,
+          "pf": 3.343,
+          "sharpe": 5.1521,
+          "total_pnl": 329413.14
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5276,
+        "val_bt": {
+          "n_trades": 12290,
+          "win_rate": 0.633,
+          "pf": 2.9351,
+          "sharpe": 5.1646,
+          "total_pnl": 328538.36
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.4708,
+      "avg_sharpe": 4.3724,
+      "avg_wr": 0.6041,
+      "total_trades": 61998,
+      "verdict": "PASS"
+    }
+  },
+  "ES_xgboost": {
+    "symbol": "ES",
+    "model_type": "xgboost",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5181,
+        "val_bt": {
+          "n_trades": 11169,
+          "win_rate": 0.6067,
+          "pf": 2.002,
+          "sharpe": 4.5864,
+          "total_pnl": 27379.74
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5101,
+        "val_bt": {
+          "n_trades": 11495,
+          "win_rate": 0.6062,
+          "pf": 2.0402,
+          "sharpe": 4.3395,
+          "total_pnl": 22268.58
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5144,
+        "val_bt": {
+          "n_trades": 12219,
+          "win_rate": 0.6143,
+          "pf": 2.8728,
+          "sharpe": 4.8944,
+          "total_pnl": 29695.13
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5196,
+        "val_bt": {
+          "n_trades": 11831,
+          "win_rate": 0.6136,
+          "pf": 3.3897,
+          "sharpe": 5.2171,
+          "total_pnl": 44420.1
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5222,
+        "val_bt": {
+          "n_trades": 11168,
+          "win_rate": 0.6298,
+          "pf": 3.0025,
+          "sharpe": 5.4461,
+          "total_pnl": 45175.36
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.6614,
+      "avg_sharpe": 4.8967,
+      "avg_wr": 0.6141,
+      "total_trades": 57882,
+      "verdict": "PASS"
+    }
+  },
+  "ES_lightgbm": {
+    "symbol": "ES",
+    "model_type": "lightgbm",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5167,
+        "val_bt": {
+          "n_trades": 11663,
+          "win_rate": 0.6069,
+          "pf": 2.0004,
+          "sharpe": 4.5634,
+          "total_pnl": 28526.85
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.511,
+        "val_bt": {
+          "n_trades": 11813,
+          "win_rate": 0.6036,
+          "pf": 1.9858,
+          "sharpe": 4.1633,
+          "total_pnl": 22154.13
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5159,
+        "val_bt": {
+          "n_trades": 12712,
+          "win_rate": 0.6113,
+          "pf": 2.8023,
+          "sharpe": 4.8197,
+          "total_pnl": 29723.62
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5199,
+        "val_bt": {
+          "n_trades": 12332,
+          "win_rate": 0.6109,
+          "pf": 3.2821,
+          "sharpe": 5.0918,
+          "total_pnl": 44064.28
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5207,
+        "val_bt": {
+          "n_trades": 11575,
+          "win_rate": 0.6296,
+          "pf": 2.9119,
+          "sharpe": 5.3171,
+          "total_pnl": 46111.67
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.5965,
+      "avg_sharpe": 4.7911,
+      "avg_wr": 0.6125,
+      "total_trades": 60095,
+      "verdict": "PASS"
+    }
+  },
+  "NAS100_xgboost": {
+    "symbol": "NAS100",
+    "model_type": "xgboost",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5185,
+        "val_bt": {
+          "n_trades": 10624,
+          "win_rate": 0.6105,
+          "pf": 2.0462,
+          "sharpe": 4.6949,
+          "total_pnl": 117153.89
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5124,
+        "val_bt": {
+          "n_trades": 10637,
+          "win_rate": 0.6017,
+          "pf": 1.9752,
+          "sharpe": 4.2163,
+          "total_pnl": 77086.01
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5242,
+        "val_bt": {
+          "n_trades": 10848,
+          "win_rate": 0.6041,
+          "pf": 2.2715,
+          "sharpe": 4.7137,
+          "total_pnl": 84011.02
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5163,
+        "val_bt": {
+          "n_trades": 10756,
+          "win_rate": 0.6151,
+          "pf": 2.62,
+          "sharpe": 4.9655,
+          "total_pnl": 137477.68
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5101,
+        "val_bt": {
+          "n_trades": 10713,
+          "win_rate": 0.6191,
+          "pf": 2.4787,
+          "sharpe": 5.0023,
+          "total_pnl": 160206.01
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.2783,
+      "avg_sharpe": 4.7185,
+      "avg_wr": 0.6101,
+      "total_trades": 53578,
+      "verdict": "PASS"
+    }
+  },
+  "NAS100_lightgbm": {
+    "symbol": "NAS100",
+    "model_type": "lightgbm",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.5206,
+        "val_bt": {
+          "n_trades": 10921,
+          "win_rate": 0.606,
+          "pf": 2.0217,
+          "sharpe": 4.5891,
+          "total_pnl": 119660.8
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5108,
+        "val_bt": {
+          "n_trades": 11012,
+          "win_rate": 0.5985,
+          "pf": 1.9484,
+          "sharpe": 4.0615,
+          "total_pnl": 78430.07
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5239,
+        "val_bt": {
+          "n_trades": 11111,
+          "win_rate": 0.6008,
+          "pf": 2.2423,
+          "sharpe": 4.5967,
+          "total_pnl": 86162.9
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5184,
+        "val_bt": {
+          "n_trades": 11355,
+          "win_rate": 0.6137,
+          "pf": 2.6429,
+          "sharpe": 4.9454,
+          "total_pnl": 145983.93
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5089,
+        "val_bt": {
+          "n_trades": 11144,
+          "win_rate": 0.6142,
+          "pf": 2.3947,
+          "sharpe": 4.8103,
+          "total_pnl": 159351.04
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.25,
+      "avg_sharpe": 4.6006,
+      "avg_wr": 0.6066,
+      "total_trades": 55543,
+      "verdict": "PASS"
+    }
+  },
+  "BTCUSD_xgboost": {
+    "symbol": "BTCUSD",
+    "model_type": "xgboost",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.4961,
+        "val_bt": {
+          "n_trades": 15450,
+          "win_rate": 0.541,
+          "pf": 1.6992,
+          "sharpe": 3.6012,
+          "total_pnl": 688615.36
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.4974,
+        "val_bt": {
+          "n_trades": 14976,
+          "win_rate": 0.5566,
+          "pf": 1.8332,
+          "sharpe": 3.8722,
+          "total_pnl": 428447.93
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5577,
+        "val_bt": {
+          "n_trades": 17087,
+          "win_rate": 0.6442,
+          "pf": 3.1836,
+          "sharpe": 6.9866,
+          "total_pnl": 1575971.93
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5791,
+        "val_bt": {
+          "n_trades": 13406,
+          "win_rate": 0.6898,
+          "pf": 3.3198,
+          "sharpe": 8.4094,
+          "total_pnl": 3009779.71
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5682,
+        "val_bt": {
+          "n_trades": 12790,
+          "win_rate": 0.66,
+          "pf": 2.981,
+          "sharpe": 7.4452,
+          "total_pnl": 3470797.14
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.6034,
+      "avg_sharpe": 6.0629,
+      "avg_wr": 0.6183,
+      "total_trades": 73709,
+      "verdict": "PASS"
+    }
+  },
+  "BTCUSD_lightgbm": {
+    "symbol": "BTCUSD",
+    "model_type": "lightgbm",
+    "folds": [
+      {
+        "fold": 1,
+        "val_acc": 0.4971,
+        "val_bt": {
+          "n_trades": 16186,
+          "win_rate": 0.5454,
+          "pf": 1.7137,
+          "sharpe": 3.6505,
+          "total_pnl": 730400.07
+        }
+      },
+      {
+        "fold": 2,
+        "val_acc": 0.5001,
+        "val_bt": {
+          "n_trades": 15453,
+          "win_rate": 0.551,
+          "pf": 1.8021,
+          "sharpe": 3.762,
+          "total_pnl": 424913.79
+        }
+      },
+      {
+        "fold": 3,
+        "val_acc": 0.5557,
+        "val_bt": {
+          "n_trades": 17504,
+          "win_rate": 0.6389,
+          "pf": 3.1005,
+          "sharpe": 6.833,
+          "total_pnl": 1579713.86
+        }
+      },
+      {
+        "fold": 4,
+        "val_acc": 0.5763,
+        "val_bt": {
+          "n_trades": 13631,
+          "win_rate": 0.6837,
+          "pf": 3.2247,
+          "sharpe": 8.1952,
+          "total_pnl": 3010041.14
+        }
+      },
+      {
+        "fold": 5,
+        "val_acc": 0.5683,
+        "val_bt": {
+          "n_trades": 13150,
+          "win_rate": 0.6561,
+          "pf": 2.9231,
+          "sharpe": 7.3094,
+          "total_pnl": 3532296.43
+        }
+      }
+    ],
+    "aggregate": {
+      "avg_pf": 2.5528,
+      "avg_sharpe": 5.95,
+      "avg_wr": 0.615,
+      "total_trades": 75924,
+      "verdict": "PASS"
+    }
+  }
+}
