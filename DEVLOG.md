@@ -1,5 +1,15 @@
 # Tradeforge Development Log
 
+## March 25 — Fix CSV Upload + Agent Wizard Symbols
+
+**CSV upload rejects Databento files**: Upload parser didn't recognize `ts_event` column (Databento's datetime column name). Added `ts_event` to `DATETIME_ALIASES` in `datasource.py`.
+
+**Agent Wizard Popular symbols wrong**: Hardcoded list included EURUSD (no models) and excluded ES. Updated to match actual trained symbols: XAUUSD, US30, BTCUSD, ES, NAS100.
+
+**Agent Wizard DEFAULT_AVAILABILITY stale**: Scalping showed only XAUUSD/US30, Expert showed XAUUSD/US30/BTCUSD. All 5 symbols have trained models for both agent types. Updated defaults to include all 5.
+
+---
+
 ## March 25 — Fix Production Deployment Errors (Render)
 
 **Prop firms 404**: Frontend `AgentWizard.tsx` called `/api/prop-firms/` (plural) but backend route is `/api/prop-firm/` (singular). Fixed URL to match backend.

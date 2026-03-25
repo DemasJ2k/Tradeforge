@@ -27,13 +27,13 @@ interface Props {
 
 /* ── Constants ─────────────────────────────────────────── */
 
-const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
-const POPULAR_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "NAS100", "EURUSD"];
+const FALLBACK_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"];
+const POPULAR_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"];
 
-// Hardcoded model availability until backend endpoint exists
+// Default model availability — all 5 trained symbols for both agent types
 const DEFAULT_AVAILABILITY: AgentAvailability = {
-  scalping: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30"] },
-  expert: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30", "BTCUSD"] },
+  scalping: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"] },
+  expert: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"] },
 };
 
 /* ═══════════════════════════════════════════════════════ */
