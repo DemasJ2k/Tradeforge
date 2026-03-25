@@ -37,3 +37,4 @@ backend/data/uploads/SPY_5m_1Yea.csv
 
 # Databento downloaded data (large CSVs, re-downloadable)
 backend/data/databento/
+backend/data/backtest_production/
