@@ -1,5 +1,17 @@
 # Tradeforge Development Log
 
+## March 25 — Comprehensive Audit Prompt
+
+**Created `AUDIT_PROMPT.md`** — A detailed, structured prompt for Claude Desktop to perform a full-platform audit.
+- 5 phases: Discovery, Backend Deep Audit, Frontend Deep Audit, Cross-Cutting Concerns, Output Report
+- Covers all 22 API route files, 20 DB models, 5 broker adapters, 2 agent types, full ML pipeline, backtest engine
+- Frontend: all 6 pages, 16+ components, hooks, API client, TypeScript build
+- Cross-cutting: security, dead code, data integrity, performance, configuration
+- Output format: grouped by area with severity ratings (Critical/High/Medium/Low), line numbers, and impact descriptions
+- Report-only mode — no fixes applied during audit
+
+---
+
 ## March 24 (continued) — News Filter + Enhanced Retrain
 
 **Add news avoidance to ScalpingAgent**
