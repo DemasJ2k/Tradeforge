@@ -36,10 +36,7 @@ def encrypt_value(plain: str) -> str:
     """Encrypt a string value for DB storage."""
     if not plain:
         return ""
-    if _FERNET:
-        return _FERNET.encrypt(plain.encode()).decode()
-    # Fallback: base64 encode (NOT secure, just obfuscation)
-    return "b64:" + base64.b64encode(plain.encode()).decode()
+    return _FERNET.encrypt(plain.encode()).decode()
 
 
 def decrypt_value(encrypted: str) -> str:

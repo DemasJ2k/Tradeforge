@@ -125,7 +125,16 @@ def update_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    s = _get_or_create_settings(db, current_user)
+    import logging
+    _log = logging.getLogger(__name__)
+
+    try:
+        s = _get_or_create_settings(db, current_user)
+    except Exception as exc:
+        _log.error("Failed to get/create settings for user %s: %s", current_user.id, exc, exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to load settings")
+
     data = payload.model_dump(exclude_none=True)
 
     # Handle LLM API key separately (encrypt before storing)
@@ -145,6 +154,12 @@ def update_settings(
         raw = data.pop("notification_telegram_bot_token")
         s.notification_telegram_bot_token_encrypted = encrypt_value(raw) if raw else ""
 
+    # Serialize dict/list values as JSON strings for TEXT columns
+    if "copilot_permissions" in data and isinstance(data["copilot_permissions"], dict):
+        data["copilot_permissions"] = _json.dumps(data["copilot_permissions"])
+    if "notifications" in data and isinstance(data["notifications"], dict):
+        data["notifications"] = _json.dumps(data["notifications"])
+
     # Map boolean fields to int for SQLite
     bool_to_int = {"compact_mode", "chart_grid", "chart_crosshair", "notification_smtp_use_tls", "copilot_enabled"}
     for key, val in data.items():
@@ -154,8 +169,15 @@ def update_settings(
             setattr(s, key, val)
 
     s.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(s)
+
+    try:
+        db.commit()
+        db.refresh(s)
+    except Exception as exc:
+        db.rollback()
+        _log.error("Failed to save settings for user %s: %s", current_user.id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save settings")
+
     return _settings_to_response(s)
 
 

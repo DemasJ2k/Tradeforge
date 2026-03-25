@@ -1517,7 +1517,12 @@ async def list_databento_datasets(user: User = Depends(get_current_user)):
         return {"datasets": []}
 
     datasets = []
-    for csv_file in sorted(data_dir.glob("*.csv")):
+    try:
+        csv_files = sorted(data_dir.glob("*.csv"))
+    except Exception:
+        return {"datasets": []}
+
+    for csv_file in csv_files:
         # Parse filename: XAUUSD_M15.csv → symbol=XAUUSD, timeframe=M15
         parts = csv_file.stem.split("_")
         if len(parts) >= 2:
@@ -1527,14 +1532,15 @@ async def list_databento_datasets(user: User = Depends(get_current_user)):
             symbol = csv_file.stem
             timeframe = "?"
 
-        # Get row count and file size
         try:
-            with open(csv_file, "r") as f:
-                row_count = sum(1 for _ in f) - 1  # subtract header
+            size_bytes = csv_file.stat().st_size
         except Exception:
-            row_count = 0
+            size_bytes = 0
+        size_mb = size_bytes / (1024 * 1024)
 
-        size_mb = csv_file.stat().st_size / (1024 * 1024)
+        # Estimate row count from file size (avoid reading entire file on large datasets).
+        # Average CSV row ~60 bytes for OHLCV data.
+        row_count = max(0, int(size_bytes / 60) - 1) if size_bytes > 0 else 0
 
         datasets.append({
             "filename": csv_file.name,
