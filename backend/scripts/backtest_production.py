@@ -36,7 +36,8 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALL_SYMBOLS = ["XAUUSD", "US30", "ES", "NAS100", "BTCUSD"]
 INITIAL_BALANCE = 10_000.0
-RISK_PER_TRADE = 0.01  # 1% of equity
+RISK_PER_TRADE = 0.01  # 1% of equity (used only when dynamic sizing is on)
+FIXED_LOT_SIZE = 0.1   # Fixed lot size for all symbols
 
 # Date filter: 2022-01-01 to 2026-03-25
 DATE_START = datetime(2022, 1, 1, tzinfo=timezone.utc)
@@ -332,10 +333,8 @@ def backtest_agent(
             sl = entry + sl_d
             tp = entry - tp_d
 
-        # Dynamic position sizing: 1% of current equity
-        session_mult = 0.5 if session == "asian" and symbol != "BTCUSD" else 1.0
-        risk_amount = equity * risk_per_trade * session_mult
-        position_size = risk_amount / (sl_d * pv) if (pv > 0 and sl_d > 0) else 0.01
+        # Fixed lot size (0.1 lots for all symbols)
+        position_size = FIXED_LOT_SIZE
 
         # Simulate trade exit
         exit_price = None
@@ -555,7 +554,7 @@ def main():
     print("  TRADEFORGE — Production Backtest")
     print("=" * 78)
     print(f"  Balance:    ${INITIAL_BALANCE:,.0f} USD")
-    print(f"  Risk:       {RISK_PER_TRADE*100:.0f}% per trade (dynamic sizing)")
+    print(f"  Lot Size:   {FIXED_LOT_SIZE} lots (fixed, all symbols)")
     print(f"  Period:     {DATE_START.strftime('%Y-%m-%d')} → {DATE_END.strftime('%Y-%m-%d')}")
     print(f"  Symbols:    {ALL_SYMBOLS}")
     print(f"  Agents:     Scalping + Expert")
@@ -705,7 +704,7 @@ def main():
     # ── Summary Table ──
     elapsed = time.time() - t_start
     print(f"\n\n{'='*108}")
-    print(f"  FINAL RESULTS — ${INITIAL_BALANCE:,.0f} | 1% Risk | 2022-2026 | Realistic Costs + News Avoidance")
+    print(f"  FINAL RESULTS — ${INITIAL_BALANCE:,.0f} | 0.1 Lots Fixed | 2022-2026 | Realistic Costs + News Avoidance")
     print(f"{'='*108}\n")
 
     header = (f"  {'Symbol':<10} {'Agent':<10} {'Final Eq':>12} {'PnL':>12} {'ROI':>8} "
