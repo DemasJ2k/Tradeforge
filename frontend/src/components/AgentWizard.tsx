@@ -121,7 +121,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
   // Fetch prop firm accounts
   useEffect(() => {
     api
-      .get<{ id: number; account_name: string; firm_name: string; status: string }[]>("/api/prop-firms/")
+      .get<{ id: number; account_name: string; firm_name: string; status: string }[]>("/api/prop-firm/")
       .then((accts) => setPropFirmAccounts(Array.isArray(accts) ? accts : []))
       .catch(() => setPropFirmAccounts([]));
   }, []);

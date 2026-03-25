@@ -1,5 +1,15 @@
 # Tradeforge Development Log
 
+## March 25 — Fix Production Deployment Errors (Render)
+
+**Prop firms 404**: Frontend `AgentWizard.tsx` called `/api/prop-firms/` (plural) but backend route is `/api/prop-firm/` (singular). Fixed URL to match backend.
+
+**Databento datasets 500**: Endpoint scanned every CSV file line-by-line to count rows (`sum(1 for _ in f)`), which timed out on large files and crashed when the directory didn't exist on Render. Changed to file-size-based row estimation (~60 bytes/row). Added try/except around glob.
+
+**Settings PUT 500**: Added error handling with logging around `_get_or_create_settings` and `db.commit()` so failures return a proper 500 with logs instead of an unhandled traceback. Also added JSON serialization for `copilot_permissions` and `notifications` dict fields before storage (TEXT columns need string, not dict). Removed dead base64 fallback from `encrypt_value()`.
+
+---
+
 ## March 25 — Comprehensive Audit Fix: 80+ Findings Across Full Stack
 
 Fixed all remaining findings from the 87-item platform audit (5 CRITICAL, 17 HIGH, 33 MEDIUM, 29 LOW).
