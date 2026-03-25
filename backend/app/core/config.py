@@ -3,15 +3,15 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "FlowrexAlgo"
+    APP_NAME: str = "Tradeforge"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
 
     # Database — overridden by DATABASE_URL env var on Render (PostgreSQL)
-    DATABASE_URL: str = f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'flowrexalgo.db'}"
+    DATABASE_URL: str = f"sqlite:///{Path(__file__).resolve().parent.parent.parent / 'data' / 'tradeforge.db'}"
 
     # Auth
-    SECRET_KEY: str = "flowrexalgo-dev-secret-change-in-production"
+    SECRET_KEY: str = "tradeforge-dev-secret-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour (use /api/auth/refresh to extend)
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
@@ -53,9 +53,18 @@ class Settings(BaseSettings):
 settings = Settings()
 
 import warnings
-if settings.SECRET_KEY == "flowrexalgo-dev-secret-change-in-production":
+import logging as _logging
+
+_DEFAULT_SECRETS = {"flowrexalgo-dev-secret-change-in-production", "tradeforge-dev-secret-change-in-production"}
+if settings.SECRET_KEY in _DEFAULT_SECRETS:
     warnings.warn(
         "Using default SECRET_KEY - this is insecure for production! "
         "Set SECRET_KEY environment variable to a random value.",
         stacklevel=1,
     )
+    # Block production startup with default key (#50)
+    if not settings.DEBUG and not settings.DATABASE_URL.startswith("sqlite"):
+        raise RuntimeError(
+            "FATAL: Default SECRET_KEY detected in production (non-SQLite DB, DEBUG=False). "
+            "Set a unique SECRET_KEY in your environment to start the server."
+        )

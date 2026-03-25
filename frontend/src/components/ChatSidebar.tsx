@@ -554,11 +554,19 @@ export default function ChatSidebar() {
         </button>
       )}
 
+      {/* Mobile backdrop — dismiss on tap */}
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 sm:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
       {/* Sidebar panel */}
       <div
         className={`fixed z-40 flex flex-col bg-sidebar-bg border-card-border shadow-xl transition-transform duration-200
-          bottom-0 right-0 w-full h-[50dvh] border-t rounded-t-2xl ${open ? "translate-y-0" : "translate-y-full"}
-          sm:top-0 sm:bottom-auto sm:h-[100dvh] sm:w-[380px] sm:rounded-none sm:border-t-0 sm:border-l ${open ? "sm:translate-x-0 sm:translate-y-0" : "sm:translate-x-full sm:translate-y-0"}`}
+          bottom-0 right-0 w-full h-[50dvh] border-t rounded-t-2xl ${open ? "translate-y-0" : "translate-y-full pointer-events-none"}
+          sm:top-0 sm:bottom-auto sm:h-[100dvh] sm:w-[380px] sm:rounded-none sm:border-t-0 sm:border-l ${open ? "sm:translate-x-0 sm:translate-y-0" : "sm:translate-x-full sm:translate-y-0 sm:pointer-events-none"}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-card-border px-4 py-3">
@@ -734,7 +742,7 @@ export default function ChatSidebar() {
           {messages.length === 0 && !streamingText && (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
               <Sparkles className="h-12 w-12 mb-3 opacity-30" />
-              <p className="text-sm font-medium">FlowrexAlgo AI</p>
+              <p className="text-sm font-medium">Tradeforge AI</p>
               <p className="text-xs mt-1">Ask me anything about trading,<br />strategies, or the platform.</p>
               <p className="text-xs mt-3 opacity-50">Ctrl + K to toggle</p>
             </div>

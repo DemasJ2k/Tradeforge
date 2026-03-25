@@ -20,7 +20,7 @@ Exit:
   TP = BB middle band (SMA)
 """
 
-# ── Settings (tunable via FlowrexAlgo UI) ─────────────────────────
+# ── Settings (tunable via Tradeforge UI) ─────────────────────────
 DEFAULTS = {
     "bb_period":        20,
     "bb_std":           2.0,

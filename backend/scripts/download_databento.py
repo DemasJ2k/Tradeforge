@@ -21,7 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# ── Symbol mapping: FlowrexAlgo name → Databento (dataset, symbol) ──
+# ── Symbol mapping: Tradeforge name → Databento (dataset, symbol) ──
 SYMBOL_MAP = {
     "GC":  ("GLBX.MDP3", "GC.FUT"),    # Gold → XAUUSD
     "ES":  ("GLBX.MDP3", "ES.FUT"),    # S&P 500

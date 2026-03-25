@@ -29,7 +29,7 @@ class DataSource(Base):
     commission_model = Column(String(20), default="per_lot")  # per_lot, per_trade, pct
     default_commission = Column(Float, default=7.0)    # default $ commission per lot
     # Ownership / visibility
-    creator_id = Column(Integer, ForeignKey("users.id"), default=1)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, default=None)
     is_public = Column(Boolean, default=True)             # visible to all users
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     deleted_at = Column(DateTime, nullable=True, default=None)

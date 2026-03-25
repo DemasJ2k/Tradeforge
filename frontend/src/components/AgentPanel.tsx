@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useAgents, subscribeToAgent } from "@/hooks/useAgents";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useBrokerAccounts } from "@/hooks/useBrokerAccounts";
@@ -93,6 +93,11 @@ export default function AgentPanel() {
   }, []);
 
   // ── Subscribe to agent WebSocket channels ──
+  // Use a stable key derived from agent IDs + statuses to avoid rebuilding WS subscriptions on every state change
+  const agentKey = useMemo(
+    () => agents.map(a => `${a.id}:${a.status}`).join(","),
+    [agents]
+  );
   useEffect(() => {
     if (wsStatus !== "connected" || agents.length === 0) return;
 
@@ -103,7 +108,8 @@ export default function AgentPanel() {
       }
     }
     return () => unsubs.forEach((u) => u());
-  }, [wsStatus, agents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsStatus, agentKey]);
 
   // ── Load pending trades periodically ──
   useEffect(() => {

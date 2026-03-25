@@ -2,7 +2,7 @@
 MT5 Bridge Server — Standalone FastAPI service for Windows VPS.
 
 This runs alongside the MT5 terminal on a Windows machine and exposes
-MetaTrader 5 operations as a REST API that the main FlowrexAlgo backend
+MetaTrader 5 operations as a REST API that the main Tradeforge backend
 (deployed on Render/Linux) can call remotely.
 
 Deployment:
@@ -78,7 +78,7 @@ class PlaceOrderRequest(BaseModel):
     price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
-    comment: str = "flowrexalgo"
+    comment: str = "tradeforge"
 
 class ModifyOrderRequest(BaseModel):
     order_id: str
@@ -270,7 +270,7 @@ async def close_position(position_id: str, size: Optional[float] = None):
             "position": ticket,
             "deviation": 20,
             "magic": 100,
-            "comment": "flowrexalgo_close",
+            "comment": "tradeforge_close",
             "type_time": mt5.ORDER_TIME_GTC,
         }
         result = _order_send_with_filling_fallback(request)

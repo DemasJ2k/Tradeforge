@@ -32,14 +32,13 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
   refreshAccounts: async () => {
     set({ loading: true });
     try {
-      // Get list of all connected brokers + today's P&L from dashboard
-      const [status, dashboard] = await Promise.all([
-        api.get<{
-          brokers: Record<string, { connected: boolean; broker_name?: string }>;
-          default_broker: string | null;
-        }>("/api/broker/status"),
-        api.get<{ today: { pnl: number; trades: number } }>("/api/dashboard/summary").catch(() => ({ today: { pnl: 0, trades: 0 } })),
-      ]);
+      // Get list of all connected brokers
+      // NOTE: todayPnl/todayTrades are left at 0 here to avoid a duplicate /api/dashboard/summary call.
+      // The dashboard page overlays these values from its own summary fetch.
+      const status = await api.get<{
+        brokers: Record<string, { connected: boolean; broker_name?: string }>;
+        default_broker: string | null;
+      }>("/api/broker/status");
 
       const connectedBrokers = Object.entries(status.brokers)
         .filter(([, info]) => info.connected)
@@ -49,9 +48,6 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
         set({ accounts: [], activeBroker: null, loading: false });
         return;
       }
-
-      const todayPnl = dashboard.today?.pnl ?? 0;
-      const todayTrades = dashboard.today?.trades ?? 0;
 
       // Fetch account info for each connected broker in parallel
       const accountResults = await Promise.allSettled(
@@ -74,8 +70,8 @@ export const useBrokerAccounts = create<BrokerAccountsStore>((set, get) => ({
               balance: info.balance ?? 0,
               equity: info.equity ?? 0,
               unrealizedPnl: info.unrealized_pnl ?? 0,
-              todayPnl: todayPnl,
-              todayTrades: todayTrades,
+              todayPnl: 0,
+              todayTrades: 0,
             }))
         )
       );

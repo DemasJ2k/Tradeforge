@@ -1,5 +1,5 @@
 /**
- * FlowrexAlgo — Indicator Calculation Library
+ * Tradeforge — Indicator Calculation Library
  *
  * Pure-function implementations for 18 technical indicators.
  * Each function accepts arrays of numbers and returns arrays of (number | null).

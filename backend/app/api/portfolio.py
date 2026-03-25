@@ -56,6 +56,29 @@ class RebalanceRequest(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────
 
+@router.get("")
+def get_portfolio(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Root portfolio endpoint — returns summary redirect info."""
+    pm = db.query(PortfolioManager).filter(PortfolioManager.user_id == user.id).first()
+    if not pm:
+        return {"has_portfolio": False, "message": "No portfolio created yet. Use POST /api/portfolio/create."}
+    return {
+        "has_portfolio": True,
+        "portfolio_id": pm.id,
+        "name": pm.name,
+        "mode": pm.mode,
+        "paused": pm.paused,
+        "links": {
+            "summary": "/api/portfolio/summary",
+            "broker_portfolios": "/api/portfolio/broker-portfolios",
+            "settings": "/api/portfolio/settings",
+        },
+    }
+
+
 @router.post("/create")
 def create_portfolio(
     req: PortfolioCreate,
@@ -637,6 +660,27 @@ def get_correlation_matrix(
             matrix[f"{s1}_{s2}"] = round(corr, 2)
 
     return {"matrix": matrix, "groups": CORRELATION_GROUPS, "active_symbols": active_symbols}
+
+
+@router.get("/settings")
+def get_portfolio_settings(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Read current portfolio settings."""
+    pm = db.query(PortfolioManager).filter(PortfolioManager.user_id == user.id).first()
+    if not pm:
+        raise HTTPException(404, "No portfolio manager found")
+    return {
+        "name": pm.name,
+        "mode": pm.mode,
+        "max_daily_loss_pct": pm.max_daily_loss_pct,
+        "max_total_drawdown_pct": pm.max_total_drawdown_pct,
+        "max_portfolio_risk_pct": pm.max_portfolio_risk_pct,
+        "correlation_threshold": pm.correlation_threshold,
+        "max_concurrent_positions": pm.max_concurrent_positions,
+        "paused": pm.paused,
+    }
 
 
 @router.put("/settings")

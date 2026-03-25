@@ -1,5 +1,5 @@
 """
-Python bindings / auto-select wrapper for the FlowrexAlgo core engine.
+Python bindings / auto-select wrapper for the Tradeforge core engine.
 
 Tries to import the compiled Rust extension (tradeforge_core).
 If that fails (not compiled, wrong platform, missing DLL), it falls
@@ -57,7 +57,7 @@ try:
         atr_array,
     )
     USING_RUST = True
-    logger.info("FlowrexAlgo Rust core loaded (tradeforge_core)")
+    logger.info("Tradeforge Rust core loaded (tradeforge_core)")
 
 except ImportError:
     from app.services.backtest.v2.core.fallback import (
@@ -93,7 +93,7 @@ except ImportError:
         atr_array,
     )
     USING_RUST = False
-    logger.info("FlowrexAlgo Rust core not available — using Python fallback")
+    logger.info("Tradeforge Rust core not available — using Python fallback")
 
 
 # ── Convenience: build bars from V2 DataHandler format ──────────

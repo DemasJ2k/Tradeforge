@@ -41,7 +41,7 @@ export default function WelcomeWizard({ onDismiss }: Props) {
 
   const steps = [
     {
-      title: 'Welcome to FlowrexAlgo',
+      title: 'Welcome to Tradeforge',
       icon: <Sparkles className="w-10 h-10 text-accent" />,
       description: 'Your AI-powered algorithmic trading platform. Deploy ML-powered trading agents — Scalping or Expert — on your favorite symbols.',
       highlights: [

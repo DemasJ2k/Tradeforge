@@ -67,6 +67,7 @@ class MT5RemoteAdapter(BrokerAdapter):
         self._connected = False
         self._bridge_url = BRIDGE_URL
         self._headers = {"X-Bridge-Key": BRIDGE_KEY}
+        self._client: Optional[httpx.AsyncClient] = None
 
     def _url(self, path: str) -> str:
         return f"{self._bridge_url}{path}"
@@ -79,52 +80,58 @@ class MT5RemoteAdapter(BrokerAdapter):
             return False
 
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-                resp = await client.post(
-                    self._url("/connect"),
-                    headers=self._headers,
-                    json={
-                        "server": self._server,
-                        "login": self._login,
-                        "password": self._password,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            self._client = httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL)
+            resp = await self._client.post(
+                self._url("/connect"),
+                headers=self._headers,
+                json={
+                    "server": self._server,
+                    "login": self._login,
+                    "password": self._password,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-                if data.get("ok"):
-                    self._connected = True
-                    logger.info(
-                        "MT5 bridge connected: account %s on %s (balance: %.2f %s)",
-                        data.get("login"), data.get("server"),
-                        data.get("balance", 0), data.get("currency", ""),
-                    )
-                    return True
-                else:
-                    logger.error("MT5 bridge connect failed: %s", data.get("error"))
-                    return False
+            if data.get("ok"):
+                self._connected = True
+                logger.info(
+                    "MT5 bridge connected: account %s on %s (balance: %.2f %s)",
+                    data.get("login"), data.get("server"),
+                    data.get("balance", 0), data.get("currency", ""),
+                )
+                return True
+            else:
+                logger.error("MT5 bridge connect failed: %s", data.get("error"))
+                await self._client.aclose()
+                self._client = None
+                return False
         except Exception as e:
             logger.error("MT5 bridge connect exception: %s", e)
+            if self._client:
+                await self._client.aclose()
+                self._client = None
             return False
 
     async def disconnect(self) -> None:
-        if self._connected:
+        if self._connected and self._client:
             try:
-                async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-                    await client.post(self._url("/disconnect"), headers=self._headers)
+                await self._client.post(self._url("/disconnect"), headers=self._headers)
             except Exception:
                 pass
+        if self._client:
+            await self._client.aclose()
+            self._client = None
         self._connected = False
 
     async def is_connected(self) -> bool:
-        if not self._connected or not self._bridge_url:
+        if not self._connected or not self._bridge_url or not self._client:
             return False
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-                resp = await client.get(self._url("/is_connected"), headers=self._headers)
-                data = resp.json()
-                self._connected = data.get("connected", False)
-                return self._connected
+            resp = await self._client.get(self._url("/is_connected"), headers=self._headers)
+            data = resp.json()
+            self._connected = data.get("connected", False)
+            return self._connected
         except Exception:
             self._connected = False
             return False
@@ -132,10 +139,10 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Account ───────────────────────────────────────
 
     async def get_account_info(self) -> AccountInfo:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.get(self._url("/account"), headers=self._headers)
-            resp.raise_for_status()
-            d = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.get(self._url("/account"), headers=self._headers)
+        resp.raise_for_status()
+        d = resp.json()
 
         return AccountInfo(
             account_id=d["account_id"],
@@ -153,10 +160,10 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Positions ─────────────────────────────────────
 
     async def get_positions(self) -> list[Position]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.get(self._url("/positions"), headers=self._headers)
-            resp.raise_for_status()
-            raw = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.get(self._url("/positions"), headers=self._headers)
+        resp.raise_for_status()
+        raw = resp.json()
 
         positions = []
         for p in raw:
@@ -180,14 +187,14 @@ class MT5RemoteAdapter(BrokerAdapter):
         if size is not None:
             params["size"] = str(size)
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.post(
-                self._url("/positions/close"),
-                headers=self._headers,
-                params=params,
-            )
-            resp.raise_for_status()
-            d = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.post(
+            self._url("/positions/close"),
+            headers=self._headers,
+            params=params,
+        )
+        resp.raise_for_status()
+        d = resp.json()
 
         if not d.get("ok"):
             raise RuntimeError(f"MT5 close failed: {d.get('error')}")
@@ -207,23 +214,23 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Orders ────────────────────────────────────────
 
     async def place_order(self, request: OrderRequest) -> Order:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.post(
-                self._url("/orders"),
-                headers=self._headers,
-                json={
-                    "symbol": request.symbol,
-                    "side": request.side.value,
-                    "size": request.size,
-                    "order_type": request.order_type.value,
-                    "price": request.price,
-                    "stop_loss": request.stop_loss,
-                    "take_profit": request.take_profit,
-                    "comment": request.comment or "flowrexalgo",
-                },
-            )
-            resp.raise_for_status()
-            d = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.post(
+            self._url("/orders"),
+            headers=self._headers,
+            json={
+                "symbol": request.symbol,
+                "side": request.side.value,
+                "size": request.size,
+                "order_type": request.order_type.value,
+                "price": request.price,
+                "stop_loss": request.stop_loss,
+                "take_profit": request.take_profit,
+                "comment": request.comment or "tradeforge",
+            },
+        )
+        resp.raise_for_status()
+        d = resp.json()
 
         if not d.get("ok"):
             raise RuntimeError(f"MT5 order failed: {d.get('error')}")
@@ -244,19 +251,19 @@ class MT5RemoteAdapter(BrokerAdapter):
         )
 
     async def modify_order(self, request: OrderModifyRequest) -> Order:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.put(
-                self._url("/orders"),
-                headers=self._headers,
-                json={
-                    "order_id": request.order_id,
-                    "stop_loss": request.stop_loss,
-                    "take_profit": request.take_profit,
-                    "price": request.price,
-                },
-            )
-            resp.raise_for_status()
-            d = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.put(
+            self._url("/orders"),
+            headers=self._headers,
+            json={
+                "order_id": request.order_id,
+                "stop_loss": request.stop_loss,
+                "take_profit": request.take_profit,
+                "price": request.price,
+            },
+        )
+        resp.raise_for_status()
+        d = resp.json()
 
         if not d.get("ok"):
             raise RuntimeError(f"MT5 modify failed: {d.get('error')}")
@@ -274,23 +281,23 @@ class MT5RemoteAdapter(BrokerAdapter):
 
     async def cancel_order(self, order_id: str) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-                resp = await client.delete(
-                    self._url(f"/orders/{order_id}"),
-                    headers=self._headers,
-                )
-                resp.raise_for_status()
-                d = resp.json()
+            assert self._client, "Not connected"
+            resp = await self._client.delete(
+                self._url(f"/orders/{order_id}"),
+                headers=self._headers,
+            )
+            resp.raise_for_status()
+            d = resp.json()
             return d.get("ok", False)
         except Exception as e:
             logger.error("MT5 cancel order failed: %s", e)
             return False
 
     async def get_open_orders(self) -> list[Order]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.get(self._url("/orders"), headers=self._headers)
-            resp.raise_for_status()
-            raw = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.get(self._url("/orders"), headers=self._headers)
+        resp.raise_for_status()
+        raw = resp.json()
 
         orders = []
         for o in raw:
@@ -316,10 +323,10 @@ class MT5RemoteAdapter(BrokerAdapter):
     # ── Market Data ───────────────────────────────────
 
     async def get_symbols(self) -> list[SymbolInfo]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.get(self._url("/symbols"), headers=self._headers)
-            resp.raise_for_status()
-            raw = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.get(self._url("/symbols"), headers=self._headers)
+        resp.raise_for_status()
+        raw = resp.json()
 
         symbols = []
         for s in raw:
@@ -354,10 +361,10 @@ class MT5RemoteAdapter(BrokerAdapter):
         if from_time:
             body["from_time"] = int(from_time.timestamp())
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.post(self._url("/candles"), headers=self._headers, json=body)
-            resp.raise_for_status()
-            raw = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.post(self._url("/candles"), headers=self._headers, json=body)
+        resp.raise_for_status()
+        raw = resp.json()
 
         candles = []
         for r in raw:
@@ -372,10 +379,10 @@ class MT5RemoteAdapter(BrokerAdapter):
         return candles
 
     async def get_price(self, symbol: str) -> PriceTick:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.get(self._url(f"/price/{symbol}"), headers=self._headers)
-            resp.raise_for_status()
-            d = resp.json()
+        assert self._client, "Not connected"
+        resp = await self._client.get(self._url(f"/price/{symbol}"), headers=self._headers)
+        resp.raise_for_status()
+        d = resp.json()
 
         return PriceTick(
             symbol=d["symbol"],
@@ -390,10 +397,10 @@ class MT5RemoteAdapter(BrokerAdapter):
     async def get_initial_bars(self, symbol: str, timeframe: str, count: int = 500) -> list[dict]:
         body = {"symbol": symbol, "timeframe": timeframe, "count": count}
 
-        async with httpx.AsyncClient(timeout=_TIMEOUT, verify=_VERIFY_SSL) as client:
-            resp = await client.post(self._url("/candles"), headers=self._headers, json=body)
-            resp.raise_for_status()
-            return resp.json()  # Already in {time, open, high, low, close, volume} format
+        assert self._client, "Not connected"
+        resp = await self._client.post(self._url("/candles"), headers=self._headers, json=body)
+        resp.raise_for_status()
+        return resp.json()  # Already in {time, open, high, low, close, volume} format
 
     # ── Streaming ─────────────────────────────────────
 

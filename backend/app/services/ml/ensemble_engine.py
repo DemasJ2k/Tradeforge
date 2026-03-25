@@ -46,7 +46,7 @@ class EnsembleSignalEngine:
     ):
         self.symbol = symbol
         self.timeframe = timeframe
-        self.model_dir = model_dir or str(Path("data/ml_models"))
+        self.model_dir = model_dir or str(Path(__file__).resolve().parent.parent.parent.parent / "data" / "ml_models")
         self.min_agreement = min_agreement
         self.min_confidence = min_confidence
         self.weights = weights or {

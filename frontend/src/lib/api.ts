@@ -34,11 +34,11 @@ function redirectToLogin() {
   if (typeof window === "undefined") return;
   // Store current path for post-login redirect
   const currentPath = window.location.pathname + window.location.search;
-  if (currentPath !== "/login" && currentPath !== "/register") {
+  if (currentPath !== "/" && currentPath !== "/register") {
     localStorage.setItem("redirect_after_login", currentPath);
   }
   localStorage.removeItem("token");
-  window.location.href = "/login";
+  window.location.href = "/";
 }
 
 async function request<T>(

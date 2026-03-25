@@ -116,7 +116,7 @@ def main():
         models = {args.model: models[args.model]}
 
     print(f"\n{'#' * 70}")
-    print(f"  FlowrexAlgo RL Training Pipeline v2")
+    print(f"  Tradeforge RL Training Pipeline v2")
     print(f"  Models to train: {len(models)}")
     print(f"  Timesteps per model: {args.timesteps:,}")
     print(f"  Parallel envs: {args.n_envs}")

@@ -110,7 +110,7 @@ class ExpertAgent:
                 # Search for the expert regime model in the model directory
                 import os
                 from pathlib import Path
-                model_dir = Path("data/ml_models")
+                model_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "ml_models"
                 regime_path = model_dir / f"expert_{self.symbol}_M5_regime.joblib"
                 if not regime_path.exists():
                     # Search by pattern
@@ -120,6 +120,10 @@ class ExpertAgent:
 
                 if regime_path.exists():
                     rd = RegimeDetector(model_id=0)
+                    # Override default model path since expert regime models use a
+                    # symbol-specific naming convention (expert_{symbol}_M5_regime.joblib)
+                    # that differs from the constructor's default (regime_{model_id}.joblib).
+                    # RegimeDetector.__init__ doesn't accept a model_path parameter.
                     rd._model_path = str(regime_path)
                     if rd.load():
                         self._regime_detector = rd

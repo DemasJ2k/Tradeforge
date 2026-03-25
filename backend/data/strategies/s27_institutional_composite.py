@@ -11,7 +11,7 @@ Logic:
   5. SL = ATR * 2.0, TP = ATR * 3.0
   6. Max 1 trade at a time, cooldown of 3 bars
 
-Author: FlowrexAlgo AI
+Author: Tradeforge AI
 Version: 3.0 (simplified)
 """
 

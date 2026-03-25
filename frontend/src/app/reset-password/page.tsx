@@ -13,8 +13,8 @@ const btnCls =
 function Logo() {
   return (
     <div className="mb-6 flex items-center justify-center gap-2">
-      <Image src="/logo.png" alt="FlowrexAlgo" width={40} height={40} className="rounded-lg" />
-      <span className="text-xl font-semibold">FlowrexAlgo</span>
+      <Image src="/logo.png" alt="Tradeforge" width={40} height={40} className="rounded-lg" />
+      <span className="text-xl font-semibold">Tradeforge</span>
     </div>
   );
 }

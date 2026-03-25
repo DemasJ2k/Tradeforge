@@ -34,8 +34,11 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-# Thread pool for running synchronous MT5 calls
-_mt5_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mt5")
+# Thread pool for running synchronous MT5 calls.
+# MT5 terminal is single-threaded — use max_workers=1 to serialize access
+# and avoid race conditions with concurrent users.
+_mt5_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mt5")
+_mt5_lock = asyncio.Lock()  # Additional async lock for safe serialization
 
 # ── Timeframe mapping ─────────────────────────────────
 _TF_MAP: dict[str, int] = {}  # populated on import if mt5 available
@@ -230,7 +233,7 @@ class MT5Adapter(BrokerAdapter):
                 "position": ticket,
                 "deviation": 20,
                 "magic": 100,
-                "comment": "flowrexalgo_close",
+                "comment": "tradeforge_close",
                 "type_time": mt5.ORDER_TIME_GTC,
             }
 
@@ -287,7 +290,7 @@ class MT5Adapter(BrokerAdapter):
                 "price": price,
                 "deviation": 20,
                 "magic": 100,
-                "comment": request.comment or "flowrexalgo",
+                "comment": request.comment or "tradeforge",
                 "type_time": mt5.ORDER_TIME_GTC,
             }
 

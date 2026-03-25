@@ -294,9 +294,9 @@ class CTraderAdapter(BrokerAdapter):
     def _convert_price(price_int: int, digits: int) -> float:
         """Convert cTrader integer price to float.
 
-        All cTrader Open API prices (spot, trendbar, position, order)
-        are encoded with a fixed factor of 100000. Divide by 100000
-        then round to the symbol's digit precision.
+        Only spot event prices and trendbar (candle) data use integer
+        encoding (uint64 divided by 100000). Position/order prices are
+        already doubles in the REST/JSON API — use float() directly for those.
         See: https://help.ctrader.com/open-api/symbol-data/
         """
         return round(price_int / 100000.0, digits)
@@ -663,6 +663,7 @@ class CTraderAdapter(BrokerAdapter):
         })
         payload = resp.get("payload", {})
         raw_positions = payload.get("position", [])
+        self._last_positions = raw_positions  # cache for close_position side lookup
         logger.info("cTrader reconcile: payloadType=%s, %d positions, %d orders, keys=%s",
                      resp.get("payloadType"), len(raw_positions),
                      len(payload.get("order", [])), list(payload.keys()))
@@ -745,13 +746,27 @@ class CTraderAdapter(BrokerAdapter):
             lot_size = self._symbol_cache.get(symbol_id, {}).get("lotSize", 100_000)
             payload["volume"] = self._to_volume(size, lot_size)
 
+        # Determine the correct closing side from the cached position data.
+        # Closing a LONG position means selling; closing a SHORT means buying.
+        close_side = OrderSide.SELL  # default
+        symbol_id = self._position_symbol.get(position_id, 0)
+        # Look up position side from the last get_positions() call cache
+        # We stored position_id → symbol_id; check the original tradeSide if available
+        # For reliability, walk the last known positions list
+        if hasattr(self, "_last_positions"):
+            for p in self._last_positions:
+                if str(p.get("positionId", "")) == str(position_id):
+                    is_buy = self._is_buy_side(p.get("tradeData", {}).get("tradeSide", 1))
+                    close_side = OrderSide.SELL if is_buy else OrderSide.BUY
+                    break
+
         resp = await self._send(PROTO_OA_CLOSE_POSITION_REQ, payload)
         exec_payload = resp.get("payload", {})
 
         return Order(
             order_id=str(exec_payload.get("orderId", position_id)),
             symbol="",
-            side=OrderSide.SELL,
+            side=close_side,
             order_type=OrderType.MARKET,
             size=size or 0,
             status=OrderStatus.FILLED,

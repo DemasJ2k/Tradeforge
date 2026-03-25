@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ═══════════════════════════════════════════════════════════
-   FlowrexAlgo — Theme System
+   Tradeforge — Theme System
    Default: "Midnight Teal" (dark, teal/cyan accent)
    ═══════════════════════════════════════════════════════════ */
 
@@ -49,7 +49,7 @@
   --sidebar-border: oklch(0.9 0.005 247);
   --sidebar-ring: oklch(0.55 0.15 200);
 
-  /* FlowrexAlgo custom tokens — light */
+  /* Tradeforge custom tokens — light */
   --fa-sidebar-bg: #f8fafc;
   --fa-sidebar-hover: #f1f5f9;
   --fa-sidebar-active: #e2e8f0;
@@ -106,7 +106,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.65 0.15 200);
 
-  /* FlowrexAlgo custom tokens — dark (Midnight Teal) */
+  /* Tradeforge custom tokens — dark (Midnight Teal) */
   --fa-sidebar-bg: #0c1425;
   --fa-sidebar-hover: #132038;
   --fa-sidebar-active: #1a2d4d;
@@ -307,7 +307,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* FlowrexAlgo custom tokens */
+  /* Tradeforge custom tokens */
   --color-fa-sidebar-bg: var(--fa-sidebar-bg);
   --color-fa-sidebar-hover: var(--fa-sidebar-hover);
   --color-fa-sidebar-active: var(--fa-sidebar-active);

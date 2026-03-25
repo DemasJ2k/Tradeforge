@@ -32,8 +32,8 @@ const POPULAR_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "NAS100", "EURUSD"];
 
 // Hardcoded model availability until backend endpoint exists
 const DEFAULT_AVAILABILITY: AgentAvailability = {
-  scalping: { available: true, grade: "A+", sharpe: 4.87, symbols: ["XAUUSD", "US30"] },
-  expert: { available: true, grade: "A+", sharpe: 5.05, symbols: ["XAUUSD", "US30", "BTCUSD"] },
+  scalping: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30"] },
+  expert: { available: true, grade: undefined, sharpe: undefined, symbols: ["XAUUSD", "US30", "BTCUSD"] },
 };
 
 /* ═══════════════════════════════════════════════════════ */
@@ -478,7 +478,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
             {!isAgentAvailable(agentType) && (
               <div className="flex items-center gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-3 py-2 text-xs text-orange-400">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span>No trained models for {symbol}. Visit ML Lab to train models for this symbol.</span>
+                <span>No trained models for {symbol}. <a href="/ml?view=retrain" className="underline text-accent hover:text-accent/80">Go to ML Lab →</a></span>
               </div>
             )}
           </div>

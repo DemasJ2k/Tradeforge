@@ -209,6 +209,17 @@ def run_python_strategy(
             },
         })
 
+        def _set_resource_limits():
+            """Set resource limits for the subprocess to prevent abuse."""
+            try:
+                import resource
+                # Limit virtual memory to 512MB
+                resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+                # Limit CPU time to 120 seconds
+                resource.setrlimit(resource.RLIMIT_CPU, (120, 120))
+            except (ImportError, ValueError):
+                pass  # resource module not available on Windows
+
         result = subprocess.run(
             [sys.executable, harness_path, file_path],
             input=input_data,
@@ -216,6 +227,7 @@ def run_python_strategy(
             text=True,
             timeout=120,  # 2 minute timeout
             cwd=os.path.dirname(file_path),
+            preexec_fn=_set_resource_limits,
         )
 
         if result.returncode != 0:

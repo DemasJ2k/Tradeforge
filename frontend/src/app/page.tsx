@@ -195,7 +195,8 @@ export default function Dashboard() {
       })
     );
     return () => unsubs.forEach((u) => u());
-  }, [data?.agents?.items, wsSubscribe, load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.agents?.items?.map((a: { id: number }) => a.id).join(","), wsSubscribe, load]);
 
   if (loading) return <DashSkeleton />;
   if (error) return <div className="p-6 text-danger">{error}</div>;
@@ -274,11 +275,11 @@ export default function Dashboard() {
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Today P&L</span>
-                  <span className={`font-medium ${acct.todayPnl > 0 ? "text-green-400" : acct.todayPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}>
-                    {acct.todayPnl >= 0 ? "+" : ""}
-                    {acct.todayPnl.toFixed(2)}
-                    {acct.todayTrades > 0 && (
-                      <span className="text-muted-foreground/60 ml-1">({acct.todayTrades})</span>
+                  <span className={`font-medium ${(data?.today?.pnl ?? 0) > 0 ? "text-green-400" : (data?.today?.pnl ?? 0) < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                    {(data?.today?.pnl ?? 0) >= 0 ? "+" : ""}
+                    {(data?.today?.pnl ?? 0).toFixed(2)}
+                    {(data?.today?.trades ?? 0) > 0 && (
+                      <span className="text-muted-foreground/60 ml-1">({data?.today?.trades ?? 0})</span>
                     )}
                   </span>
                 </div>
@@ -423,8 +424,8 @@ export default function Dashboard() {
                     <TableRow key={p.position_id} className="border-card-border/40">
                       <TableCell className="font-medium text-xs py-2">{p.symbol}</TableCell>
                       <TableCell className="text-xs py-2 text-muted-foreground capitalize">{p.broker ?? "—"}</TableCell>
-                      <TableCell className={`text-xs py-2 ${p.side === "BUY" ? "text-success" : "text-danger"}`}>
-                        {p.side}
+                      <TableCell className={`text-xs py-2 ${String(p.side).includes("BUY") || String(p.side).includes("LONG") ? "text-success" : "text-danger"}`}>
+                        {String(p.side).replace(/^(PositionSide|OrderSide)\./, "")}
                       </TableCell>
                       <TableCell className="text-xs py-2 text-right">{p.size}</TableCell>
                       <TableCell className="text-xs py-2 text-right">{fmt(p.entry_price, 5)}</TableCell>

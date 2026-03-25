@@ -18,7 +18,7 @@ Exit:
   Force close at session end
 """
 
-# ── Settings (tunable via FlowrexAlgo UI) ─────────────────────────
+# ── Settings (tunable via Tradeforge UI) ─────────────────────────
 DEFAULTS = {
     "fast_ema":           8,
     "slow_ema":           21,

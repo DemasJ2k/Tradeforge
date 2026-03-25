@@ -496,8 +496,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS — explicit origins to avoid browser issues with wildcard + credentials.
 _cors_origins = [
     settings.FRONTEND_URL,                   # local dev: http://localhost:3000
-    "https://flowrexalgo.onrender.com",      # production frontend
-    "https://tradeforge.onrender.com",       # legacy frontend URL
+    "https://tradeforge.onrender.com",       # production frontend
 ]
 if settings.DEBUG:
     _cors_origins += ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"]
@@ -555,7 +554,7 @@ async def _global_exception_handler(request: Request, exc: Exception):
     )
     response = JSONResponse(
         status_code=500,
-        content={"detail": f"Internal server error: {type(exc).__name__}: {str(exc)[:300]}"},
+        content={"detail": "Internal server error"},
     )
     # Ensure CORS headers are present on error responses so browsers don't
     # mask the real error message behind an opaque CORS failure.
@@ -570,7 +569,7 @@ async def _global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(datasource_api.router)
-app.include_router(strategy_api.router)
+# strategy_api removed — UI no longer uses strategy endpoints (#6)
 app.include_router(backtest_api.router)
 app.include_router(settings_api.router)
 app.include_router(llm_api.router)
@@ -598,7 +597,7 @@ def _seed_admin_user():
     from app.core.auth import hash_password
 
     _log = logging.getLogger(__name__)
-    admin_user = os.environ.get("ADMIN_USERNAME", "FlowrexAdmin")
+    admin_user = os.environ.get("ADMIN_USERNAME", "TradeforgeAdmin")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "")
 
     if not admin_pass:
@@ -636,7 +635,7 @@ def _seed_admin_user():
             password_hash=hash_password(admin_pass),
             email=admin_email,
             is_admin=True,
-            must_change_password=False,
+            must_change_password=True,
         )
         db.add(admin)
         db.commit()
@@ -1337,12 +1336,38 @@ def _register_rl_models():
         db.close()
 
 
+def _check_ml_models():
+    """Log which ML model files are present/missing at startup."""
+    from pathlib import Path
+    _log = logging.getLogger(__name__)
+    model_dir = Path(__file__).resolve().parent / "data" / "ml_models"
+    if not model_dir.exists():
+        _log.warning("[ML Health] Model directory not found: %s", model_dir)
+        return
+    symbols = ["XAUUSD", "US30", "ES", "NAS100", "BTCUSD"]
+    for pipeline in ("scalping", "expert"):
+        for sym in symbols:
+            prefix = f"{pipeline}_{sym}_M5"
+            xgb = model_dir / f"{prefix}_xgboost.joblib"
+            lgb = model_dir / f"{prefix}_lightgbm.joblib"
+            if xgb.exists() and lgb.exists():
+                _log.info("[ML Health] %s %s: OK", pipeline, sym)
+            else:
+                missing = []
+                if not xgb.exists():
+                    missing.append("xgboost")
+                if not lgb.exists():
+                    missing.append("lightgbm")
+                _log.warning("[ML Health] %s %s: MISSING %s", pipeline, sym, ", ".join(missing))
+
+
 @app.on_event("startup")
 async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
     _seed_databento_sources()
     _register_rl_models()
+    _check_ml_models()
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     _recalculate_agent_pnl()
     await ws_manager.start()

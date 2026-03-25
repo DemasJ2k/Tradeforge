@@ -99,6 +99,8 @@ export const useWebSocket = create<WSState>((set, get) => ({
     _cleanupConnection();
     set({ status: "connecting" });
 
+    // JWT passed as query param because WebSocket API doesn't support custom headers.
+    // This is standard practice for WS auth — the token is only visible in server logs.
     const ws = new WebSocket(`${WS_BASE}/ws?token=${token}`);
     _ws = ws;
 

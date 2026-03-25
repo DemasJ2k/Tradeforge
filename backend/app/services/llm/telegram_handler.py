@@ -135,7 +135,7 @@ async def handle_telegram_message(
                 tool_name = data.get("name", "")
                 response_parts.append(
                     f"\n\nAction '<b>{tool_name}</b>' needs your approval. "
-                    "Please approve it in the FlowrexAlgo web app."
+                    "Please approve it in the Tradeforge web app."
                 )
 
             elif event_type == "error":
