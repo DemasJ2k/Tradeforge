@@ -19,12 +19,15 @@ build_output.txt
 frontend_log.txt
 claude_logs.md
 
-# Project local data artifacts
+# Project local data artifacts — ignore bulk/generic models only
 backend/data/ml_models/
-# Allow small ONNX deploy files (needed for Render)
-!backend/data/ml_models/*.onnx
-!backend/data/ml_models/*.onnx.data
-!backend/data/ml_models/*.npz
+# Allow scalping & expert production models (needed for Render deployment)
+!backend/data/ml_models/scalping_*.joblib
+!backend/data/ml_models/expert_*.joblib
+!backend/data/ml_models/expert_*_lstm.onnx
+!backend/data/ml_models/expert_*_lstm.onnx.data
+!backend/data/ml_models/expert_*_lstm_scaler.npz
+!backend/data/ml_models/expert_*_lstm_meta.json
 backend/data/*.db
 backend/*.db
 nul
