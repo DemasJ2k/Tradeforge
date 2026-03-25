@@ -35,7 +35,7 @@ RESULTS_DIR = Path(__file__).parent.parent / "data" / "backtest_production"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALL_SYMBOLS = ["XAUUSD", "US30", "ES", "NAS100", "BTCUSD"]
-INITIAL_BALANCE = 10_000.0
+INITIAL_BALANCE = 100_000.0
 RISK_PER_TRADE = 0.01  # 1% of equity (used only when dynamic sizing is on)
 FIXED_LOT_SIZE = 0.1   # Fixed lot size for all symbols
 
@@ -715,8 +715,12 @@ def main():
 
             # Free memory between agents
             import gc
-            del trade_log, equity_curve, preds, confs, X
+            del trade_log, equity_curve, preds, confs, X, closes, highs, lows, datetimes
             gc.collect()
+
+        # Free symbol data between symbols
+        del m5_data, h1_data, h4_data
+        gc.collect()
 
     # ── Summary Table ──
     elapsed = time.time() - t_start
