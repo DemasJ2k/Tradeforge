@@ -1,5 +1,20 @@
 # Tradeforge Development Log
 
+## March 25 — Deploy Scalping/Expert Models to Render + Remove Old RL Models
+
+**Problem**: NAS100 and ES agents couldn't be created on Render because `.joblib` model files were gitignored. The `/api/ml/available-agents` endpoint checks for model files on disk — none exist on Render's ephemeral filesystem.
+
+**Fix**:
+1. Updated `.gitignore` to allow `scalping_*.joblib`, `expert_*.joblib`, and LSTM metadata files (`.onnx`, `.onnx.data`, `.npz`, `.json`) — total ~73MB of production models now git-tracked
+2. Removed 3 old RL models (`rl_lw_us30.onnx`, `rl_lw_xauusd.onnx`, `rl_mb_btcusd.onnx`) and their stats files from git
+3. Removed `_register_rl_models()` auto-registration from `main.py` startup
+4. Removed `/api/ml/register-rl-model` endpoint from `ml.py`
+5. Removed standalone `backend/scripts/register_rl_models.py`
+
+All 5 symbols (XAUUSD, US30, BTCUSD, ES, NAS100) × 2 agent types (scalping, expert) now have model files in git and will deploy to Render.
+
+---
+
 ## March 25 — Remove Fixed Lot Sizing from Agent Wizard
 
 **Rationale**: Production backtests (both agents × 5 symbols, $100K, fixed 0.1 lots, 2022-2026) all lost money. The ML models were trained/validated with dynamic % risk sizing — fixed lots breaks their calibration. Removed the option entirely.
