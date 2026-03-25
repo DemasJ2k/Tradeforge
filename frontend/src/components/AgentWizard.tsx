@@ -63,7 +63,6 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
   const [timeframe, setTimeframe] = useState("M5");
 
   /* ── Step 3: Risk Config ── */
-  const [sizeType, setSizeType] = useState("percent_risk");
   const [riskPerTrade, setRiskPerTrade] = useState("0.5");
   const [maxDailyLoss, setMaxDailyLoss] = useState("4");
   const [maxDrawdown, setMaxDrawdown] = useState("8");
@@ -192,7 +191,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
         ? {
             agent_type: "scalping",
             risk_per_trade: parseFloat(riskPerTrade) / 100 || 0.005,
-            position_size_type: sizeType,
+            position_size_type: "percent_risk",
             position_size_value: parseFloat(riskPerTrade) || 0.5,
             max_daily_loss_pct: parseFloat(maxDailyLoss) || 4,
             max_drawdown_pct: parseFloat(maxDrawdown) || 8,
@@ -204,7 +203,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
         : {
             agent_type: "expert",
             risk_per_trade: parseFloat(riskPerTrade) / 100 || 0.005,
-            position_size_type: sizeType,
+            position_size_type: "percent_risk",
             position_size_value: parseFloat(riskPerTrade) || 0.5,
             max_daily_loss_pct: parseFloat(maxDailyLoss) || 4,
             max_drawdown_pct: parseFloat(maxDrawdown) || 8,
@@ -490,31 +489,38 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
             {/* Position Sizing */}
             <div>
               <Label className="block text-xs font-semibold text-foreground mb-2">Position Sizing</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="block text-[10px] text-muted-foreground mb-1">Type</Label>
-                  <select
-                    value={sizeType}
-                    onChange={(e) => setSizeType(e.target.value)}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+              <div className="flex gap-2 mb-2">
+                {[
+                  { label: "Conservative", value: "0.25" },
+                  { label: "Moderate", value: "0.5" },
+                  { label: "Aggressive", value: "1" },
+                ].map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setRiskPerTrade(preset.value)}
+                    className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                      riskPerTrade === preset.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-card-border bg-background text-muted-foreground hover:border-primary/50"
+                    }`}
                   >
-                    <option value="percent_risk">% of Balance</option>
-                    <option value="fixed_lot">Fixed Lot</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="block text-[10px] text-muted-foreground mb-1">
-                    {sizeType === "percent_risk" ? "Risk per Trade (%)" : "Lot Size"}
-                  </Label>
-                  <input
-                    type="number"
-                    step={sizeType === "percent_risk" ? "0.1" : "0.01"}
-                    min="0.01"
-                    value={riskPerTrade}
-                    onChange={(e) => setRiskPerTrade(e.target.value)}
-                    className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-                  />
-                </div>
+                    {preset.label} ({preset.value}%)
+                  </button>
+                ))}
+              </div>
+              <div>
+                <Label className="block text-[10px] text-muted-foreground mb-1">Risk per Trade (%)</Label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="3"
+                  value={riskPerTrade}
+                  onChange={(e) => setRiskPerTrade(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Each trade risks this % of your current balance</p>
               </div>
             </div>
 
@@ -733,7 +739,7 @@ export default function AgentWizard({ open, onOpenChange, onCreated }: Props) {
                 <span className="font-medium text-foreground">{timeframe}</span>
                 <span className="text-muted-foreground">Risk / Trade</span>
                 <span className="font-medium text-foreground">
-                  {sizeType === "percent_risk" ? `${riskPerTrade}%` : `${riskPerTrade} lots`}
+                  {riskPerTrade}% of balance
                 </span>
                 <span className="text-muted-foreground">Max Daily Loss</span>
                 <span className="font-medium text-foreground">{maxDailyLoss}%</span>
