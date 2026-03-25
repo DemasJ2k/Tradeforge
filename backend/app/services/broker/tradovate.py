@@ -351,6 +351,27 @@ class TradovateAdapter(BrokerAdapter):
 
         order_id = str(data.get("orderId", ""))
 
+        # Place bracket orders for SL/TP if provided
+        if order_id and (request.stop_loss or request.take_profit):
+            try:
+                bracket_body: dict = {
+                    "accountSpec": self._account_spec,
+                    "accountId": self._account_id,
+                    "symbol": request.symbol,
+                    "orderQty": int(request.size),
+                    "isAutomated": True,
+                }
+                if request.stop_loss:
+                    sl_body = {**bracket_body, "orderType": "Stop", "stopPrice": request.stop_loss,
+                               "action": "Sell" if request.side == OrderSide.BUY else "Buy"}
+                    await self._post("/order/placeorder", sl_body)
+                if request.take_profit:
+                    tp_body = {**bracket_body, "orderType": "Limit", "price": request.take_profit,
+                               "action": "Sell" if request.side == OrderSide.BUY else "Buy"}
+                    await self._post("/order/placeorder", tp_body)
+            except Exception as e:
+                logger.warning("Tradovate SL/TP bracket order failed: %s", e)
+
         return Order(
             order_id=order_id,
             symbol=request.symbol,

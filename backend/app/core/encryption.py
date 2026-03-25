@@ -11,6 +11,13 @@ import hashlib
 from app.core.config import settings
 
 _FERNET = None
+import logging as _logging
+_enc_logger = _logging.getLogger(__name__)
+
+if settings.SECRET_KEY in {"flowrexalgo-dev-secret-change-in-production", "tradeforge-dev-secret-change-in-production"}:
+    _enc_logger.warning("Encryption key derived from default SECRET_KEY — broker credentials are NOT secure. "
+                         "Set a unique SECRET_KEY in .env for production.")
+
 try:
     from cryptography.fernet import Fernet
     # Derive a 32-byte URL-safe key from the app secret
@@ -19,7 +26,10 @@ try:
     )
     _FERNET = Fernet(key)
 except ImportError:
-    pass
+    raise ImportError(
+        "The 'cryptography' package is required for broker credential encryption. "
+        "Install it with: pip install cryptography"
+    )
 
 
 def encrypt_value(plain: str) -> str:

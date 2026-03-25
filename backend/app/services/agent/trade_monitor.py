@@ -36,6 +36,8 @@ class PaperTradeMonitor:
         # Cache latest prices per symbol: { "XAUUSD": { "bid": ..., "ask": ..., "last": ... } }
         self._prices: dict[str, dict] = {}
         self._unsubscribers: list = []
+        self._subscribed_symbols: set[str] = set()
+        self._on_tick = None
         # Callbacks for trade close notifications: {agent_id: callable(pnl)}
         self._on_close_callbacks: dict[int, list] = {}
 

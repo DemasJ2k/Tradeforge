@@ -514,7 +514,7 @@ async def confirm_trade(
                 order_type=OrderType.MARKET,
                 stop_loss=trade.stop_loss,
                 take_profit=trade.take_profit_1,
-                comment=f"FlowrexAlgo agent:{agent_id}",
+                comment=f"Tradeforge agent:{agent_id}",
             )
             order = await adapter.place_order(order_req)
             broker_ticket = order.order_id

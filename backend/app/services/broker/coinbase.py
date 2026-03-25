@@ -326,9 +326,16 @@ class CoinbaseAdapter(BrokerAdapter):
 
         order_config: dict = {}
         if request.order_type == OrderType.MARKET:
-            order_config["market_market_ioc"] = {
-                "base_size": str(request.size),
-            }
+            if request.side == OrderSide.BUY:
+                # Market BUY: use quote_size (spend $X of quote currency)
+                order_config["market_market_ioc"] = {
+                    "quote_size": str(request.size),
+                }
+            else:
+                # Market SELL: use base_size (sell X units of base currency)
+                order_config["market_market_ioc"] = {
+                    "base_size": str(request.size),
+                }
         elif request.order_type == OrderType.LIMIT:
             order_config["limit_limit_gtc"] = {
                 "base_size": str(request.size),
@@ -463,6 +470,11 @@ class CoinbaseAdapter(BrokerAdapter):
     ) -> list[Candle]:
         product_id = _to_coinbase_product(symbol)
         granularity = _TF_MAP.get(timeframe, "ONE_HOUR")
+        if timeframe in ("H4", "4h"):
+            logger.warning(
+                "Coinbase has no 4-hour candle granularity; using SIX_HOUR (6H) for %s",
+                product_id,
+            )
         bar_seconds = _GRANULARITY_SECONDS.get(granularity, 3600)
 
         now = int(time.time())

@@ -1,5 +1,5 @@
 /**
- * FlowrexAlgo — Indicator Registry
+ * Tradeforge — Indicator Registry
  *
  * Metadata for every indicator: id, display name, type (overlay / oscillator),
  * configurable parameters, output keys, and default colours.

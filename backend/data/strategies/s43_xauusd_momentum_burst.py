@@ -21,7 +21,7 @@ Exit:
 24h session, works on M15.
 """
 
-# -- Settings (tunable via FlowrexAlgo UI) --------------------------
+# -- Settings (tunable via Tradeforge UI) --------------------------
 DEFAULTS = {
     "rsi_period":       6,
     "body_thresh":      0.15,

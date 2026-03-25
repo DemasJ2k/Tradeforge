@@ -194,7 +194,7 @@ async def test_webhook(
 
     test_payload = {
         "event": "test",
-        "message": "This is a test webhook from FlowrexAlgo",
+        "message": "This is a test webhook from Tradeforge",
         "webhook_id": webhook_id,
         "webhook_name": endpoint.name,
     }

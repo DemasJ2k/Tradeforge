@@ -25,7 +25,7 @@ const fmtBalance = (n: number, currency: string) => {
 
 const ROUTE_LABELS: Record<string, string> = {
   "/": "Dashboard",
-  "/data": "Data Sources",
+  "/backtest": "Backtest",
   "/ml": "ML Lab",
   "/trading": "Trading",
   "/portfolio": "Portfolio",
@@ -35,7 +35,7 @@ const ROUTE_LABELS: Record<string, string> = {
 export default function TopBar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { toggle, toggleMobile } = useSidebar();
+  const { toggle, setMobileOpen } = useSidebar();
   const { accounts, activeBroker, setActiveBroker, refreshAccounts } = useBrokerAccounts();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -82,13 +82,13 @@ export default function TopBar() {
       <div className="flex items-center gap-1.5 text-sm min-w-0">
         {/* Mobile hamburger */}
         <button
-          onClick={toggleMobile}
+          onClick={() => setMobileOpen(true)}
           className="flex md:hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-fa-sidebar-hover hover:text-foreground transition-colors"
           title="Open menu"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="hidden sm:inline text-muted-foreground">FlowrexAlgo</span>
+        <span className="hidden sm:inline text-muted-foreground">Tradeforge</span>
         <ChevronRight className="hidden sm:inline h-3.5 w-3.5 text-muted-foreground/50" />
         <span className="font-medium text-foreground truncate">{pageLabel}</span>
       </div>

@@ -21,7 +21,7 @@ Exit:
   - Forced close at session_end_hour
 """
 
-# -- Settings (tunable via FlowrexAlgo UI) ---------------------------------
+# -- Settings (tunable via Tradeforge UI) ---------------------------------
 DEFAULTS = {
     "atr_period":        14,
     "atr_mult":          1.0,

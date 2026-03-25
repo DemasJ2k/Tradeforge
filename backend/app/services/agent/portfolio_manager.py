@@ -122,14 +122,10 @@ class PortfolioManagerService:
         Validate a trade against portfolio-level constraints.
         Called by AgentRunner BEFORE creating a trade.
         """
-        # Reset daily P&L at midnight UTC
+        # Reset daily P&L at midnight UTC (also snapshots starting equity)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if today != self._daily_reset_date:
-            self._daily_pnl = 0.0
-            self._daily_reset_date = today
-            for a in self._agents.values():
-                a.daily_pnl = 0.0
-                a.trades_today = 0
+            self.reset_daily()
 
         # 1. Portfolio paused?
         if self._paused:
@@ -226,6 +222,23 @@ class PortfolioManagerService:
                 for aid, a in self._agents.items()
             },
         }
+
+    def reset_daily(self) -> None:
+        """Reset daily tracking at the start of each trading day.
+
+        Should be called once per day (e.g. at UTC midnight) to snapshot the
+        current equity as the day's starting equity and zero out daily P&L.
+        """
+        self._starting_equity = self._current_equity
+        self._daily_pnl = 0.0
+        self._daily_reset_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        for a in self._agents.values():
+            a.daily_pnl = 0.0
+            a.trades_today = 0
+        _log.info(
+            "PM[%s] daily reset — starting_equity=%.2f",
+            self.portfolio_id, self._starting_equity,
+        )
 
     def unpause(self) -> None:
         """Manually unpause the portfolio (admin action)."""

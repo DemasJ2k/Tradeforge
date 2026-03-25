@@ -68,7 +68,7 @@ class AgentLog(Base):
     __tablename__ = "agent_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("trading_agents.id"), nullable=False)
+    agent_id = Column(Integer, ForeignKey("trading_agents.id"), nullable=False, index=True)
 
     # Level: info | warn | error | trade | signal
     level = Column(String(10), nullable=False, default="info")
@@ -84,7 +84,7 @@ class AgentTrade(Base):
     __tablename__ = "agent_trades"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_id = Column(Integer, ForeignKey("trading_agents.id"), nullable=False)
+    agent_id = Column(Integer, ForeignKey("trading_agents.id"), nullable=False, index=True)
 
     symbol = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)  # BUY or SELL
@@ -99,7 +99,7 @@ class AgentTrade(Base):
     pnl_pct = Column(Float, default=0.0)
 
     # Status: pending_confirmation | confirmed | executed | rejected | paper | closed
-    status = Column(String(30), nullable=False, default="pending_confirmation")
+    status = Column(String(30), nullable=False, default="pending_confirmation", index=True)
 
     # Signal metadata
     signal_type = Column(String(20))       # BOS, CHoCH, etc.
@@ -116,8 +116,8 @@ class AgentTrade(Base):
     broker_name = Column(String(50), nullable=True)      # Which broker executed
     exit_reason = Column(String(30), nullable=True)      # SL, TP1, TP2, Reversal, Reconciled
 
-    opened_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    closed_at = Column(DateTime)
+    opened_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    closed_at = Column(DateTime, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     agent = relationship("TradingAgent", back_populates="trades")

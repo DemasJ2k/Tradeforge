@@ -1,5 +1,5 @@
 /**
- * FlowrexAlgo Toast Utility
+ * Tradeforge Toast Utility
  *
  * Usage:
  *   import { showToast } from "@/lib/toast";

@@ -241,6 +241,19 @@ class OandaAdapter(BrokerAdapter):
         data = await self._get(f"/accounts/{self._account_id}/openPositions")
         positions: list[Position] = []
 
+        # Fetch open trades to get actual open timestamps
+        trade_open_times: dict[str, datetime] = {}
+        try:
+            trades_data = await self._get(f"/accounts/{self._account_id}/openTrades")
+            for t in trades_data.get("trades", []):
+                instrument = t.get("instrument", "")
+                open_time = self._parse_ts(t.get("openTime", ""))
+                # Use the earliest trade open time per instrument
+                if instrument not in trade_open_times or open_time < trade_open_times[instrument]:
+                    trade_open_times[instrument] = open_time
+        except Exception:
+            pass
+
         for pos in data.get("positions", []):
             long_units = float(pos.get("long", {}).get("units", 0))
             short_units = float(pos.get("short", {}).get("units", 0))
@@ -280,6 +293,9 @@ class OandaAdapter(BrokerAdapter):
             if "takeProfitOrder" in side_data:
                 tp = float(side_data["takeProfitOrder"].get("price", 0))
 
+            # Use actual open time from trades, fall back to now
+            open_time = trade_open_times.get(pos["instrument"], datetime.now(timezone.utc))
+
             positions.append(Position(
                 position_id=f"{pos['instrument']}_{side.value}",
                 symbol=pos["instrument"],
@@ -289,7 +305,7 @@ class OandaAdapter(BrokerAdapter):
                 current_price=current_price,
                 unrealized_pnl=unrealized,
                 margin_used=0,
-                open_time=datetime.now(timezone.utc),
+                open_time=open_time,
                 stop_loss=sl,
                 take_profit=tp,
             ))
@@ -425,14 +441,30 @@ class OandaAdapter(BrokerAdapter):
         )
 
     async def modify_order(self, request: OrderModifyRequest) -> Order:
+        # Resolve instrument precision for price formatting.
+        # request.symbol may be set by the caller; fall back to looking up the trade.
+        instrument = ""
+        if getattr(request, "symbol", None):
+            instrument = _to_oanda_instrument(request.symbol)
+        if not instrument:
+            # Fetch the trade to discover its instrument
+            try:
+                trade_data = await self._get(
+                    f"/accounts/{self._account_id}/trades/{request.order_id}"
+                )
+                instrument = trade_data.get("trade", {}).get("instrument", "")
+            except Exception:
+                pass
+        precision = await self._get_precision(instrument) if instrument else 5
+
         # Try modifying as a trade (position) SL/TP first
         body: dict = {}
         if request.stop_loss is not None:
-            body["stopLoss"] = {"price": str(request.stop_loss)}
+            body["stopLoss"] = {"price": self._fmt_price(request.stop_loss, precision)}
         if request.take_profit is not None:
-            body["takeProfit"] = {"price": str(request.take_profit)}
+            body["takeProfit"] = {"price": self._fmt_price(request.take_profit, precision)}
         if request.trailing_stop_distance is not None:
-            body["trailingStopLoss"] = {"distance": str(request.trailing_stop_distance)}
+            body["trailingStopLoss"] = {"distance": self._fmt_price(request.trailing_stop_distance, precision)}
 
         try:
             # Try as trade modification
@@ -454,11 +486,11 @@ class OandaAdapter(BrokerAdapter):
             # Try as pending order modification
             order_body: dict = {}
             if request.price is not None:
-                order_body["price"] = str(request.price)
+                order_body["price"] = self._fmt_price(request.price, precision)
             if request.stop_loss is not None:
-                order_body["stopLossOnFill"] = {"price": str(request.stop_loss)}
+                order_body["stopLossOnFill"] = {"price": self._fmt_price(request.stop_loss, precision)}
             if request.take_profit is not None:
-                order_body["takeProfitOnFill"] = {"price": str(request.take_profit)}
+                order_body["takeProfitOnFill"] = {"price": self._fmt_price(request.take_profit, precision)}
 
             data = await self._put(
                 f"/accounts/{self._account_id}/orders/{request.order_id}",

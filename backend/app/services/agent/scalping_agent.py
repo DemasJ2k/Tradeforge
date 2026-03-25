@@ -22,7 +22,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path("data/ml_models")
+MODEL_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "ml_models"
 
 
 class ScalpingAgent:
@@ -73,6 +73,7 @@ class ScalpingAgent:
         self._daily_pnl = 0.0
         self._trade_count_today = 0
         self._last_trade_bar = -100
+        self._balance = 10000.0  # Updated by engine before evaluate()
 
     def load(self) -> bool:
         """Load scalping models from disk."""
@@ -143,7 +144,7 @@ class ScalpingAgent:
             return None
 
         # Daily loss gate
-        if self._daily_pnl < -(10000 * self.max_daily_loss_pct):
+        if self._daily_pnl < -(balance * self.max_daily_loss_pct):
             logger.info("[Scalp %d] Daily loss limit hit", self.agent_id)
             return None
 

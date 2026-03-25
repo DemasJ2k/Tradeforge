@@ -74,9 +74,9 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
         {/* Logo + wordmark — when expanded */}
         {expanded && (
           <div className="ml-2 flex items-center gap-2 overflow-hidden">
-            <Image src="/logo.png" alt="FlowrexAlgo" width={32} height={32} className="shrink-0 rounded-lg" />
+            <Image src="/logo.png" alt="Tradeforge" width={32} height={32} className="shrink-0 rounded-lg" />
             <span className="text-base font-semibold text-foreground whitespace-nowrap tracking-tight">
-              FlowrexAlgo
+              Tradeforge
             </span>
           </div>
         )}
@@ -131,7 +131,7 @@ function SidebarContent({ isMobile = false }: { isMobile?: boolean }) {
         <div className="border-t border-fa-card-border p-3">
           <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
             <div className="h-2 w-2 rounded-full bg-fa-success" />
-            <span>FlowrexAlgo v2.0</span>
+            <span>Tradeforge v2.0</span>
           </div>
         </div>
       )}

@@ -54,6 +54,8 @@ class BrokerManager:
             return self._adapters.get((user_id, name))
 
         # Fallback: search all adapters for this broker name (backward compat)
+        logger.warning("get_adapter() called without user_id for broker=%s — "
+                        "falling back to first matching adapter (cross-user risk)", broker_name)
         name = broker_name
         if not name:
             # Try the first available default

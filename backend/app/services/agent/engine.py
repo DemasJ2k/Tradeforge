@@ -68,7 +68,9 @@ class AgentRunner:
 
         db = SessionLocal()
         try:
-            agent = db.query(TradingAgent).filter(TradingAgent.id == self.agent_id).first()
+            agent = await asyncio.to_thread(
+                lambda: db.query(TradingAgent).filter(TradingAgent.id == self.agent_id).first()
+            )
             if not agent:
                 logger.error("[Agent %d] Not found in DB", self.agent_id)
                 return
@@ -386,7 +388,7 @@ class AgentRunner:
 
                 # Log candle close to agent UI
                 bar_ts = bar_data.get("time", 0)
-                bar_dt = datetime.utcfromtimestamp(bar_ts).strftime("%Y-%m-%d %H:%M") if bar_ts else "??"
+                bar_dt = datetime.fromtimestamp(bar_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if bar_ts else "??"
                 self._log("info",
                     f"{self._timeframe} candle closed | {bar_dt} "
                     f"O={bar_data.get('open', 0):.2f} H={bar_data.get('high', 0):.2f} "
@@ -875,6 +877,12 @@ class AgentRunner:
         except Exception:
             pass
 
+        # Update agent's balance reference for daily loss checks
+        try:
+            self._expert_agent._balance = await self._get_balance()
+        except Exception:
+            pass
+
         # Run expert evaluation
         signal = await self._expert_agent.evaluate(self._bar_buffer, broker_adapter)
         if signal is None:
@@ -1156,7 +1164,7 @@ class AgentRunner:
                     order_type=OrderType.MARKET,
                     stop_loss=stop_loss,
                     take_profit=take_profit,
-                    comment=f"FlowrexAlgo Agent#{self.agent_id}",
+                    comment=f"Tradeforge Agent#{self.agent_id}",
                 )
                 # place_order returns an Order dataclass with fill data
                 result = await adapter.place_order(request)
@@ -1249,7 +1257,7 @@ class AgentRunner:
                     "tp": tp,
                     "deviation": 20,
                     "magic": 234000,
-                    "comment": f"FlowrexAlgo Agent#{self.agent_id}",
+                    "comment": f"Tradeforge Agent#{self.agent_id}",
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": filling,
                 }

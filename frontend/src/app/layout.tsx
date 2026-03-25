@@ -29,7 +29,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "FlowrexAlgo",
+  title: "Tradeforge",
   description: "Algorithmic trading platform for strategy building, backtesting, and live trading",
   icons: {
     icon: "/logo.png",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, API_BASE } from "@/lib/api";
 import ChatHelpers from "@/components/ChatHelpers";
@@ -91,6 +91,8 @@ export default function MLPage() {
   // Pipeline retrain state
   const [retrainRunning, setRetrainRunning] = useState<string | null>(null);
   const [retrainLog, setRetrainLog] = useState<string[]>([]);
+  const retrainPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retrainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Heatmap filter
   const [heatFilter, setHeatFilter] = useState("lightgbm");
@@ -108,12 +110,19 @@ export default function MLPage() {
       if (result.task_id) {
         setRetrainLog(prev => [...prev, `Task started: ${result.task_id}`]);
         // Poll for completion
+        // Clear any previous polling
+        if (retrainPollRef.current) clearInterval(retrainPollRef.current);
+        if (retrainTimeoutRef.current) clearTimeout(retrainTimeoutRef.current);
+
         const poll = setInterval(async () => {
           try {
             const m = await api.get<{ status: string; log?: string[] }>(`/api/ml/retrain/status/${result.task_id}`);
             if (m.log) setRetrainLog(m.log);
             if (m.status === "completed" || m.status === "failed") {
               clearInterval(poll);
+              if (retrainTimeoutRef.current) clearTimeout(retrainTimeoutRef.current);
+              retrainPollRef.current = null;
+              retrainTimeoutRef.current = null;
               setRetrainRunning(null);
               toast[m.status === "completed" ? "success" : "error"](`${pipeline} retrain ${m.status}`);
               loadModels();
@@ -121,11 +130,17 @@ export default function MLPage() {
             }
           } catch {
             clearInterval(poll);
+            if (retrainTimeoutRef.current) clearTimeout(retrainTimeoutRef.current);
+            retrainPollRef.current = null;
+            retrainTimeoutRef.current = null;
             setRetrainRunning(null);
           }
         }, 3000);
-        setTimeout(() => {
+        retrainPollRef.current = poll;
+        retrainTimeoutRef.current = setTimeout(() => {
           clearInterval(poll);
+          retrainPollRef.current = null;
+          retrainTimeoutRef.current = null;
           setRetrainRunning(null);
           toast.error("Training timed out after 10 minutes. Check ML Lab for status.");
           setRetrainLog(prev => [...prev, "Polling stopped — 10 minute timeout reached. Training may still be running on server."]);
@@ -142,6 +157,14 @@ export default function MLPage() {
       setRetrainRunning(null);
     }
   };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (retrainPollRef.current) clearInterval(retrainPollRef.current);
+      if (retrainTimeoutRef.current) clearTimeout(retrainTimeoutRef.current);
+    };
+  }, []);
 
   /* ── loaders ────────────────────────────────── */
   const loadModels = useCallback(async () => {

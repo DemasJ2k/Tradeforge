@@ -256,7 +256,7 @@ def seed_databento_sources(db: Session) -> None:
             default_spread=profile.get("default_spread", 0.3),
             commission_model="per_lot",
             default_commission=profile.get("default_commission", 4.0),
-            creator_id=1,  # admin user
+            creator_id=None,  # system datasource — visible to all users
             is_public=True,
         )
         db.add(ds)

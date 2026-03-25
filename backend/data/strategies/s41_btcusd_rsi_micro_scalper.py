@@ -18,7 +18,7 @@ Exit:
 24h session, works on M5.
 """
 
-# -- Settings (tunable via FlowrexAlgo UI) --------------------------
+# -- Settings (tunable via Tradeforge UI) --------------------------
 DEFAULTS = {
     "rsi_period":       4,
     "rsi_os":           32,

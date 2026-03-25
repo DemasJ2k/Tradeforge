@@ -154,9 +154,9 @@ export default function TradingPage() {
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_timeframe", chartTimeframe); }, [chartTimeframe]);
   useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("tf_chart_broker", chartBroker); }, [chartBroker]);
 
-  // Fetch available symbols from the selected broker
+  // Fetch available symbols from the selected broker (only when broker is connected)
   useEffect(() => {
-    if (!chartBroker || chartBroker === "static") { setBrokerSymbols([]); return; }
+    if (!chartBroker || chartBroker === "static" || !connected) { setBrokerSymbols([]); return; }
     setBrokerSymbolsLoading(true);
     api
       .get<{ symbol: string; display_name: string; asset_class: string; tradeable: boolean }[]>(
@@ -170,7 +170,7 @@ export default function TradingPage() {
       })
       .catch((err) => { console.error("[Trading] broker symbols fetch:", err); setBrokerSymbols([]); })
       .finally(() => setBrokerSymbolsLoading(false));
-  }, [chartBroker]);
+  }, [chartBroker, connected]);
 
   const [chartBars, setChartBars] = useState<CandleInput[]>([]);
   const [chartLoading, setChartLoading] = useState(false);

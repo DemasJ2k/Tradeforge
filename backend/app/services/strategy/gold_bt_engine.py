@@ -1,5 +1,5 @@
 """
-Gold Breakout Trader (Gold BT) Strategy Engine — FlowrexAlgo Port.
+Gold Breakout Trader (Gold BT) Strategy Engine — Tradeforge Port.
 
 Ported from: PineScript "Gold Breakout Trader" indicator.
 

@@ -1604,7 +1604,7 @@ async def get_available_agents(
 ):
     """Return which agent types have trained models available for a symbol."""
     result = {}
-    model_dir = Path("data/ml_models")
+    model_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "ml_models"
 
     for pipeline, info in PIPELINE_MODELS.items():
         available = symbol in info["symbols"] if symbol else True
@@ -1614,10 +1614,9 @@ async def get_available_agents(
             pattern = f"*{pipeline}*{symbol}*" if symbol else f"*{pipeline}*"
             has_models = any(model_dir.glob(pattern))
 
-        # Also check DB for ready models
+        # Also check DB for ready models (any user's models or system models)
         if not has_models and symbol:
             db_models = db.query(MLModel).filter(
-                MLModel.creator_id == user.id,
                 MLModel.symbol == symbol,
                 MLModel.status == "ready",
             ).all()
