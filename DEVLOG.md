@@ -1,5 +1,29 @@
 # Tradeforge Development Log
 
+## March 25 — Remove Fixed Lot Sizing from Agent Wizard
+
+**Rationale**: Production backtests (both agents × 5 symbols, $100K, fixed 0.1 lots, 2022-2026) all lost money. The ML models were trained/validated with dynamic % risk sizing — fixed lots breaks their calibration. Removed the option entirely.
+
+**Changes in `AgentWizard.tsx`**:
+- Removed `sizeType` state and the Type dropdown (percent_risk / fixed_lot selector)
+- Hardcoded `position_size_type: "percent_risk"` in both scalping and expert deploy payloads
+- Added preset buttons: Conservative (0.25%) | Moderate (0.5%) | Aggressive (1%)
+- Risk input now has min 0.1%, max 3%, with hint text explaining dynamic sizing
+- Review step shows `X% of balance` instead of conditional lots/percent display
+- Default remains 0.5% (Moderate)
+
+---
+
+## March 25 — Fix CSV Upload + Agent Wizard Symbols
+
+**CSV upload rejects Databento files**: Upload parser didn't recognize `ts_event` column (Databento's datetime column name). Added `ts_event` to `DATETIME_ALIASES` in `datasource.py`.
+
+**Agent Wizard Popular symbols wrong**: Hardcoded list included EURUSD (no models) and excluded ES. Updated to match actual trained symbols: XAUUSD, US30, BTCUSD, ES, NAS100.
+
+**Agent Wizard DEFAULT_AVAILABILITY stale**: Scalping showed only XAUUSD/US30, Expert showed XAUUSD/US30/BTCUSD. All 5 symbols have trained models for both agent types. Updated defaults to include all 5.
+
+---
+
 ## March 25 — Fix Production Deployment Errors (Render)
 
 **Prop firms 404**: Frontend `AgentWizard.tsx` called `/api/prop-firms/` (plural) but backend route is `/api/prop-firm/` (singular). Fixed URL to match backend.

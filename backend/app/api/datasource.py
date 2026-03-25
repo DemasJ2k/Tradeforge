@@ -32,7 +32,7 @@ DATETIME_FORMATS = [
 ]
 
 # Column name aliases (lowercase)
-DATETIME_ALIASES = {"time", "date", "datetime", "timestamp", "date_time", "<date>", "<time>"}
+DATETIME_ALIASES = {"time", "date", "datetime", "timestamp", "date_time", "<date>", "<time>", "ts_event"}
 OPEN_ALIASES = {"open", "o", "<open>"}
 HIGH_ALIASES = {"high", "h", "<high>"}
 LOW_ALIASES = {"low", "l", "<low>"}
