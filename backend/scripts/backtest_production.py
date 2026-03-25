@@ -97,9 +97,20 @@ def load_csv(path: str, date_start=None, date_end=None) -> list[dict]:
 
 # ── Feature Computation ──────────────────────────────────────────────
 
+MAX_M5_BARS = 150_000  # Cap to prevent OOM (150K M5 bars ≈ 2.5 years)
+
 def compute_all_features(m5_data, h1_data=None, h4_data=None):
     """Compute features for all bars at once (vectorized)."""
+    import gc
     from app.services.ml.features_mtf import compute_expert_features
+
+    # Cap data to prevent OOM
+    if len(m5_data) > MAX_M5_BARS:
+        m5_data = m5_data[-MAX_M5_BARS:]
+    if h1_data and len(h1_data) > 12000:
+        h1_data = h1_data[-12000:]
+    if h4_data and len(h4_data) > 4000:
+        h4_data = h4_data[-4000:]
 
     feat_names, X = compute_expert_features(
         m5_data,
@@ -107,8 +118,9 @@ def compute_all_features(m5_data, h1_data=None, h4_data=None):
         h4_data if h4_data and len(h4_data) >= 20 else None,
         None,
     )
-    X = np.array(X, dtype=np.float64)
+    X = np.array(X, dtype=np.float32)  # float32 halves memory vs float64
     X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    gc.collect()
     return feat_names, X
 
 
@@ -700,6 +712,11 @@ def main():
             save_equity_curve(equity_curve, symbol, agent_type)
 
             all_results[symbol][agent_type] = stats
+
+            # Free memory between agents
+            import gc
+            del trade_log, equity_curve, preds, confs, X
+            gc.collect()
 
     # ── Summary Table ──
     elapsed = time.time() - t_start
