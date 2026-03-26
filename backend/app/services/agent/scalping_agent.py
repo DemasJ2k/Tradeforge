@@ -223,7 +223,7 @@ class ScalpingAgent:
 
         # Position sizing
         session_mult = 0.5 if session == "asian" and self.symbol != "BTCUSD" else 1.0
-        risk_amount = 10000 * self.risk_per_trade * session_mult
+        risk_amount = self._balance * self.risk_per_trade * session_mult
 
         try:
             from app.services.agent.instrument_specs import calc_lot_size

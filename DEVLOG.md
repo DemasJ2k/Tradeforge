@@ -1,5 +1,13 @@
 # Tradeforge Development Log
 
+## March 26 — Agent Audit: Scalping + Engine Bugs Fixed
+
+1. **Scalping agent: hardcoded $10K in position sizing** (line 226) — `risk_amount = 10000 * ...` instead of `self._balance * ...`. Every scalping agent calculated lot sizes as if account was $10K regardless of actual balance. Fixed to use `self._balance` (same fix already applied to expert agent).
+
+2. **Engine: `_active_direction` overwritten after failed broker execution** (lines 851, 978) — After `_create_trade()`, engine unconditionally set `_active_direction = signal.direction`. If broker execution failed inside `_create_trade` (resetting direction to 0 at line 1056), the caller immediately overwrote it back. Agent would think it had an open position when it didn't, blocking new signals. Fixed by moving `_active_direction` assignment into `_create_trade` — only set on successful execution (auto mode) or trade creation (paper/confirmation mode).
+
+---
+
 ## March 26 — cTrader Adapter Audit: 3 Bug Fixes
 
 Full audit of `backend/app/services/broker/ctrader.py` (1262 lines). Found and fixed:

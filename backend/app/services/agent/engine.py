@@ -848,7 +848,6 @@ class AgentRunner:
 
         # ── Create trade and track position ──
         await self._create_trade(signal, direction, lot_size)
-        self._active_direction = signal.direction
 
     async def _evaluate_expert_signal(self):
         """
@@ -975,7 +974,6 @@ class AgentRunner:
         sig.reason = signal["reason"]
 
         await self._create_trade(sig, direction_str, lot_size)
-        self._active_direction = direction_int
 
     async def _create_trade(self, signal, direction: str, lot_size: float):
         """
@@ -1043,6 +1041,7 @@ class AgentRunner:
                     server_info = ""
                     if _adapter and hasattr(_adapter, "_server"):
                         server_info = f" server={_adapter._server}"
+                    self._active_direction = signal.direction
                     self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f}{fill_info} | ticket={broker_ticket}{server_info}", data={
                         "trade_id": trade_id,
                         "lot_size": lot_size,
@@ -1058,6 +1057,7 @@ class AgentRunner:
 
                 db.commit()
             else:
+                self._active_direction = signal.direction
                 self._log("trade", f"{direction} {self._symbol} @ {signal.entry_price:.5f} — {status}", data={
                     "trade_id": trade_id,
                     "lot_size": lot_size,
