@@ -410,10 +410,10 @@ export default function MLPage() {
       {/* Agent Pipeline Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {([
-          { key: "scalping", icon: <Zap className="h-5 w-5" />, title: "Scalping Agent", desc: "XGBoost + LightGBM ensemble · M5 timeframe · Session-filtered", symbols: ["XAUUSD", "US30"], color: "text-amber-400", borderColor: "border-amber-500/20 hover:border-amber-500/40" },
-          { key: "expert", icon: <Brain className="h-5 w-5" />, title: "Expert Agent", desc: "XGB + LGB + LSTM + Meta-labeler + Regime · Multi-TF · News-aware", symbols: ["XAUUSD", "US30", "BTCUSD"], color: "text-cyan-400", borderColor: "border-cyan-500/20 hover:border-cyan-500/40" },
+          { key: "scalping", icon: <Zap className="h-5 w-5" />, title: "Scalping Agent", desc: "XGBoost + LightGBM ensemble · M5 timeframe · Session-filtered", symbols: ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"], color: "text-amber-400", borderColor: "border-amber-500/20 hover:border-amber-500/40" },
+          { key: "expert", icon: <Brain className="h-5 w-5" />, title: "Expert Agent", desc: "XGB + LGB + LSTM + Meta-labeler + Regime · Multi-TF · News-aware", symbols: ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"], color: "text-cyan-400", borderColor: "border-cyan-500/20 hover:border-cyan-500/40" },
         ]).map(({ key, icon, title, desc, symbols, color, borderColor }) => {
-          const ready = models.filter(m => m.status === "ready").length;
+          const ready = models.filter(m => m.status === "ready" && symbols.includes(m.symbol || "")).length;
           return (
             <Card key={key} className={`bg-card-bg ${borderColor} transition-colors cursor-pointer`} onClick={() => setView("retrain")}>
               <CardContent className="p-5">
@@ -1016,7 +1016,7 @@ export default function MLPage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {["XAUUSD", "US30"].map(symbol => (
+                {["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"].map(symbol => (
                   <div key={symbol} className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3">
                     <div>
                       <div className="text-sm font-medium">{symbol}</div>
@@ -1054,7 +1054,7 @@ export default function MLPage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                {["XAUUSD", "US30", "BTCUSD"].map(symbol => (
+                {["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"].map(symbol => (
                   <div key={symbol} className="flex items-center justify-between rounded-lg border border-card-border bg-background/50 p-3">
                     <div>
                       <div className="text-sm font-medium">{symbol}</div>

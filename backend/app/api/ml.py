@@ -1552,7 +1552,7 @@ async def get_available_agents(
 ):
     """Return which agent types have trained models available for a symbol."""
     result = {}
-    model_dir = Path(__file__).resolve().parent.parent.parent.parent / "data" / "ml_models"
+    model_dir = Path(__file__).resolve().parent.parent.parent / "data" / "ml_models"
 
     for pipeline, info in PIPELINE_MODELS.items():
         available = symbol in info["symbols"] if symbol else True
