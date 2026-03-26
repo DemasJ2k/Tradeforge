@@ -1,5 +1,17 @@
 # Tradeforge Development Log
 
+## March 26 — Fix NAS100/ES "Training Required" + Remove RL Models from DB + Fix ML Lab
+
+**Critical bug**: `/api/ml/available-agents` had wrong path resolution — `Path(__file__).resolve().parent.parent.parent.parent` went 4 levels up instead of 3, landing at `/home/user/Tradeforge/data/ml_models` (doesn't exist) instead of `/home/user/Tradeforge/backend/data/ml_models`. This meant the model file check ALWAYS failed, so all agents showed "Training Required".
+
+**Fixes**:
+1. **`backend/app/api/ml.py`**: Fixed `model_dir` path from `.parent.parent.parent.parent` to `.parent.parent.parent` — now correctly resolves to `backend/data/ml_models/`
+2. **`backend/main.py`**: Added `_cleanup_old_rl_models()` on startup — deletes all `model_type="rl_ppo"` records from DB (the 3 old RL models that were already registered won't come back)
+3. **`frontend/src/app/ml/page.tsx`**: Updated all 4 hardcoded symbol lists to include all 5 trained symbols (XAUUSD, US30, BTCUSD, ES, NAS100) — pipeline cards, retrain buttons, and model count
+4. **`frontend/src/app/ml/page.tsx`**: Fixed "models ready" count to filter by pipeline symbols instead of counting all models globally
+
+---
+
 ## March 25 — Deploy Scalping/Expert Models to Render + Remove Old RL Models
 
 **Problem**: NAS100 and ES agents couldn't be created on Render because `.joblib` model files were gitignored. The `/api/ml/available-agents` endpoint checks for model files on disk — none exist on Render's ephemeral filesystem.

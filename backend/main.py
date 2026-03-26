@@ -1216,6 +1216,29 @@ def _seed_databento_sources():
         db.close()
 
 
+def _cleanup_old_rl_models():
+    """Remove legacy RL PPO model records from the database.
+
+    These old RL models (rl_lw_us30, rl_lw_xauusd, rl_mb_btcusd) are no longer
+    used — the platform now uses scalping/expert pipelines exclusively.
+    """
+    from app.core.database import SessionLocal
+    from app.models.ml import MLModel
+
+    _log = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        deleted = db.query(MLModel).filter(MLModel.model_type == "rl_ppo").delete()
+        db.commit()
+        if deleted:
+            _log.info("Cleaned up %d legacy RL model record(s) from DB", deleted)
+    except Exception as e:
+        db.rollback()
+        _log.error("Failed to clean up RL models: %s", e)
+    finally:
+        db.close()
+
+
 def _check_ml_models():
     """Log which ML model files are present/missing at startup."""
     from pathlib import Path
@@ -1246,6 +1269,7 @@ async def startup_event():
     _seed_admin_user()
     _seed_all_strategies()
     _seed_databento_sources()
+    _cleanup_old_rl_models()
     _check_ml_models()
     _remove_incompatible_strategies()  # must run AFTER seeder to catch re-created python strategies
     _recalculate_agent_pnl()
