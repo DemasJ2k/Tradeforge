@@ -147,9 +147,9 @@ def get_pnl_summary(
             TradingAgent.timeframe,
             TradingAgent.status,
             TradingAgent.mode,
-            func.coalesce(func.sum(AgentTrade.pnl), 0).label("total_pnl"),
+            func.coalesce(func.sum(func.coalesce(AgentTrade.broker_pnl, AgentTrade.pnl)), 0).label("total_pnl"),
             func.count(AgentTrade.id).label("total_trades"),
-            func.sum(case((AgentTrade.pnl > 0, 1), else_=0)).label("wins"),
+            func.sum(case((func.coalesce(AgentTrade.broker_pnl, AgentTrade.pnl) > 0, 1), else_=0)).label("wins"),
         )
         .outerjoin(
             AgentTrade,

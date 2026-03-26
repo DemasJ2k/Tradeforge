@@ -1250,7 +1250,7 @@ export default function TradingPage() {
                             {p.agent_name}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">{p.broker || "Manual"}</span>
+                          <span className="text-xs text-muted-foreground">Manual</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">

@@ -1,5 +1,15 @@
 # Tradeforge Development Log
 
+## March 26 — Trading Page Audit: Position Attribution + PnL Consistency
+
+1. **Position agent attribution broken on Oanda** — The positions endpoint matched `p.position_id` against `broker_ticket` (order ID) to find which agent opened a position. On Oanda, position IDs are `{instrument}_{LONG|SHORT}` (e.g. `XAU_USD_LONG`), which never matches any order ID. All agent-opened positions showed "Manual" instead of the agent name. Fixed by adding a secondary symbol-based lookup as fallback.
+
+2. **PnL summary cards vs History tab showed different numbers** — The per-agent PnL summary cards (on trading page) used `AgentTrade.pnl` (paper PnL), but the History tab used `broker_pnl` when available (actual broker P&L with slippage/spread). For live-executed trades these can differ significantly. Fixed by making the summary query also prefer `broker_pnl` via `COALESCE(broker_pnl, pnl)`.
+
+3. **Dead `broker` field on `LivePosition` type** — Frontend type included `broker: string | null` but the backend `PositionResponse` never returns this field. Removed from type, cleaned up UI reference.
+
+---
+
 ## March 26 — Agent Audit: Scalping + Engine Bugs Fixed
 
 1. **Scalping agent: hardcoded $10K in position sizing** (line 226) — `risk_amount = 10000 * ...` instead of `self._balance * ...`. Every scalping agent calculated lot sizes as if account was $10K regardless of actual balance. Fixed to use `self._balance` (same fix already applied to expert agent).
