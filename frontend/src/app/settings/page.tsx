@@ -2803,7 +2803,7 @@ export default function SettingsPage() {
               </p>
               <button
                 onClick={() => {
-                  localStorage.removeItem('flowrex_onboarding_completed');
+                  localStorage.removeItem('tradeforge_onboarding_completed');
                   window.location.href = '/';
                 }}
                 className={`${btnSecondary} inline-flex items-center gap-2`}

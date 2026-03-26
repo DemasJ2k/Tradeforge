@@ -284,9 +284,35 @@ async def get_positions(
     except Exception:
         pass  # Agent lookup is best-effort
 
+    # Build secondary lookup by symbol for brokers where position_id != order_id
+    # (e.g. Oanda uses "{instrument}_{LONG|SHORT}" as position_id, not the order ID)
+    symbol_agent_map: dict[str, dict] = {}
+    for ticket, info in agent_map.items():
+        # For each executed agent trade, also index by the trade's symbol
+        # (agent_map values don't have symbol, so pull from AgentTrade)
+        pass
+    try:
+        symbol_trades = (
+            db.query(AgentTrade.symbol, TradingAgent.name.label("agent_name"), AgentTrade.agent_id)
+            .join(TradingAgent, AgentTrade.agent_id == TradingAgent.id)
+            .filter(
+                TradingAgent.created_by == user.id,
+                AgentTrade.status.in_(["executed", "confirmed"]),
+            )
+            .all()
+        )
+        for sym, agent_name, agent_id in symbol_trades:
+            if sym and sym not in symbol_agent_map:
+                symbol_agent_map[sym] = {"agent_name": agent_name, "agent_id": agent_id}
+    except Exception:
+        pass
+
     result = []
     for p in positions:
         agent_info = agent_map.get(p.position_id, {})
+        # Fallback: match by symbol if broker_ticket lookup failed
+        if not agent_info:
+            agent_info = symbol_agent_map.get(p.symbol, {})
         result.append(PositionResponse(
             position_id=p.position_id,
             symbol=p.symbol,

@@ -1,5 +1,71 @@
 # Tradeforge Development Log
 
+## March 26 — Trading Page Audit: Position Attribution + PnL Consistency
+
+1. **Position agent attribution broken on Oanda** — The positions endpoint matched `p.position_id` against `broker_ticket` (order ID) to find which agent opened a position. On Oanda, position IDs are `{instrument}_{LONG|SHORT}` (e.g. `XAU_USD_LONG`), which never matches any order ID. All agent-opened positions showed "Manual" instead of the agent name. Fixed by adding a secondary symbol-based lookup as fallback.
+
+2. **PnL summary cards vs History tab showed different numbers** — The per-agent PnL summary cards (on trading page) used `AgentTrade.pnl` (paper PnL), but the History tab used `broker_pnl` when available (actual broker P&L with slippage/spread). For live-executed trades these can differ significantly. Fixed by making the summary query also prefer `broker_pnl` via `COALESCE(broker_pnl, pnl)`.
+
+3. **Dead `broker` field on `LivePosition` type** — Frontend type included `broker: string | null` but the backend `PositionResponse` never returns this field. Removed from type, cleaned up UI reference.
+
+---
+
+## March 26 — Agent Audit: Scalping + Engine Bugs Fixed
+
+1. **Scalping agent: hardcoded $10K in position sizing** (line 226) — `risk_amount = 10000 * ...` instead of `self._balance * ...`. Every scalping agent calculated lot sizes as if account was $10K regardless of actual balance. Fixed to use `self._balance` (same fix already applied to expert agent).
+
+2. **Engine: `_active_direction` overwritten after failed broker execution** (lines 851, 978) — After `_create_trade()`, engine unconditionally set `_active_direction = signal.direction`. If broker execution failed inside `_create_trade` (resetting direction to 0 at line 1056), the caller immediately overwrote it back. Agent would think it had an open position when it didn't, blocking new signals. Fixed by moving `_active_direction` assignment into `_create_trade` — only set on successful execution (auto mode) or trade creation (paper/confirmation mode).
+
+---
+
+## March 26 — cTrader Adapter Audit: 3 Bug Fixes
+
+Full audit of `backend/app/services/broker/ctrader.py` (1262 lines). Found and fixed:
+
+1. **`close_position` returned empty symbol and `filled_price=0`** — Now resolves symbol name from `_symbol_cache` and attempts to get filled price from execution response or price cache
+2. **`modify_order` returned `symbol=""` and hardcoded `side=OrderSide.BUY`** — Now resolves actual symbol, side, and size from cached positions before returning
+3. **`get_symbols` wrong lot size conversion** — `min_lot`, `max_lot`, `lot_step` divided volume by 100 instead of `lot_size * 100`. For a forex pair with `lotSize=100000`, this returned values 1000× too large (e.g. 1 lot instead of 0.001). Now uses correct `_from_volume`-equivalent divisor
+
+---
+
+## March 26 — Production Readiness Audit: 12 Fixes Across Backend + Frontend
+
+**Comprehensive audit** before Render rollout. Fixed all critical/high issues found:
+
+### Agent Engine (engine.py)
+- **CRITICAL**: MT5 direct fallback returned `str(result.order)` instead of `Order` dataclass — caused `AttributeError` when accessing `.order_id`, `.filled_price`, `.filled_time` at trade creation. Now returns proper `BrokerOrder` object
+- **HIGH**: Default balance fallback ($10K) now logs WARNING in auto mode to flag risk sizing may be incorrect
+- MT5 magic number now includes `agent_id` (was hardcoded `234000` for all agents → `234000 + agent_id`)
+
+### Expert Agent (expert_agent.py)
+- **CRITICAL**: Missing `self._balance` initialization — added default $10K (engine updates it before each eval)
+- **CRITICAL**: Missing daily loss gate check — expert agent had the config (`max_daily_loss_pct`) but never checked it. Added check matching scalping_agent pattern
+- **CRITICAL**: Hardcoded `10000 * effective_risk` on line 287 → changed to `self._balance * effective_risk`
+- Silent exception handling in `_fetch_htf_bars()` — added logging for broker adapter and connection failures
+
+### Oanda Adapter (oanda.py)
+- **CRITICAL**: Missing reverse symbol mapping — positions/orders returned Oanda names (`XAU_USD`) instead of internal (`XAUUSD`). Added `_from_oanda_instrument()` applied to all 7 return points (positions, orders, prices, trades, stream)
+- **HIGH**: `_post()` and `_put()` had no retry logic — copied retry pattern from `_get()` (429/502/503/504 + ConnectError/ReadTimeout)
+- Added 429 (rate limit) to `_get()` retry list
+- Replaced `assert self._client` with proper `RuntimeError` in `_get`/`_post`/`_put`
+
+### cTrader Adapter (ctrader.py)
+- Missing ES (S&P 500) symbol aliases — added `ES → [SPX500, SP500, US500, US SPX 500]`
+
+### Frontend
+- Trading page `FALLBACK_SYMBOLS` had wrong symbols (included XAGUSD/EURUSD, missing ES) — fixed to match trained models
+- Stale `flowrex_onboarding_completed` localStorage keys in WelcomeWizard.tsx and settings page → renamed to `tradeforge_onboarding_completed`
+
+---
+
+## March 26 — Fix Scalping Agent NameError + Oanda Symbol Mappings
+
+**Bug 1**: `scalping_agent.py` line 147 used bare `balance` instead of `self._balance` in the daily loss gate check. Every bar evaluation raised `NameError: name 'balance' is not defined`, preventing all scalping agents from generating signals.
+
+**Bug 2**: Oanda adapter missing symbol aliases for `ES` and `BTCUSD`. ES was sent as-is to Oanda API (`/instruments/ES/candles`) → 400 Bad Request. Added mappings: `ES → SPX500_USD`, `BTCUSD → BTC_USD`, `ETHUSD → ETH_USD`.
+
+---
+
 ## March 26 — Fix NAS100/ES "Training Required" + Remove RL Models from DB + Fix ML Lab
 
 **Critical bug**: `/api/ml/available-agents` had wrong path resolution — `Path(__file__).resolve().parent.parent.parent.parent` went 4 levels up instead of 3, landing at `/home/user/Tradeforge/data/ml_models` (doesn't exist) instead of `/home/user/Tradeforge/backend/data/ml_models`. This meant the model file check ALWAYS failed, so all agents showed "Training Required".

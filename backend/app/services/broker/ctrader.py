@@ -338,6 +338,7 @@ class CTraderAdapter(BrokerAdapter):
     # Common symbol aliases for broker-specific naming conventions
     _SYMBOL_ALIASES: dict[str, list[str]] = {
         "US30": ["DJ30", "WS30", "DJI", "USTEC30", "US Wall Street 30"],
+        "ES": ["SPX500", "SP500", "US500", "US SPX 500"],
         "NAS100": ["USTEC", "NQ100", "NDX100", "US Tech 100"],
         "XAUUSD": ["XAU/USD", "GOLD", "Gold"],
         "XAGUSD": ["XAG/USD", "SILVER", "Silver"],
@@ -763,14 +764,27 @@ class CTraderAdapter(BrokerAdapter):
         resp = await self._send(PROTO_OA_CLOSE_POSITION_REQ, payload)
         exec_payload = resp.get("payload", {})
 
+        # Resolve symbol name from cache
+        sym_info = self._symbol_cache.get(symbol_id, {})
+        symbol_name = sym_info.get("symbolName", "")
+
+        # Try to get filled price from execution response or price cache
+        filled_price = 0.0
+        position_data = exec_payload.get("position", {})
+        if position_data and position_data.get("price"):
+            filled_price = float(position_data["price"])
+        elif symbol_name and symbol_name in self._price_cache:
+            tick = self._price_cache[symbol_name]
+            filled_price = tick.ask if close_side == OrderSide.BUY else tick.bid
+
         return Order(
             order_id=str(exec_payload.get("orderId", position_id)),
-            symbol="",
+            symbol=symbol_name,
             side=close_side,
             order_type=OrderType.MARKET,
             size=size or 0,
             status=OrderStatus.FILLED,
-            filled_price=0,
+            filled_price=filled_price if filled_price > 0 else None,
             filled_time=datetime.now(timezone.utc),
         )
 
@@ -891,12 +905,18 @@ class CTraderAdapter(BrokerAdapter):
             "positionId": int(request.order_id),
         }
 
-        # Need symbol digits for price conversion
+        # Resolve symbol and side from cached positions
         digits = 5  # default
+        matched_symbol = ""
+        matched_side = OrderSide.BUY
+        matched_size = 0.0
         try:
             positions = await self.get_positions()
             for pos in positions:
                 if pos.position_id == request.order_id:
+                    matched_symbol = pos.symbol
+                    matched_side = OrderSide.BUY if pos.side == PositionSide.LONG else OrderSide.SELL
+                    matched_size = pos.size
                     sym_id = self._symbol_name_to_id.get(pos.symbol, 0)
                     digits = self._symbol_cache.get(sym_id, {}).get("digits", 5)
                     break
@@ -912,10 +932,10 @@ class CTraderAdapter(BrokerAdapter):
             await self._send(PROTO_OA_AMEND_POSITION_SLTP_REQ, payload)
             return Order(
                 order_id=request.order_id,
-                symbol="",
-                side=OrderSide.BUY,
+                symbol=matched_symbol,
+                side=matched_side,
                 order_type=OrderType.MARKET,
-                size=0,
+                size=matched_size,
                 stop_loss=request.stop_loss,
                 take_profit=request.take_profit,
                 status=OrderStatus.PENDING,
@@ -936,10 +956,10 @@ class CTraderAdapter(BrokerAdapter):
             await self._send(PROTO_OA_AMEND_ORDER_REQ, order_payload)
             return Order(
                 order_id=request.order_id,
-                symbol="",
-                side=OrderSide.BUY,
+                symbol=matched_symbol,
+                side=matched_side,
                 order_type=OrderType.LIMIT,
-                size=0,
+                size=matched_size,
                 price=request.price,
                 stop_loss=request.stop_loss,
                 take_profit=request.take_profit,
@@ -1097,9 +1117,13 @@ class CTraderAdapter(BrokerAdapter):
 
             digits = sym.get("digits", 5)
             pip_size = 10 ** (-digits)
+            lot_size = sym.get("lotSize", 100_000)
             step_volume = sym.get("stepVolume", 100)
             min_volume = sym.get("minVolume", 100)
             max_volume = sym.get("maxVolume", 10000000)
+
+            # Convert centos (units × 100) to lots using lot_size
+            divisor = lot_size * 100 if lot_size > 0 else 100
 
             symbols.append(SymbolInfo(
                 symbol=name,
@@ -1107,9 +1131,9 @@ class CTraderAdapter(BrokerAdapter):
                 base_currency=base,
                 quote_currency=quote,
                 pip_size=pip_size,
-                min_lot=min_volume / 100,
-                max_lot=max_volume / 100,
-                lot_step=step_volume / 100,
+                min_lot=min_volume / divisor,
+                max_lot=max_volume / divisor,
+                lot_step=step_volume / divisor,
                 margin_rate=0.05,
                 tradeable=sym.get("enabled", True),
                 asset_class=asset_class,

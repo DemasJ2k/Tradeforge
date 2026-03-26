@@ -144,7 +144,7 @@ class ScalpingAgent:
             return None
 
         # Daily loss gate
-        if self._daily_pnl < -(balance * self.max_daily_loss_pct):
+        if self._daily_pnl < -(self._balance * self.max_daily_loss_pct):
             logger.info("[Scalp %d] Daily loss limit hit", self.agent_id)
             return None
 
@@ -223,7 +223,7 @@ class ScalpingAgent:
 
         # Position sizing
         session_mult = 0.5 if session == "asian" and self.symbol != "BTCUSD" else 1.0
-        risk_amount = 10000 * self.risk_per_trade * session_mult
+        risk_amount = self._balance * self.risk_per_trade * session_mult
 
         try:
             from app.services.agent.instrument_specs import calc_lot_size

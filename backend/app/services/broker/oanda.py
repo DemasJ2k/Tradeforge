@@ -45,9 +45,11 @@ _TF_MAP = {
 _SYMBOL_ALIASES: dict[str, str] = {
     "XAUUSD": "XAU_USD", "XAGUSD": "XAG_USD",
     "US30": "US30_USD", "NAS100": "NAS100_USD",
-    "SPX500": "SPX500_USD", "UK100": "UK100_GBP",
+    "ES": "SPX500_USD", "SPX500": "SPX500_USD",
+    "UK100": "UK100_GBP",
     "JP225": "JP225_USD", "DE30": "DE30_EUR",
     "USOIL": "WTICO_USD", "UKOIL": "BCO_USD",
+    "BTCUSD": "BTC_USD", "ETHUSD": "ETH_USD",
 }
 
 # Default display precision by instrument type (Oanda rejects prices with too many decimals)
@@ -59,6 +61,14 @@ _DEFAULT_PRECISION: dict[str, int] = {
     "WTICO_USD": 3, "BCO_USD": 3, "NATGAS_USD": 3,
     "WHEAT_USD": 1, "CORN_USD": 1, "SUGAR_USD": 4, "SOYBN_USD": 1,
 }
+
+
+_REVERSE_SYMBOL_MAP: dict[str, str] = {v: k for k, v in _SYMBOL_ALIASES.items()}
+
+
+def _from_oanda_instrument(instrument: str) -> str:
+    """Convert Oanda instrument name back to internal symbol."""
+    return _REVERSE_SYMBOL_MAP.get(instrument, instrument)
 
 
 def _to_oanda_instrument(symbol: str) -> str:
@@ -120,7 +130,8 @@ class OandaAdapter(BrokerAdapter):
         }
 
     async def _get(self, path: str, params: dict | None = None, _retries: int = 4) -> dict:
-        assert self._client, "Not connected"
+        if not self._client:
+            raise RuntimeError("Not connected to Oanda")
         last_exc: Exception | None = None
         for attempt in range(_retries):
             try:
@@ -132,7 +143,7 @@ class OandaAdapter(BrokerAdapter):
                 r.raise_for_status()
                 return r.json()
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in (502, 503, 504) and attempt < _retries - 1:
+                if e.response.status_code in (429, 502, 503, 504) and attempt < _retries - 1:
                     wait = 2 ** attempt  # 1s, 2s, 4s
                     logger.warning("[Oanda] %d on %s — retry %d in %ds", e.response.status_code, path, attempt + 1, wait)
                     await asyncio.sleep(wait)
@@ -149,25 +160,67 @@ class OandaAdapter(BrokerAdapter):
                 raise
         raise last_exc  # type: ignore[misc]
 
-    async def _post(self, path: str, body: dict) -> dict:
-        assert self._client, "Not connected"
-        r = await self._client.post(
-            f"{self._base_url}/v3{path}",
-            json=body,
-            headers=self._headers(),
-        )
-        r.raise_for_status()
-        return r.json()
+    async def _post(self, path: str, body: dict, _retries: int = 3) -> dict:
+        if not self._client:
+            raise RuntimeError("Not connected to Oanda")
+        last_exc: Exception | None = None
+        for attempt in range(_retries):
+            try:
+                r = await self._client.post(
+                    f"{self._base_url}/v3{path}",
+                    json=body,
+                    headers=self._headers(),
+                )
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (429, 502, 503, 504) and attempt < _retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("[Oanda] %d on POST %s — retry %d in %ds", e.response.status_code, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+            except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                if attempt < _retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("[Oanda] %s on POST %s — retry %d in %ds", type(e).__name__, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+        raise last_exc  # type: ignore[misc]
 
-    async def _put(self, path: str, body: dict) -> dict:
-        assert self._client, "Not connected"
-        r = await self._client.put(
-            f"{self._base_url}/v3{path}",
-            json=body,
-            headers=self._headers(),
-        )
-        r.raise_for_status()
-        return r.json()
+    async def _put(self, path: str, body: dict, _retries: int = 3) -> dict:
+        if not self._client:
+            raise RuntimeError("Not connected to Oanda")
+        last_exc: Exception | None = None
+        for attempt in range(_retries):
+            try:
+                r = await self._client.put(
+                    f"{self._base_url}/v3{path}",
+                    json=body,
+                    headers=self._headers(),
+                )
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (429, 502, 503, 504) and attempt < _retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("[Oanda] %d on PUT %s — retry %d in %ds", e.response.status_code, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+            except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                if attempt < _retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning("[Oanda] %s on PUT %s — retry %d in %ds", type(e).__name__, path, attempt + 1, wait)
+                    await asyncio.sleep(wait)
+                    last_exc = e
+                    continue
+                raise
+        raise last_exc  # type: ignore[misc]
 
     @staticmethod
     def _parse_ts(ts_str: str) -> datetime:
@@ -298,7 +351,7 @@ class OandaAdapter(BrokerAdapter):
 
             positions.append(Position(
                 position_id=f"{pos['instrument']}_{side.value}",
-                symbol=pos["instrument"],
+                symbol=_from_oanda_instrument(pos["instrument"]),
                 side=side,
                 size=size,
                 entry_price=avg_price,
@@ -333,7 +386,7 @@ class OandaAdapter(BrokerAdapter):
         related = data.get("longOrderFillTransaction") or data.get("shortOrderFillTransaction", {})
         return Order(
             order_id=str(related.get("id", "0")),
-            symbol=instrument,
+            symbol=_from_oanda_instrument(instrument),
             side=OrderSide.SELL if side == "LONG" else OrderSide.BUY,
             order_type=OrderType.MARKET,
             size=abs(float(related.get("units", 0))),
@@ -427,7 +480,7 @@ class OandaAdapter(BrokerAdapter):
 
         return Order(
             order_id=str(tx.get("id", data.get("orderCreateTransaction", {}).get("id", "0"))),
-            symbol=oanda_instrument,
+            symbol=_from_oanda_instrument(oanda_instrument),
             side=request.side,
             order_type=request.order_type,
             size=abs(float(tx.get("units", request.size))),
@@ -545,7 +598,7 @@ class OandaAdapter(BrokerAdapter):
 
             orders.append(Order(
                 order_id=o.get("id", ""),
-                symbol=o.get("instrument", ""),
+                symbol=_from_oanda_instrument(o.get("instrument", "")),
                 side=side,
                 order_type=otype,
                 size=abs(float(o.get("units", 0))),
@@ -679,7 +732,7 @@ class OandaAdapter(BrokerAdapter):
         ask = float(p.get("asks", [{"price": 0}])[0]["price"])
 
         return PriceTick(
-            symbol=instrument,
+            symbol=_from_oanda_instrument(instrument),
             bid=bid,
             ask=ask,
             timestamp=self._parse_ts(p.get("time", "")),
@@ -726,7 +779,7 @@ class OandaAdapter(BrokerAdapter):
 
             closed_trades.append(ClosedTrade(
                 trade_id=str(txn.get("id", "")),
-                symbol=instrument,
+                symbol=_from_oanda_instrument(instrument),
                 side="BUY" if units > 0 else "SELL",
                 size=abs(units),
                 entry_price=0,  # Oanda doesn't include entry price in fill txn
@@ -761,7 +814,7 @@ class OandaAdapter(BrokerAdapter):
                             bid = float(bids[0]["price"]) if bids else 0
                             ask = float(asks[0]["price"]) if asks else 0
                             yield PriceTick(
-                                symbol=data.get("instrument", ""),
+                                symbol=_from_oanda_instrument(data.get("instrument", "")),
                                 bid=bid,
                                 ask=ask,
                                 timestamp=self._parse_ts(data.get("time", "")),

@@ -848,7 +848,6 @@ class AgentRunner:
 
         # ── Create trade and track position ──
         await self._create_trade(signal, direction, lot_size)
-        self._active_direction = signal.direction
 
     async def _evaluate_expert_signal(self):
         """
@@ -975,7 +974,6 @@ class AgentRunner:
         sig.reason = signal["reason"]
 
         await self._create_trade(sig, direction_str, lot_size)
-        self._active_direction = direction_int
 
     async def _create_trade(self, signal, direction: str, lot_size: float):
         """
@@ -1043,6 +1041,7 @@ class AgentRunner:
                     server_info = ""
                     if _adapter and hasattr(_adapter, "_server"):
                         server_info = f" server={_adapter._server}"
+                    self._active_direction = signal.direction
                     self._log("trade", f"LIVE {direction} {self._symbol} @ {signal.entry_price:.5f}{fill_info} | ticket={broker_ticket}{server_info}", data={
                         "trade_id": trade_id,
                         "lot_size": lot_size,
@@ -1058,6 +1057,7 @@ class AgentRunner:
 
                 db.commit()
             else:
+                self._active_direction = signal.direction
                 self._log("trade", f"{direction} {self._symbol} @ {signal.entry_price:.5f} — {status}", data={
                     "trade_id": trade_id,
                     "lot_size": lot_size,
@@ -1256,7 +1256,7 @@ class AgentRunner:
                     "sl": sl,
                     "tp": tp,
                     "deviation": 20,
-                    "magic": 234000,
+                    "magic": 234000 + self.agent_id,
                     "comment": f"Tradeforge Agent#{self.agent_id}",
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": filling,
@@ -1279,7 +1279,18 @@ class AgentRunner:
                 self._log("info",
                     f"MT5 order placed: {direction} {self._symbol} "
                     f"ticket={result.order} sl={result.request.sl:.5f} tp={result.request.tp:.5f}")
-                return str(result.order)
+                # Return Order dataclass consistent with adapter interface
+                from app.services.broker.base import Order as BrokerOrder, OrderSide, OrderType, OrderStatus
+                return BrokerOrder(
+                    order_id=str(result.order),
+                    symbol=self._symbol,
+                    side=OrderSide(direction),
+                    order_type=OrderType.MARKET,
+                    size=lot_size,
+                    status=OrderStatus.FILLED,
+                    filled_price=result.price if hasattr(result, "price") else entry_price,
+                    filled_time=datetime.now(timezone.utc),
+                )
             else:
                 retcode = result.retcode if result else "None"
                 comment = result.comment if result else "no result"
@@ -1396,6 +1407,9 @@ class AgentRunner:
                     return float(balance)
             except Exception:
                 pass
+        if self._mode == "auto":
+            logger.warning("[Agent %d] Could not fetch balance from broker — using $10K default. "
+                           "Risk sizing may be incorrect.", self.agent_id)
         return 10000.0  # Default for paper trading
 
     def _log(self, level: str, message: str, data: Optional[dict] = None):

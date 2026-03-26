@@ -103,7 +103,7 @@ export default function TradingPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Chart state ──
-  const FALLBACK_SYMBOLS = ["XAUUSD", "XAGUSD", "US30", "NAS100", "EURUSD", "BTCUSD"];
+  const FALLBACK_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"];
   const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
   const [brokerSymbols, setBrokerSymbols] = useState<string[]>([]);
   const [brokerSymbolsLoading, setBrokerSymbolsLoading] = useState(false);
@@ -1250,7 +1250,7 @@ export default function TradingPage() {
                             {p.agent_name}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">{p.broker || "Manual"}</span>
+                          <span className="text-xs text-muted-foreground">Manual</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">
