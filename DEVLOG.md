@@ -1,5 +1,17 @@
 # Tradeforge Development Log
 
+## March 26 — Scalping Agent: Relax Voting Requirement to Single-Model Fire
+
+Changed scalping agent voting logic so any ONE model firing with ≥55% confidence is enough to generate a signal. Previously required BOTH XGB and LGB to produce a non-hold prediction with ≥55% confidence — far too strict for 3-class classifiers where "hold" is the dominant prediction.
+
+New logic:
+- 0 votes → rejected (no model had a non-hold signal with enough confidence)
+- 1 vote → signal fires (single model with conviction is sufficient)
+- 2 votes, same direction → signal fires (both agree)
+- 2 votes, different directions → rejected (models disagree)
+
+---
+
 ## March 26 — Agent Zero-Trades Diagnosis: Added Signal Pipeline Diagnostics
 
 Agents running 24+ hours with zero trades. Root cause analysis found multiple strict filters silently blocking all signals with NO logging:
