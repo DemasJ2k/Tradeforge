@@ -4,6 +4,11 @@
 
 **Comprehensive audit** before Render rollout. Fixed all critical/high issues found:
 
+### Agent Engine (engine.py)
+- **CRITICAL**: MT5 direct fallback returned `str(result.order)` instead of `Order` dataclass — caused `AttributeError` when accessing `.order_id`, `.filled_price`, `.filled_time` at trade creation. Now returns proper `BrokerOrder` object
+- **HIGH**: Default balance fallback ($10K) now logs WARNING in auto mode to flag risk sizing may be incorrect
+- MT5 magic number now includes `agent_id` (was hardcoded `234000` for all agents → `234000 + agent_id`)
+
 ### Expert Agent (expert_agent.py)
 - **CRITICAL**: Missing `self._balance` initialization — added default $10K (engine updates it before each eval)
 - **CRITICAL**: Missing daily loss gate check — expert agent had the config (`max_daily_loss_pct`) but never checked it. Added check matching scalping_agent pattern

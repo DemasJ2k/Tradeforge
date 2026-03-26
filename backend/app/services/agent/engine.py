@@ -1256,7 +1256,7 @@ class AgentRunner:
                     "sl": sl,
                     "tp": tp,
                     "deviation": 20,
-                    "magic": 234000,
+                    "magic": 234000 + self.agent_id,
                     "comment": f"Tradeforge Agent#{self.agent_id}",
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": filling,
@@ -1279,7 +1279,18 @@ class AgentRunner:
                 self._log("info",
                     f"MT5 order placed: {direction} {self._symbol} "
                     f"ticket={result.order} sl={result.request.sl:.5f} tp={result.request.tp:.5f}")
-                return str(result.order)
+                # Return Order dataclass consistent with adapter interface
+                from app.services.broker.base import Order as BrokerOrder, OrderSide, OrderType, OrderStatus
+                return BrokerOrder(
+                    order_id=str(result.order),
+                    symbol=self._symbol,
+                    side=OrderSide(direction),
+                    order_type=OrderType.MARKET,
+                    size=lot_size,
+                    status=OrderStatus.FILLED,
+                    filled_price=result.price if hasattr(result, "price") else entry_price,
+                    filled_time=datetime.now(timezone.utc),
+                )
             else:
                 retcode = result.retcode if result else "None"
                 comment = result.comment if result else "no result"
@@ -1396,6 +1407,9 @@ class AgentRunner:
                     return float(balance)
             except Exception:
                 pass
+        if self._mode == "auto":
+            logger.warning("[Agent %d] Could not fetch balance from broker — using $10K default. "
+                           "Risk sizing may be incorrect.", self.agent_id)
         return 10000.0  # Default for paper trading
 
     def _log(self, level: str, message: str, data: Optional[dict] = None):
