@@ -1,5 +1,11 @@
 # Tradeforge Development Log
 
+## March 26 — Frontend: Signal Log Level Styling in AgentPanel
+
+Added `signal` log level styling to AgentPanel log viewer (blue background/text). Signal-level logs from the engine (ensemble predictions, trade executions) were rendering as invisible gray — now visually distinct from generic info logs.
+
+---
+
 ## March 26 — Scalping Agent: Relax Voting Requirement to Single-Model Fire
 
 Changed scalping agent voting logic so any ONE model firing with ≥55% confidence is enough to generate a signal. Previously required BOTH XGB and LGB to produce a non-hold prediction with ≥55% confidence — far too strict for 3-class classifiers where "hold" is the dominant prediction.
