@@ -45,9 +45,11 @@ _TF_MAP = {
 _SYMBOL_ALIASES: dict[str, str] = {
     "XAUUSD": "XAU_USD", "XAGUSD": "XAG_USD",
     "US30": "US30_USD", "NAS100": "NAS100_USD",
-    "SPX500": "SPX500_USD", "UK100": "UK100_GBP",
+    "ES": "SPX500_USD", "SPX500": "SPX500_USD",
+    "UK100": "UK100_GBP",
     "JP225": "JP225_USD", "DE30": "DE30_EUR",
     "USOIL": "WTICO_USD", "UKOIL": "BCO_USD",
+    "BTCUSD": "BTC_USD", "ETHUSD": "ETH_USD",
 }
 
 # Default display precision by instrument type (Oanda rejects prices with too many decimals)

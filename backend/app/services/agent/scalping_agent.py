@@ -144,7 +144,7 @@ class ScalpingAgent:
             return None
 
         # Daily loss gate
-        if self._daily_pnl < -(balance * self.max_daily_loss_pct):
+        if self._daily_pnl < -(self._balance * self.max_daily_loss_pct):
             logger.info("[Scalp %d] Daily loss limit hit", self.agent_id)
             return None
 

@@ -1,5 +1,13 @@
 # Tradeforge Development Log
 
+## March 26 — Fix Scalping Agent NameError + Oanda Symbol Mappings
+
+**Bug 1**: `scalping_agent.py` line 147 used bare `balance` instead of `self._balance` in the daily loss gate check. Every bar evaluation raised `NameError: name 'balance' is not defined`, preventing all scalping agents from generating signals.
+
+**Bug 2**: Oanda adapter missing symbol aliases for `ES` and `BTCUSD`. ES was sent as-is to Oanda API (`/instruments/ES/candles`) → 400 Bad Request. Added mappings: `ES → SPX500_USD`, `BTCUSD → BTC_USD`, `ETHUSD → ETH_USD`.
+
+---
+
 ## March 26 — Fix NAS100/ES "Training Required" + Remove RL Models from DB + Fix ML Lab
 
 **Critical bug**: `/api/ml/available-agents` had wrong path resolution — `Path(__file__).resolve().parent.parent.parent.parent` went 4 levels up instead of 3, landing at `/home/user/Tradeforge/data/ml_models` (doesn't exist) instead of `/home/user/Tradeforge/backend/data/ml_models`. This meant the model file check ALWAYS failed, so all agents showed "Training Required".
