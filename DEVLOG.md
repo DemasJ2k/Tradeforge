@@ -1,5 +1,15 @@
 # Tradeforge Development Log
 
+## March 26 — cTrader Adapter Audit: 3 Bug Fixes
+
+Full audit of `backend/app/services/broker/ctrader.py` (1262 lines). Found and fixed:
+
+1. **`close_position` returned empty symbol and `filled_price=0`** — Now resolves symbol name from `_symbol_cache` and attempts to get filled price from execution response or price cache
+2. **`modify_order` returned `symbol=""` and hardcoded `side=OrderSide.BUY`** — Now resolves actual symbol, side, and size from cached positions before returning
+3. **`get_symbols` wrong lot size conversion** — `min_lot`, `max_lot`, `lot_step` divided volume by 100 instead of `lot_size * 100`. For a forex pair with `lotSize=100000`, this returned values 1000× too large (e.g. 1 lot instead of 0.001). Now uses correct `_from_volume`-equivalent divisor
+
+---
+
 ## March 26 — Production Readiness Audit: 12 Fixes Across Backend + Frontend
 
 **Comprehensive audit** before Render rollout. Fixed all critical/high issues found:
