@@ -705,6 +705,7 @@ function AgentInlineDetail({
                     log.level === "error" ? "bg-red-500/5 text-red-400"
                     : log.level === "warn" ? "bg-yellow-500/5 text-yellow-400"
                     : log.level === "trade" ? "bg-green-500/5 text-green-400"
+                    : log.level === "signal" ? "bg-blue-500/5 text-blue-400"
                     : log.level === "rl_filter" ? "bg-purple-500/5 text-purple-400"
                     : "text-muted-foreground"
                   }`}
@@ -716,6 +717,7 @@ function AgentInlineDetail({
                     log.level === "error" ? "text-red-400"
                     : log.level === "warn" ? "text-yellow-400"
                     : log.level === "trade" ? "text-green-400"
+                    : log.level === "signal" ? "text-blue-400"
                     : log.level === "rl_filter" ? "text-purple-400"
                     : "text-zinc-500"
                   }`}>
