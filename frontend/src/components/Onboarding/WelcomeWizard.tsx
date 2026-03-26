@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-const ONBOARDING_KEY = 'flowrex_onboarding_completed';
+const ONBOARDING_KEY = 'tradeforge_onboarding_completed';
 
 interface Props {
   onDismiss: () => void;

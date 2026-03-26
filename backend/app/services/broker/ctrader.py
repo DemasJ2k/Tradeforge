@@ -338,6 +338,7 @@ class CTraderAdapter(BrokerAdapter):
     # Common symbol aliases for broker-specific naming conventions
     _SYMBOL_ALIASES: dict[str, list[str]] = {
         "US30": ["DJ30", "WS30", "DJI", "USTEC30", "US Wall Street 30"],
+        "ES": ["SPX500", "SP500", "US500", "US SPX 500"],
         "NAS100": ["USTEC", "NQ100", "NDX100", "US Tech 100"],
         "XAUUSD": ["XAU/USD", "GOLD", "Gold"],
         "XAGUSD": ["XAG/USD", "SILVER", "Silver"],

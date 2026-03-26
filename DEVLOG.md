@@ -1,5 +1,30 @@
 # Tradeforge Development Log
 
+## March 26 — Production Readiness Audit: 12 Fixes Across Backend + Frontend
+
+**Comprehensive audit** before Render rollout. Fixed all critical/high issues found:
+
+### Expert Agent (expert_agent.py)
+- **CRITICAL**: Missing `self._balance` initialization — added default $10K (engine updates it before each eval)
+- **CRITICAL**: Missing daily loss gate check — expert agent had the config (`max_daily_loss_pct`) but never checked it. Added check matching scalping_agent pattern
+- **CRITICAL**: Hardcoded `10000 * effective_risk` on line 287 → changed to `self._balance * effective_risk`
+- Silent exception handling in `_fetch_htf_bars()` — added logging for broker adapter and connection failures
+
+### Oanda Adapter (oanda.py)
+- **CRITICAL**: Missing reverse symbol mapping — positions/orders returned Oanda names (`XAU_USD`) instead of internal (`XAUUSD`). Added `_from_oanda_instrument()` applied to all 7 return points (positions, orders, prices, trades, stream)
+- **HIGH**: `_post()` and `_put()` had no retry logic — copied retry pattern from `_get()` (429/502/503/504 + ConnectError/ReadTimeout)
+- Added 429 (rate limit) to `_get()` retry list
+- Replaced `assert self._client` with proper `RuntimeError` in `_get`/`_post`/`_put`
+
+### cTrader Adapter (ctrader.py)
+- Missing ES (S&P 500) symbol aliases — added `ES → [SPX500, SP500, US500, US SPX 500]`
+
+### Frontend
+- Trading page `FALLBACK_SYMBOLS` had wrong symbols (included XAGUSD/EURUSD, missing ES) — fixed to match trained models
+- Stale `flowrex_onboarding_completed` localStorage keys in WelcomeWizard.tsx and settings page → renamed to `tradeforge_onboarding_completed`
+
+---
+
 ## March 26 — Fix Scalping Agent NameError + Oanda Symbol Mappings
 
 **Bug 1**: `scalping_agent.py` line 147 used bare `balance` instead of `self._balance` in the daily loss gate check. Every bar evaluation raised `NameError: name 'balance' is not defined`, preventing all scalping agents from generating signals.

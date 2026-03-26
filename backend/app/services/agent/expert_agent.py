@@ -86,6 +86,7 @@ class ExpertAgent:
         self._daily_pnl = 0.0
         self._trade_count_today = 0
         self._last_trade_bar = -100
+        self._balance = 10000.0  # Updated by engine before each evaluation
 
     def load(self) -> bool:
         """Load all ML components."""
@@ -166,6 +167,11 @@ class ExpertAgent:
             return None
 
         if len(m5_bars) < 60:
+            return None
+
+        # Daily loss gate
+        if self._daily_pnl < -(self._balance * self.max_daily_loss_pct):
+            logger.info("[Expert %d] Daily loss limit hit (%.2f)", self.agent_id, self._daily_pnl)
             return None
 
         current_bar = m5_bars[-1]
@@ -284,7 +290,7 @@ class ExpertAgent:
 
         # Risk amount adjusted by session and regime
         effective_risk = self.risk_per_trade * session_risk_mult * regime_risk_mult
-        risk_amount = 10000 * effective_risk  # Assuming $10K account
+        risk_amount = self._balance * effective_risk
 
         # Calculate lot size
         from app.services.agent.instrument_specs import calc_lot_size
@@ -420,7 +426,8 @@ class ExpertAgent:
             try:
                 from app.services.broker.manager import broker_manager
                 adapter = broker_manager.get_adapter(self.broker_name)
-            except Exception:
+            except Exception as e:
+                logger.warning("[Expert %d] Failed to get broker adapter: %s", self.agent_id, e)
                 return
 
         if adapter is None:
@@ -430,7 +437,8 @@ class ExpertAgent:
             connected = await adapter.is_connected()
             if not connected:
                 return
-        except Exception:
+        except Exception as e:
+            logger.warning("[Expert %d] Broker connection check failed: %s", self.agent_id, e)
             return
 
         try:
