@@ -1,5 +1,25 @@
 # Tradeforge Development Log
 
+## March 26 — Agent Zero-Trades Diagnosis: Added Signal Pipeline Diagnostics
+
+Agents running 24+ hours with zero trades. Root cause analysis found multiple strict filters silently blocking all signals with NO logging:
+
+### What was blocking trades (pipeline strictness):
+1. **Scalping agent**: requires BOTH XGB and LGB to predict non-hold (class ≠ 1) with ≥55% confidence AND agree on direction. In live markets, 3-class classifiers often predict "hold" or disagree → zero votes → silent rejection
+2. **Expert ensemble**: requires 2/3 models to agree + combined confidence ≥55% + meta-labeler approval. Even when models agree, weighted confidence often falls below 0.55
+3. **Zero diagnostic logging**: when ensemble returned direction=0, both agents silently returned None with no log output. Impossible to diagnose.
+4. **HTF bars may fail silently**: if broker adapter isn't ready, H1/H4/D1 buffers stay empty. Features computed without HTF context get NaN → replaced with zeros → models see out-of-distribution data → low confidence
+
+### Fixes added:
+1. **Ensemble rejection tracking** (`ensemble_engine.py`): tracks rejection counts by reason (insufficient_models, no_consensus, low_confidence, meta_rejected, nan_features). Logs summary every 50 evaluations.
+2. **Expert agent logging** (`expert_agent.py`): logs rejection reason + HTF buffer sizes + feature count when ensemble rejects (every 10th rejection to avoid spam)
+3. **Scalping agent logging** (`scalping_agent.py`): logs when models disagree or insufficient votes, with H1 buffer and session info
+4. **Engine health log** (`engine.py`): periodic health check every 50 evaluations showing eval count, signal count, bar buffer size, active direction
+
+These diagnostics will expose exactly which pipeline stage is blocking trades on the next deployment.
+
+---
+
 ## March 26 — Trading Page Audit: Position Attribution + PnL Consistency
 
 1. **Position agent attribution broken on Oanda** — The positions endpoint matched `p.position_id` against `broker_ticket` (order ID) to find which agent opened a position. On Oanda, position IDs are `{instrument}_{LONG|SHORT}` (e.g. `XAU_USD_LONG`), which never matches any order ID. All agent-opened positions showed "Manual" instead of the agent name. Fixed by adding a secondary symbol-based lookup as fallback.

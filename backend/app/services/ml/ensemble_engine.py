@@ -63,6 +63,8 @@ class EnsembleSignalEngine:
         self._feature_names: list[str] = []
         self._lstm_scaler = None
         self._loaded = False
+        self._predict_count = 0
+        self._reject_reasons: dict[str, int] = {}
 
     def load_models(self) -> bool:
         """
@@ -173,8 +175,13 @@ class EnsembleSignalEngine:
         if not self._loaded and not self.load_models():
             return None
 
+        self._predict_count += 1
+
         # Check for NaN in features
         if np.any(~np.isfinite(feature_vector)):
+            nan_count = int(np.sum(~np.isfinite(feature_vector)))
+            self._track_reject("nan_features")
+            logger.debug("[Ensemble %s] Rejected: %d NaN/Inf in feature vector", self.symbol, nan_count)
             return None
 
         votes = {}
@@ -238,6 +245,7 @@ class EnsembleSignalEngine:
 
         # ── Voting logic ──
         if len(directions) < 2:
+            self._track_reject("insufficient_models")
             return {
                 "direction": 0,
                 "confidence": 0.0,
@@ -259,6 +267,7 @@ class EnsembleSignalEngine:
             consensus_dir = -1
             agreement = bear_votes
         else:
+            self._track_reject("no_consensus")
             return {
                 "direction": 0,
                 "confidence": 0.0,
@@ -284,6 +293,7 @@ class EnsembleSignalEngine:
 
         # Check minimum confidence threshold
         if combined_confidence < self.min_confidence:
+            self._track_reject("low_confidence")
             return {
                 "direction": 0,
                 "confidence": combined_confidence,
@@ -319,6 +329,7 @@ class EnsembleSignalEngine:
                 meta_approved = True  # fail open
 
         if not meta_approved:
+            self._track_reject("meta_rejected")
             return {
                 "direction": 0,
                 "confidence": combined_confidence,
@@ -336,6 +347,16 @@ class EnsembleSignalEngine:
             "meta_approved": True,
             "reason": f"{agreement}/{len(directions)} models agree ({'BUY' if consensus_dir == 1 else 'SELL'}, conf={combined_confidence:.1%})",
         }
+
+    def _track_reject(self, reason_key: str):
+        """Track rejection reasons for diagnostics."""
+        self._reject_reasons[reason_key] = self._reject_reasons.get(reason_key, 0) + 1
+        # Log summary every 50 predictions
+        if self._predict_count > 0 and self._predict_count % 50 == 0:
+            accept_count = self._predict_count - sum(self._reject_reasons.values())
+            logger.info("[Ensemble %s] Prediction stats after %d evals: "
+                        "%d signals, rejections=%s",
+                        self.symbol, self._predict_count, accept_count, self._reject_reasons)
 
     def get_feature_names(self) -> list[str]:
         """Return the feature names expected by the ensemble models."""

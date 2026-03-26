@@ -203,10 +203,20 @@ class ScalpingAgent:
         # Require agreement
         n_models = (1 if self._xgb else 0) + (1 if self._lgb else 0)
         if len(votes) < min(2, n_models):
+            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
+                logger.info("[Scalp %d] Signal rejected (#%d): insufficient votes (%d/%d) | "
+                            "H1=%d bars | session=%s",
+                            self.agent_id, self._eval_rejects, len(votes), n_models,
+                            len(self._h1_buffer), session)
             return None
 
         # Check direction agreement
         if len(set(votes)) != 1:
+            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
+                logger.info("[Scalp %d] Signal rejected (#%d): models disagree (votes=%s)",
+                            self.agent_id, self._eval_rejects, votes)
             return None
 
         direction = 1 if votes[0] == 2 else -1
