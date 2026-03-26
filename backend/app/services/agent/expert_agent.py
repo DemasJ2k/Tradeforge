@@ -265,6 +265,14 @@ class ExpertAgent:
             return None
 
         if not ensemble_result or ensemble_result["direction"] == 0:
+            reason = ensemble_result.get("reason", "unknown") if ensemble_result else "ensemble returned None"
+            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            # Log every 10th rejection to avoid spam, but always log first
+            if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
+                logger.info("[Expert %d] Signal rejected (#%d): %s | HTF: H1=%d H4=%d D1=%d | features=%d",
+                            self.agent_id, self._eval_rejects, reason,
+                            len(self._h1_buffer), len(self._h4_buffer), len(self._daily_buffer),
+                            len(latest_features) if latest_features is not None else 0)
             return None
 
         direction = ensemble_result["direction"]

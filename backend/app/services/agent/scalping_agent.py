@@ -200,15 +200,25 @@ class ScalpingAgent:
                 votes.append(2 if pred == 2 else 0)
                 confs.append(conf)
 
-        # Require agreement
-        n_models = (1 if self._xgb else 0) + (1 if self._lgb else 0)
-        if len(votes) < min(2, n_models):
+        # Require at least one model to fire
+        if len(votes) == 0:
+            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
+                logger.info("[Scalp %d] Signal rejected (#%d): no model voted | "
+                            "H1=%d bars | session=%s",
+                            self.agent_id, self._eval_rejects,
+                            len(self._h1_buffer), session)
             return None
 
-        # Check direction agreement
-        if len(set(votes)) != 1:
+        # If both models voted, they must agree on direction
+        if len(votes) == 2 and len(set(votes)) != 1:
+            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
+                logger.info("[Scalp %d] Signal rejected (#%d): models disagree (votes=%s)",
+                            self.agent_id, self._eval_rejects, votes)
             return None
 
+        # Use the majority vote (or single vote if only one model fired)
         direction = 1 if votes[0] == 2 else -1
         confidence = float(np.mean(confs))
 

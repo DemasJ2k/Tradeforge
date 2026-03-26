@@ -56,6 +56,9 @@ class AgentRunner:
         self._expert_agent = None  # ExpertAgent (ML-only, replaces traditional strategy)
         # Position tracking (mirrors backtester behavior)
         self._active_direction: int = 0  # 0=flat, 1=long, -1=short
+        # Evaluation counters for diagnostics
+        self._eval_count: int = 0
+        self._signal_count: int = 0
         # Prop firm account link (for pre-trade rule validation)
         self._prop_firm_account_id: int | None = None
         # Portfolio manager for cross-agent coordination
@@ -868,6 +871,13 @@ class AgentRunner:
         if len(self._bar_buffer) < 60:
             return
 
+        self._eval_count += 1
+        # Periodic health log every 50 evaluations (~4 hours on M5)
+        if self._eval_count % 50 == 0:
+            self._log("info",
+                f"Health: {self._eval_count} evals, {self._signal_count} signals, "
+                f"bars={len(self._bar_buffer)}, direction={self._active_direction}")
+
         # Get broker adapter for HTF data fetching
         broker_adapter = None
         try:
@@ -887,6 +897,7 @@ class AgentRunner:
         if signal is None:
             return
 
+        self._signal_count += 1
         direction_int = signal["direction"]
         direction_str = "BUY" if direction_int == 1 else "SELL"
 
