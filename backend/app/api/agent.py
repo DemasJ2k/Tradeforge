@@ -408,6 +408,57 @@ async def pause_agent(
     return _agent_to_response(agent)
 
 
+# ── Engine Logs (unified across all agents) ─────────
+
+@router.get("/engine-logs")
+def get_engine_logs(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get unified engine logs across all agents owned by this user."""
+    # Get all agent IDs for this user
+    agent_ids = [
+        a.id for a in db.query(TradingAgent.id).filter(
+            TradingAgent.created_by == user.id,
+            TradingAgent.deleted_at.is_(None),
+        ).all()
+    ]
+    if not agent_ids:
+        return {"items": []}
+
+    # Build agent name lookup
+    agents = db.query(TradingAgent.id, TradingAgent.name, TradingAgent.symbol).filter(
+        TradingAgent.id.in_(agent_ids)
+    ).all()
+    agent_info = {a.id: {"name": a.name, "symbol": a.symbol} for a in agents}
+
+    # Query logs across all agents
+    logs = (
+        db.query(AgentLog)
+        .filter(AgentLog.agent_id.in_(agent_ids))
+        .order_by(AgentLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "id": log.id,
+                "agent_id": log.agent_id,
+                "agent_name": agent_info.get(log.agent_id, {}).get("name", f"Agent #{log.agent_id}"),
+                "agent_symbol": agent_info.get(log.agent_id, {}).get("symbol", ""),
+                "level": log.level,
+                "message": log.message,
+                "data": log.data or {},
+                "created_at": log.created_at.isoformat() if log.created_at else "",
+            }
+            for log in logs
+        ],
+    }
+
+
 # ── Logs ─────────────────────────────────────────────
 
 @router.get("/{agent_id}/logs")

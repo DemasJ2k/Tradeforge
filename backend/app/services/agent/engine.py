@@ -131,6 +131,7 @@ class AgentRunner:
                     config=risk_config,
                 )
                 if self._expert_agent.load():
+                    self._expert_agent._log_fn = self._log
                     self._strategy_type = "expert"
                     self._evaluator = None
                     logger.info("[Agent %d] Scalping Agent initialized for %s", self.agent_id, self._symbol)
@@ -148,6 +149,7 @@ class AgentRunner:
                     config=risk_config,
                 )
                 if self._expert_agent.load():
+                    self._expert_agent._log_fn = self._log
                     self._strategy_type = "expert"
                     self._evaluator = None  # Expert agent replaces traditional evaluator
                     logger.info("[Agent %d] Expert Agent initialized for %s", self.agent_id, self._symbol)
@@ -872,8 +874,8 @@ class AgentRunner:
             return
 
         self._eval_count += 1
-        # Periodic health log every 50 evaluations (~4 hours on M5)
-        if self._eval_count % 50 == 0:
+        # Periodic health log every 12 evaluations (~1 hour on M5)
+        if self._eval_count % 12 == 0:
             self._log("info",
                 f"Health: {self._eval_count} evals, {self._signal_count} signals, "
                 f"bars={len(self._bar_buffer)}, direction={self._active_direction}")

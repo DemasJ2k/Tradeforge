@@ -102,6 +102,13 @@ export default function TradingPage() {
   // polling
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Engine logs
+  const [engineLogs, setEngineLogs] = useState<Array<{
+    id: number; agent_id: number; agent_name: string; agent_symbol: string;
+    level: string; message: string; data: Record<string, unknown>; created_at: string;
+  }>>([]);
+  const engineLogPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // ── Chart state ──
   const FALLBACK_SYMBOLS = ["XAUUSD", "US30", "BTCUSD", "ES", "NAS100"];
   const TIMEFRAMES = ["M1", "M5", "M10", "M15", "M30", "H1", "H4", "D1"];
@@ -712,6 +719,22 @@ export default function TradingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── Engine log polling (5s) ────────────────────── */
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await api.get<{ items: typeof engineLogs }>("/api/agents/engine-logs?limit=100");
+        setEngineLogs(res.items);
+      } catch { /* ignore */ }
+    };
+    fetchLogs();
+    engineLogPollRef.current = setInterval(fetchLogs, 5000);
+    return () => {
+      if (engineLogPollRef.current) clearInterval(engineLogPollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const checkBrokerStatus = async () => {
     try {
       const res = await api.get<BrokerListResponse>("/api/broker/status");
@@ -1188,6 +1211,7 @@ export default function TradingPage() {
           <TabsTrigger value="positions">Positions ({positions.length})</TabsTrigger>
           <TabsTrigger value="orders">Orders ({orders.length})</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="engine-log">Engine Log ({engineLogs.length})</TabsTrigger>
         </TabsList>
 
         {/* ── Agents Tab ── */}
@@ -1419,6 +1443,57 @@ export default function TradingPage() {
                 </table>
               </div>
             </>
+          )}
+        </TabsContent>
+
+        {/* ── Engine Log Tab ── */}
+        <TabsContent value="engine-log" className="pt-3">
+          {engineLogs.length === 0 ? (
+            <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+              No engine logs yet — logs appear when agents are running
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-card-border max-h-[500px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-card-border text-xs text-muted-foreground bg-card-bg">
+                    <th className="px-3 py-2 text-left font-medium w-[140px]">Time</th>
+                    <th className="px-3 py-2 text-left font-medium w-[180px]">Agent</th>
+                    <th className="px-3 py-2 text-center font-medium w-[70px]">Level</th>
+                    <th className="px-3 py-2 text-left font-medium">Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {engineLogs.map((log) => (
+                    <tr key={log.id} className="border-b border-card-border/50 last:border-0">
+                      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {log.created_at ? new Date(log.created_at).toLocaleTimeString() : "—"}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <span className="text-xs font-medium">{log.agent_name}</span>
+                        {log.agent_symbol && (
+                          <span className="text-[10px] text-muted-foreground ml-1">({log.agent_symbol})</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        <Badge variant="secondary" className={`text-[10px] uppercase ${
+                          log.level === "error" ? "bg-red-500/15 text-red-400"
+                          : log.level === "warn" ? "bg-yellow-500/15 text-yellow-400"
+                          : log.level === "signal" ? "bg-blue-500/15 text-blue-400"
+                          : log.level === "trade" ? "bg-green-500/15 text-green-400"
+                          : "bg-zinc-500/15 text-zinc-400"
+                        }`}>
+                          {log.level}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-1.5 text-xs font-mono text-foreground/80">
+                        {log.message}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </TabsContent>
       </Tabs>

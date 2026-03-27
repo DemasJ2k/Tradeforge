@@ -87,6 +87,8 @@ class ExpertAgent:
         self._trade_count_today = 0
         self._last_trade_bar = -100
         self._balance = 10000.0  # Updated by engine before each evaluation
+        self._log_fn = None  # Set by engine to write to agent_logs DB
+        self._eval_rejects = 0
 
     def load(self) -> bool:
         """Load all ML components."""
@@ -139,6 +141,13 @@ class ExpertAgent:
             logger.error("[Expert %d] Failed to load: %s", self.agent_id, e)
             return False
 
+    def _agent_log(self, level: str, message: str, data: dict = None):
+        """Write to agent panel logs if engine connected the callback."""
+        if self._log_fn:
+            self._log_fn(level, message, data)
+        else:
+            logger.info("[Expert %d] %s", self.agent_id, message)
+
     async def evaluate(
         self,
         m5_bars: list[dict],
@@ -171,7 +180,7 @@ class ExpertAgent:
 
         # Daily loss gate
         if self._daily_pnl < -(self._balance * self.max_daily_loss_pct):
-            logger.info("[Expert %d] Daily loss limit hit (%.2f)", self.agent_id, self._daily_pnl)
+            self._agent_log("warn", f"Daily loss limit hit ({self._daily_pnl:.2f})")
             return None
 
         current_bar = m5_bars[-1]
@@ -214,7 +223,7 @@ class ExpertAgent:
         if self.news_filter_enabled:
             news_ok = await self._check_news_filter()
             if not news_ok:
-                logger.info("[Expert %d] Trade blocked by news filter", self.agent_id)
+                self._agent_log("info", "Trade blocked by news filter")
                 return None
 
         # ── Step 4: Session awareness ──
@@ -269,10 +278,10 @@ class ExpertAgent:
             self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
             # Log every 10th rejection to avoid spam, but always log first
             if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
-                logger.info("[Expert %d] Signal rejected (#%d): %s | HTF: H1=%d H4=%d D1=%d | features=%d",
-                            self.agent_id, self._eval_rejects, reason,
-                            len(self._h1_buffer), len(self._h4_buffer), len(self._daily_buffer),
-                            len(latest_features) if latest_features is not None else 0)
+                self._agent_log("info",
+                    f"Signal rejected (#{self._eval_rejects}): {reason} | "
+                    f"HTF: H1={len(self._h1_buffer)} H4={len(self._h4_buffer)} D1={len(self._daily_buffer)} | "
+                    f"features={len(latest_features) if latest_features is not None else 0}")
             return None
 
         direction = ensemble_result["direction"]
@@ -326,18 +335,11 @@ class ExpertAgent:
             "signal_type": "expert_ensemble",
         }
 
-        logger.info(
-            "[Expert %d] SIGNAL: %s %s @ %.2f | SL=%.2f TP=%.2f | conf=%.1f%% | "
-            "regime=%s session=%s | %s",
-            self.agent_id,
-            "BUY" if direction == 1 else "SELL",
-            self.symbol,
-            current_price,
-            sl, tp,
-            confidence * 100,
-            regime, session,
-            ensemble_result["reason"],
-        )
+        side = "BUY" if direction == 1 else "SELL"
+        self._agent_log("signal",
+            f"SIGNAL: {side} {self.symbol} @ {current_price:.2f} | "
+            f"SL={sl:.2f} TP={tp:.2f} | conf={confidence*100:.1f}% | "
+            f"regime={regime} session={session} | {ensemble_result['reason']}")
 
         return signal
 

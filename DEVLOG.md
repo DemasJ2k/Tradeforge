@@ -1,5 +1,19 @@
 # Tradeforge Development Log
 
+## March 27 — Agent Engine Log Tab + Production Log Routing
+
+Added a unified "Engine Log" tab on the trading page showing cross-agent logs in one place. All agent diagnostic logs (signal rejections, health checks, trade signals, news filter blocks, daily loss limit hits) now route through the DB-backed `agent_logs` table and are visible in the frontend.
+
+### Backend changes:
+- **`expert_agent.py`**: Replaced all `logger.info()` calls with `self._agent_log()` helper that writes to DB via engine callback (`_log_fn`). Signal fires, rejections, daily loss limit, and news filter blocks all appear in the agent panel.
+- **`scalping_agent.py`**: Added same `_log_fn` / `_agent_log()` pattern. Signal fires, rejections (no votes, model disagreement), daily loss limit, and news filter blocks all route to DB.
+- **`agent.py` (API)**: `GET /api/agents/engine-logs` endpoint (already added) returns unified logs across all agents owned by the user, with agent name and symbol metadata.
+
+### Frontend changes:
+- **`trading/page.tsx`**: New "Engine Log" tab alongside Agents/Positions/Orders/History. Polls `/api/agents/engine-logs?limit=100` every 5 seconds. Each row shows timestamp, agent name (symbol), color-coded level badge, and message. 100 entries max, rolls off naturally. Scrollable table with sticky header.
+
+---
+
 ## March 26 — Frontend: Signal Log Level Styling in AgentPanel
 
 Added `signal` log level styling to AgentPanel log viewer (blue background/text). Signal-level logs from the engine (ensemble predictions, trade executions) were rendering as invisible gray — now visually distinct from generic info logs.
