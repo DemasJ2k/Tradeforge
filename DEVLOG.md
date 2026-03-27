@@ -1,5 +1,11 @@
 # Tradeforge Development Log
 
+## March 27 — Fix Engine Log Endpoint Route Ordering
+
+The `/api/agents/engine-logs` endpoint was returning 0 results despite agents actively running and producing logs. Root cause: FastAPI route ordering — the `GET /{agent_id}` route (line 271) was defined before `GET /engine-logs` (line 413), so "engine-logs" was being matched as an `agent_id` path parameter. Moved `/engine-logs` before all `/{agent_id}` routes.
+
+---
+
 ## March 27 — Agent Engine Log Tab + Production Log Routing
 
 Added a unified "Engine Log" tab on the trading page showing cross-agent logs in one place. All agent diagnostic logs (signal rejections, health checks, trade signals, news filter blocks, daily loss limit hits) now route through the DB-backed `agent_logs` table and are visible in the frontend.
