@@ -74,6 +74,15 @@ class ScalpingAgent:
         self._trade_count_today = 0
         self._last_trade_bar = -100
         self._balance = 10000.0  # Updated by engine before evaluate()
+        self._log_fn = None  # Set by engine to write to agent_logs DB
+        self._eval_rejects = 0
+
+    def _agent_log(self, level: str, message: str, data: dict = None):
+        """Write to agent panel logs if engine connected the callback."""
+        if self._log_fn:
+            self._log_fn(level, message, data)
+        else:
+            logger.info("[Scalp %d] %s", self.agent_id, message)
 
     def load(self) -> bool:
         """Load scalping models from disk."""
@@ -145,14 +154,14 @@ class ScalpingAgent:
 
         # Daily loss gate
         if self._daily_pnl < -(self._balance * self.max_daily_loss_pct):
-            logger.info("[Scalp %d] Daily loss limit hit", self.agent_id)
+            self._agent_log("warn", "Daily loss limit hit")
             return None
 
         # News filter — avoid trading during high-impact events
         if self.news_filter_enabled:
             news_ok = await self._check_news_filter()
             if not news_ok:
-                logger.info("[Scalp %d] Trade blocked by news filter", self.agent_id)
+                self._agent_log("info", "Trade blocked by news filter")
                 return None
 
         # Fetch H1 context
@@ -202,20 +211,19 @@ class ScalpingAgent:
 
         # Require at least one model to fire
         if len(votes) == 0:
-            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            self._eval_rejects += 1
             if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
-                logger.info("[Scalp %d] Signal rejected (#%d): no model voted | "
-                            "H1=%d bars | session=%s",
-                            self.agent_id, self._eval_rejects,
-                            len(self._h1_buffer), session)
+                self._agent_log("info",
+                    f"Signal rejected (#{self._eval_rejects}): no model voted | "
+                    f"H1={len(self._h1_buffer)} bars | session={session}")
             return None
 
         # If both models voted, they must agree on direction
         if len(votes) == 2 and len(set(votes)) != 1:
-            self._eval_rejects = getattr(self, "_eval_rejects", 0) + 1
+            self._eval_rejects += 1
             if self._eval_rejects <= 1 or self._eval_rejects % 10 == 0:
-                logger.info("[Scalp %d] Signal rejected (#%d): models disagree (votes=%s)",
-                            self.agent_id, self._eval_rejects, votes)
+                self._agent_log("info",
+                    f"Signal rejected (#{self._eval_rejects}): models disagree (votes={votes})")
             return None
 
         # Use the majority vote (or single vote if only one model fired)
@@ -245,6 +253,12 @@ class ScalpingAgent:
             return None
 
         self._last_trade_bar = bar_idx
+
+        side = "BUY" if direction == 1 else "SELL"
+        self._agent_log("signal",
+            f"SIGNAL: {side} {self.symbol} @ {price:.2f} | "
+            f"SL={sl:.5f} TP={tp:.5f} | conf={confidence*100:.1f}% | "
+            f"session={session} | XGB={self._xgb_grade} LGB={self._lgb_grade}")
 
         return {
             "direction": direction,
