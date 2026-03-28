@@ -1,5 +1,33 @@
 # Tradeforge Development Log
 
+## March 28 — VPrompt: Full Rebuild Prompt Kit for Flowrex Algo
+
+Created `VPrompt/` folder containing 10 phase prompts + architecture reference for rebuilding the entire trading platform from scratch as "Flowrex Algo" using Claude Desktop (Opus 4.6, 1M context).
+
+### Files created:
+- `VPrompt/README.md` — Master guide with phase overview and usage instructions
+- `VPrompt/ARCHITECTURE.md` — Full system design reference (DB schema, API contracts, folder structure, ML pipeline, agent engine, WebSocket channels, deployment config)
+- `VPrompt/phase-01-foundation.md` — Project scaffold, PostgreSQL, config, dark theme
+- `VPrompt/phase-02-backend-core.md` — DB models, migrations, CRUD APIs, schemas
+- `VPrompt/phase-03-broker-adapters.md` — Oanda, cTrader, MT5 adapters
+- `VPrompt/phase-04-frontend-shell.md` — Full trading terminal UI
+- `VPrompt/phase-05-ml-pipeline.md` — Feature engineering, model training, ensemble engine
+- `VPrompt/phase-06-scalping-agent.md` — Scalping agent, engine loop, trade execution
+- `VPrompt/phase-07-expert-agent.md` — Expert agent, meta-labeler, regime detection
+- `VPrompt/phase-08-realtime-websockets.md` — Live prices, agent streaming, WS infrastructure
+- `VPrompt/phase-09-auth-polish.md` — JWT auth, 2FA, backtesting, prop firm, UI polish
+- `VPrompt/phase-10-deploy-harden.md` — Render deploy, security hardening, monitoring
+
+### Design decisions:
+- FastAPI + Next.js + PostgreSQL (from day 1, not SQLite)
+- Start with 3 symbols (BTCUSD, XAUUSD, US30), expand to 5 in Phase 7
+- Scalping agent first, expert agent second
+- Single-user dev mode first, full auth in Phase 9
+- Each phase ends with checkpoint questions before proceeding
+- Claude must test with preview tool + unit tests + integration tests
+
+---
+
 ## March 27 — Fix Engine Log Endpoint Route Ordering
 
 The `/api/agents/engine-logs` endpoint was returning 0 results despite agents actively running and producing logs. Root cause: FastAPI route ordering — the `GET /{agent_id}` route (line 271) was defined before `GET /engine-logs` (line 413), so "engine-logs" was being matched as an `agent_id` path parameter. Moved `/engine-logs` before all `/{agent_id}` routes.
